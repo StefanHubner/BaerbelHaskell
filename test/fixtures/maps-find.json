@@ -1,0 +1,474 @@
+[
+  {
+    "label": "missing area requests caller context without HTTP",
+    "arguments": {
+      "query": "cafe",
+      "area": "home"
+    },
+    "responses": [],
+    "expected": {
+      "status": "error",
+      "error": "needs_context",
+      "message": "Ask the caller which town or area to search; their location is unknown."
+    },
+    "expected_call_count": 0
+  },
+  {
+    "label": "invalid newline query rejected before HTTP",
+    "arguments": {
+      "query": "cafe\n",
+      "area": "London"
+    },
+    "responses": [],
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_arguments"
+    },
+    "expected_call_count": 0
+  },
+  {
+    "label": "ambiguous area returns choices without places search",
+    "arguments": {
+      "query": "cafe",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          },
+          {
+            "place_id": "other-area",
+            "formatted_address": "London, Canada",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "status": "error",
+      "error": "needs_context",
+      "area_candidates": [
+        {
+          "address": "London, UK",
+          "partial_match": false,
+          "precision": "APPROXIMATE"
+        },
+        {
+          "address": "London, Canada",
+          "partial_match": false,
+          "precision": "APPROXIMATE"
+        }
+      ],
+      "message": "The stated area could not be resolved unambiguously. Ask the caller for a more specific town, area or country."
+    },
+    "expected_call_count": 1
+  },
+  {
+    "label": "places provide explicit precision and pagination",
+    "arguments": {
+      "query": "cafe",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "places": [
+          {
+            "id": "cafe-id",
+            "displayName": {
+              "text": "Cafe"
+            },
+            "formattedAddress": "High Road",
+            "location": {
+              "latitude": 51.5,
+              "longitude": -0.12
+            },
+            "types": [
+              "cafe"
+            ]
+          }
+        ],
+        "nextPageToken": "more"
+      }
+    ],
+    "expected": {
+      "status": "ok",
+      "candidates": [
+        {
+          "name": "Cafe",
+          "address": "High Road",
+          "source": "google_places",
+          "precision": "PLACE_LOCATION",
+          "partial_match": null,
+          "approximate": false
+        }
+      ],
+      "result_count": 1,
+      "has_more": true,
+      "selection_required": true,
+      "resolved_area": "London, UK",
+      "source": "Google Maps",
+      "untrusted_place_content": true
+    },
+    "expected_call_count": 2
+  },
+  {
+    "label": "street matches carry approximate warning",
+    "arguments": {
+      "query": "road",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "places": [
+          {
+            "id": "cafe-id",
+            "displayName": {
+              "text": "Cafe"
+            },
+            "formattedAddress": "High Road",
+            "location": {
+              "latitude": 51.5,
+              "longitude": -0.12
+            },
+            "types": [
+              "route"
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "status": "ok",
+      "candidates": [
+        {
+          "name": "Cafe",
+          "address": "High Road",
+          "source": "google_places",
+          "precision": "STREET_OR_AREA_LOCATION",
+          "partial_match": null,
+          "approximate": true,
+          "warning": "Approximate street or area reference; the caller's exact position is unknown. Suitable for a broad route when it matches the requested place; finer detail matters only if it changes the useful guidance."
+        }
+      ],
+      "result_count": 1,
+      "has_more": false,
+      "selection_required": true,
+      "resolved_area": "London, UK",
+      "source": "Google Maps",
+      "untrusted_place_content": true
+    },
+    "expected_call_count": 2
+  },
+  {
+    "label": "empty places fall back to geocoding",
+    "arguments": {
+      "query": "road",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "places": []
+      },
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "status": "ok",
+      "candidates": [
+        {
+          "name": "London, UK",
+          "address": "London, UK",
+          "source": "google_geocoding",
+          "precision": "APPROXIMATE",
+          "partial_match": false,
+          "approximate": true,
+          "warning": "Approximate street or area reference; the caller's exact position is unknown. Suitable for a broad route when it matches the requested place; finer detail matters only if it changes the useful guidance."
+        }
+      ],
+      "result_count": 1,
+      "has_more": false,
+      "selection_required": true,
+      "resolved_area": "London, UK",
+      "source": "Google Maps",
+      "untrusted_place_content": true
+    },
+    "expected_call_count": 3
+  },
+  {
+    "label": "invalid place identity rejected before minting references",
+    "arguments": {
+      "query": "cafe",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "APPROXIMATE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "places": [
+          {
+            "id": "cafe-id",
+            "displayName": {
+              "text": "Cafe"
+            },
+            "formattedAddress": "High Road",
+            "location": {
+              "latitude": 51.5,
+              "longitude": -0.12
+            },
+            "types": [
+              "cafe"
+            ]
+          },
+          {
+            "id": "bad/id",
+            "displayName": {
+              "text": "Cafe"
+            },
+            "formattedAddress": "High Road",
+            "location": {
+              "latitude": 51.5,
+              "longitude": -0.12
+            },
+            "types": [
+              "cafe"
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_place_response"
+    },
+    "expected_call_count": 2
+  },
+  {
+    "label": "unknown area precision remains explicit",
+    "arguments": {
+      "query": "cafe",
+      "area": "London"
+    },
+    "responses": [
+      {
+        "results": [
+          {
+            "place_id": "area-id",
+            "formatted_address": "London, UK",
+            "geometry": {
+              "location": {
+                "lat": 51.5,
+                "lng": -0.1
+              },
+              "location_type": "FUTURE",
+              "viewport": {
+                "southwest": {
+                  "lat": 51,
+                  "lng": -0.5
+                },
+                "northeast": {
+                  "lat": 52,
+                  "lng": 0.5
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "places": [
+          {
+            "id": "cafe-id",
+            "displayName": {
+              "text": "Cafe"
+            },
+            "formattedAddress": "High Road",
+            "location": {
+              "latitude": 51.5,
+              "longitude": -0.12
+            },
+            "types": [
+              "cafe"
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "status": "ok",
+      "candidates": [
+        {
+          "name": "Cafe",
+          "address": "High Road",
+          "source": "google_places",
+          "precision": "PLACE_LOCATION",
+          "partial_match": null,
+          "approximate": false
+        }
+      ],
+      "result_count": 1,
+      "has_more": false,
+      "selection_required": true,
+      "resolved_area": "London, UK",
+      "source": "Google Maps",
+      "untrusted_place_content": true
+    },
+    "expected_call_count": 2
+  }
+]

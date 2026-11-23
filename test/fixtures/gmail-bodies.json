@@ -1,0 +1,105 @@
+[
+  {
+    "input": {},
+    "expected": {
+      "body": "",
+      "truncated": false,
+      "attachments": []
+    }
+  },
+  {
+    "input": {
+      "mimeType": "text/plain",
+      "body": {
+        "data": "IEhlbGxvACB3b3JsZAo"
+      }
+    },
+    "expected": {
+      "body": "Hello world",
+      "truncated": false,
+      "attachments": []
+    }
+  },
+  {
+    "input": {
+      "mimeType": "multipart/alternative",
+      "parts": [
+        {
+          "mimeType": "text/html",
+          "body": {
+            "data": "PHA-aGlkZGVuIGFsdGVybmF0aXZlPC9wPg"
+          }
+        },
+        {
+          "mimeType": "text/plain",
+          "body": {
+            "data": "cGxhaW4gYWx0ZXJuYXRpdmU"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "body": "plain alternative",
+      "truncated": false,
+      "attachments": []
+    }
+  },
+  {
+    "input": {
+      "mimeType": "multipart/mixed",
+      "parts": [
+        {
+          "mimeType": "text/plain",
+          "body": {
+            "data": "Ym9keQ"
+          }
+        },
+        {
+          "filename": "photo.jpg",
+          "mimeType": "image/jpeg",
+          "body": {
+            "size": 42,
+            "attachmentId": "id"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "body": "body",
+      "truncated": false,
+      "attachments": [
+        {
+          "filename": "photo.jpg",
+          "mime_type": "image/jpeg",
+          "size": 42
+        }
+      ]
+    }
+  },
+  {
+    "input": {
+      "mimeType": "text/plain",
+      "body": {
+        "attachmentId": "stored"
+      }
+    },
+    "expected": {
+      "body": "",
+      "truncated": true,
+      "attachments": []
+    }
+  },
+  {
+    "input": {
+      "mimeType": "text/html",
+      "body": {
+        "data": "PGhlYWQ-aGlkZGVuPC9oZWFkPjxwPk9uZSAmYW1wOyB0d288L3A-PHNjcmlwdD5uZXZlcjwvc2NyaXB0PjxwPlRocmVlPC9wPg"
+      }
+    },
+    "expected": {
+      "body": "One & two\n\nThree",
+      "truncated": false,
+      "attachments": []
+    }
+  }
+]

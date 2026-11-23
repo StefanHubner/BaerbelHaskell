@@ -1,0 +1,44 @@
+[
+  {
+    "input": {
+      "phrase": "send it",
+      "speech": "hello, send it."
+    },
+    "expected": true
+  },
+  {
+    "input": {
+      "phrase": "send it",
+      "speech": "send it later"
+    },
+    "expected": false
+  },
+  {
+    "input": {
+      "phrase": "that's all",
+      "speech": "This is the note. That’s all!"
+    },
+    "expected": true
+  },
+  {
+    "input": {
+      "phrase": "",
+      "speech": "hello"
+    },
+    "expected": false
+  },
+  {
+    "input": {
+      "phrase": "two words",
+      "speech": "words"
+    },
+    "expected": false
+  },
+  {
+    "input": {
+      "phrase": "send it",
+      "speech": "send this"
+    },
+    "expected": false
+  }
+]

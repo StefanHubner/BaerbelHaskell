@@ -1,0 +1,6453 @@
+[
+  {
+    "label": "agenda filters duplicates, declined, cancelled and adjacent events",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "cancelled",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "declined",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              },
+              "attendees": [
+                {
+                  "self": true,
+                  "responseStatus": "declined"
+                }
+              ]
+            },
+            {
+              "id": "next-day",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-26T00:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-26T01:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00+01:00",
+          "end": "2026-09-25T10:00:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": false,
+      "truncated": false,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "all-day events retain source calendar time zone",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-26"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "LA",
+              "summary": "West coast",
+              "accessRole": "owner",
+              "timeZone": "America/Los_Angeles"
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/LA/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "all-day",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "date": "2026-09-25"
+              },
+              "end": {
+                "date": "2026-09-26"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-26",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "LA",
+          "calendar_name": "West coast",
+          "time_zone": "America/Los_Angeles",
+          "event_id": "all-day",
+          "summary": "Team meeting",
+          "start": "2026-09-25",
+          "end": "2026-09-26",
+          "all_day": true,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": false,
+      "truncated": false,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "LA",
+          "calendar_name": "West coast",
+          "access_role": "owner",
+          "time_zone": "America/Los_Angeles",
+          "primary": false,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "failed later discovery retains known calendars",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ],
+          "nextPageToken": "later"
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": "later",
+        "body": null,
+        "error": "calendar_http_503"
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00+01:00",
+          "end": "2026-09-25T10:00:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": false,
+      "calendar_list_error": "calendar_http_503",
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 3,
+    "expected_reserved": 0
+  },
+  {
+    "label": "unreadable calendars disclose incomplete coverage",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            },
+            {
+              "id": "busy",
+              "summary": "Primary calendar",
+              "accessRole": "freeBusyReader",
+              "timeZone": "Europe/London"
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00+01:00",
+          "end": "2026-09-25T10:00:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 2,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        },
+        {
+          "calendar_id": "busy",
+          "calendar_name": "Primary calendar",
+          "access_role": "freeBusyReader",
+          "time_zone": "Europe/London",
+          "primary": false,
+          "status": "skipped",
+          "reason": "free_busy_only"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "ambiguous calendar names return choices without scanning",
+    "tool": "calendar_search",
+    "arguments": {
+      "start_date": "2026-09-25",
+      "end_date": "2026-09-26",
+      "query": "",
+      "calendar": "Work"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "a",
+              "summary": "Work",
+              "accessRole": "owner",
+              "timeZone": "Europe/London"
+            },
+            {
+              "id": "b",
+              "summary": "Work",
+              "accessRole": "owner",
+              "timeZone": "Europe/London"
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 2,
+      "calendars_checked": 0,
+      "calendar_results": [
+        {
+          "calendar_id": "a",
+          "calendar_name": "Work",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": false,
+          "status": "skipped",
+          "reason": "calendar_ambiguous"
+        },
+        {
+          "calendar_id": "b",
+          "calendar_name": "Work",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": false,
+          "status": "skipped",
+          "reason": "calendar_ambiguous"
+        }
+      ],
+      "calendar_selection_error": "calendar_ambiguous",
+      "start_date": "2026-09-25",
+      "end_date": "2026-09-26",
+      "query": "",
+      "calendar": "Work",
+      "error": "calendar_ambiguous"
+    },
+    "expected_call_count": 1,
+    "expected_reserved": 0
+  },
+  {
+    "label": "unknown calendar returns choices without scanning",
+    "tool": "calendar_search",
+    "arguments": {
+      "start_date": "2026-09-25",
+      "end_date": "2026-09-26",
+      "query": "",
+      "calendar": "Missing"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 0,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "skipped",
+          "reason": "calendar_not_found"
+        }
+      ],
+      "calendar_selection_error": "calendar_not_found",
+      "start_date": "2026-09-25",
+      "end_date": "2026-09-26",
+      "query": "",
+      "calendar": "Missing",
+      "error": "calendar_not_found"
+    },
+    "expected_call_count": 1,
+    "expected_reserved": 0
+  },
+  {
+    "label": "empty calendar discovery is complete",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": []
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": false,
+      "truncated": false,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 0,
+      "calendars_checked": 0,
+      "calendar_results": []
+    },
+    "expected_call_count": 1,
+    "expected_reserved": 0
+  },
+  {
+    "label": "failed event scan reports error and coverage",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": null,
+        "error": "calendar_http_503"
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 0,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "failed",
+          "reason": "calendar_http_503"
+        }
+      ],
+      "error": "calendar_events_unavailable"
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "raw cancelled-event scan limit is enforced",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "0",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "1",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "2",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "3",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "4",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "5",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "6",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "7",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "8",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "9",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "10",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "11",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "12",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "13",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "14",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "15",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "16",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "17",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "18",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "19",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "20",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "21",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "22",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "23",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "24",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "25",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "26",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "27",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "28",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "29",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "30",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "31",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "32",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "33",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "34",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "35",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "36",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "37",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "38",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "39",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "40",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "41",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "42",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "43",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "44",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "45",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "46",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "47",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "48",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "49",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "50",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "51",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "52",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "53",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "54",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "55",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "56",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "57",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "58",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "59",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "60",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "61",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "62",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "63",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "64",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "65",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "66",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "67",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "68",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "69",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "70",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "71",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "72",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "73",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "74",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "75",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "76",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "77",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "78",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "79",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "80",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "81",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "82",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "83",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "84",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "85",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "86",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "87",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "88",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "89",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "90",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "91",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "92",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "93",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "94",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "95",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "96",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "97",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "98",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "99",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "100",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "101",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "102",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "103",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "104",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "105",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "106",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "107",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "108",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "109",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "110",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "111",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "112",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "113",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "114",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "115",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "116",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "117",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "118",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "119",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "120",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "121",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "122",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "123",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "124",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "125",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "126",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "127",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "128",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "129",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "130",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "131",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "132",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "133",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "134",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "135",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "136",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "137",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "138",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "139",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "140",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "141",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "142",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "143",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "144",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "145",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "146",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "147",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "148",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "149",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "150",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "151",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "152",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "153",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "154",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "155",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "156",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "157",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "158",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "159",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "160",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "161",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "162",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "163",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "164",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "165",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "166",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "167",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "168",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "169",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "170",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "171",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "172",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "173",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "174",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "175",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "176",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "177",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "178",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "179",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "180",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "181",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "182",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "183",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "184",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "185",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "186",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "187",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "188",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "189",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "190",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "191",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "192",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "193",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "194",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "195",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "196",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "197",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "198",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "199",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "200",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "not-reached",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "partial",
+          "reason": "event_scan_limit"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "adjacent events do not block creation",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:30:00+01:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "previous",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T08:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T09:30:00+01:00"
+              }
+            },
+            {
+              "id": "next",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T10:30:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T11:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "created": true,
+      "event": {
+        "calendar_id": "primary",
+        "calendar_name": "Primary calendar",
+        "time_zone": "Europe/London",
+        "event_id": "a1b4bfeaf7a2d47b0a19838508d8bce9631e20296de68f957bbe479fcae59f68",
+        "summary": "Coffee",
+        "start": "2026-09-25T09:30:00+01:00",
+        "end": "2026-09-25T10:30:00+01:00",
+        "all_day": false,
+        "location": "Cafe",
+        "busy": true
+      },
+      "attendees": [],
+      "invitations_requested": false,
+      "retry_safe": false
+    },
+    "expected_call_count": 3,
+    "expected_reserved": 1
+  },
+  {
+    "label": "busy overlap blocks creation without reserving",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:30:00+01:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "error": "schedule_conflict",
+      "retry_safe": false,
+      "conflicts": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00+01:00",
+          "end": "2026-09-25T10:00:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "conflicts_truncated": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "receipt reuse skips discovery and conflict checks",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:30:00+01:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "responses": [],
+    "previous": {
+      "status": "ok",
+      "created": true,
+      "duplicate": true,
+      "fixture_receipt": true
+    },
+    "expected": {
+      "status": "ok",
+      "created": true,
+      "duplicate": true,
+      "fixture_receipt": true
+    },
+    "expected_call_count": 0,
+    "expected_reserved": 0
+  },
+  {
+    "label": "invalid recipient is rejected without requesting",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:30:00+01:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [
+        "bad"
+      ],
+      "allow_conflicts": false
+    },
+    "responses": [],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "error": "invalid_email_address",
+      "retry_safe": false
+    },
+    "expected_call_count": 0,
+    "expected_reserved": 0
+  },
+  {
+    "label": "invalid offset is rejected without requesting",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:00:00+25:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "responses": [],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "error": "invalid_calendar_timestamp",
+      "retry_safe": false
+    },
+    "expected_call_count": 0,
+    "expected_reserved": 0
+  },
+  {
+    "label": "invalid later calendar preserves earlier entries from same page",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            },
+            {
+              "id": ""
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00+01:00",
+          "end": "2026-09-25T10:00:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": false,
+      "calendar_list_error": "calendar_invalid_calendar_list",
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "incomplete conflict scan preserves coverage without reservation",
+    "tool": "calendar_create",
+    "arguments": {
+      "summary": "Coffee",
+      "start": "2026-09-25T09:30:00+01:00",
+      "end": "2026-09-25T10:30:00+01:00",
+      "description": "Discuss the plans.",
+      "location": "Cafe",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            },
+            {
+              "id": "busy",
+              "summary": "Primary calendar",
+              "accessRole": "freeBusyReader",
+              "timeZone": "Europe/London"
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": []
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "error": "calendar_conflict_check_incomplete",
+      "retry_safe": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 2,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        },
+        {
+          "calendar_id": "busy",
+          "calendar_name": "Primary calendar",
+          "access_role": "freeBusyReader",
+          "time_zone": "Europe/London",
+          "primary": false,
+          "status": "skipped",
+          "reason": "free_busy_only"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "fall-back transition sorts by UTC rather than local clock strings",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-10-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "later",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-10-25T01:15:00+00:00"
+              },
+              "end": {
+                "dateTime": "2026-10-25T01:45:00+00:00"
+              }
+            },
+            {
+              "id": "earlier",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-10-25T01:45:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-10-25T01:55:00+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-10-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "earlier",
+          "summary": "Team meeting",
+          "start": "2026-10-25T01:45:00+01:00",
+          "end": "2026-10-25T01:55:00+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        },
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "later",
+          "summary": "Team meeting",
+          "start": "2026-10-25T01:15:00+00:00",
+          "end": "2026-10-25T01:45:00+00:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 2,
+      "has_more": false,
+      "truncated": false,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "short fractional timestamps preserve original parser rejection",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00.1+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00.12+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 0,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "failed",
+          "reason": "invalid_calendar_timestamp"
+        }
+      ],
+      "error": "calendar_events_unavailable"
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "millisecond timestamps retain six-digit output precision",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "meeting1",
+              "status": "confirmed",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00.100+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00.120+01:00"
+              }
+            }
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "time_zone": "Europe/London",
+          "event_id": "meeting1",
+          "summary": "Team meeting",
+          "start": "2026-09-25T09:00:00.100000+01:00",
+          "end": "2026-09-25T10:00:00.120000+01:00",
+          "all_day": false,
+          "location": "Office",
+          "busy": true
+        }
+      ],
+      "event_count": 1,
+      "has_more": false,
+      "truncated": false,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": true,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "malformed optional calendar role stays unreadable metadata",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            },
+            {
+              "id": "unknown-role",
+              "summary": "Primary calendar",
+              "accessRole": [
+                "invalid"
+              ],
+              "timeZone": "Europe/London"
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": []
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 2,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "complete"
+        },
+        {
+          "calendar_id": "unknown-role",
+          "calendar_name": "Primary calendar",
+          "access_role": "unknown",
+          "time_zone": "Europe/London",
+          "primary": false,
+          "status": "skipped",
+          "reason": "unreadable_access_role"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "scan cap ignores malformed later event rows",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "primary",
+              "summary": "Primary calendar",
+              "accessRole": "owner",
+              "timeZone": "Europe/London",
+              "primary": true
+            }
+          ]
+        },
+        "error": null
+      },
+      {
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "page_token": null,
+        "body": {
+          "items": [
+            {
+              "id": "0",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "1",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "2",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "3",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "4",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "5",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "6",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "7",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "8",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "9",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "10",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "11",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "12",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "13",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "14",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "15",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "16",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "17",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "18",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "19",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "20",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "21",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "22",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "23",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "24",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "25",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "26",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "27",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "28",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "29",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "30",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "31",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "32",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "33",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "34",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "35",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "36",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "37",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "38",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "39",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "40",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "41",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "42",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "43",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "44",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "45",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "46",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "47",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "48",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "49",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "50",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "51",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "52",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "53",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "54",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "55",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "56",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "57",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "58",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "59",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "60",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "61",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "62",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "63",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "64",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "65",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "66",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "67",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "68",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "69",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "70",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "71",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "72",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "73",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "74",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "75",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "76",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "77",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "78",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "79",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "80",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "81",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "82",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "83",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "84",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "85",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "86",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "87",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "88",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "89",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "90",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "91",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "92",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "93",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "94",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "95",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "96",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "97",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "98",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "99",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "100",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "101",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "102",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "103",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "104",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "105",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "106",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "107",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "108",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "109",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "110",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "111",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "112",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "113",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "114",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "115",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "116",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "117",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "118",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "119",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "120",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "121",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "122",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "123",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "124",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "125",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "126",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "127",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "128",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "129",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "130",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "131",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "132",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "133",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "134",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "135",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "136",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "137",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "138",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "139",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "140",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "141",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "142",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "143",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "144",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "145",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "146",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "147",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "148",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "149",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "150",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "151",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "152",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "153",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "154",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "155",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "156",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "157",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "158",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "159",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "160",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "161",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "162",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "163",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "164",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "165",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "166",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "167",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "168",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "169",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "170",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "171",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "172",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "173",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "174",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "175",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "176",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "177",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "178",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "179",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "180",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "181",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "182",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "183",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "184",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "185",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "186",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "187",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "188",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "189",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "190",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "191",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "192",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "193",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "194",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "195",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "196",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "197",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "198",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            {
+              "id": "199",
+              "status": "cancelled",
+              "summary": "Team meeting",
+              "location": "Office",
+              "start": {
+                "dateTime": "2026-09-25T09:00:00+01:00"
+              },
+              "end": {
+                "dateTime": "2026-09-25T10:00:00+01:00"
+              }
+            },
+            false
+          ]
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "ok",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": true,
+      "calendar_list_error": null,
+      "calendar_list_truncated": false,
+      "calendars_found": 1,
+      "calendars_checked": 1,
+      "calendar_results": [
+        {
+          "calendar_id": "primary",
+          "calendar_name": "Primary calendar",
+          "access_role": "owner",
+          "time_zone": "Europe/London",
+          "primary": true,
+          "status": "partial",
+          "reason": "event_scan_limit"
+        }
+      ]
+    },
+    "expected_call_count": 2,
+    "expected_reserved": 0
+  },
+  {
+    "label": "explicit null calendar list is invalid discovery",
+    "tool": "calendar_agenda",
+    "arguments": {
+      "date": "2026-09-25"
+    },
+    "responses": [
+      {
+        "url": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        "page_token": null,
+        "body": {
+          "items": null
+        },
+        "error": null
+      }
+    ],
+    "previous": null,
+    "expected": {
+      "status": "error",
+      "date": "2026-09-25",
+      "time_zone": "Europe/London",
+      "events": [],
+      "event_count": 0,
+      "has_more": true,
+      "truncated": true,
+      "event_output_limited": false,
+      "untrusted_calendar_content": true,
+      "coverage_complete": false,
+      "calendar_list_complete": false,
+      "calendar_list_error": "calendar_invalid_calendar_list",
+      "calendar_list_truncated": false,
+      "calendars_found": 0,
+      "calendars_checked": 0,
+      "calendar_results": [],
+      "error": "calendar_discovery_failed"
+    },
+    "expected_call_count": 1,
+    "expected_reserved": 0
+  }
+]

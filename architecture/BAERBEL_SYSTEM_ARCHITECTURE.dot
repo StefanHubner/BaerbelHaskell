@@ -1,0 +1,36 @@
+digraph Baerbel {
+  graph [layout=neato, overlap=true, splines=polyline, bgcolor="#ffffff", pad="0.35", outputorder=edgesfirst];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=15, margin="0.18,0.15", color="#728397", fillcolor="#eef4fa", penwidth=1.4];
+  edge [fontname="DejaVu Sans", fontsize=12, color="#586f86", arrowsize=0.8];
+  title [shape=plain, style="", label="BÄRBEL · HASKELL IMPLEMENTATION", fontsize=26, pos="800,870!"];
+  status [shape=plain, style="", label="Candidate implementation and local tests · existing Python service remains deployed", fontsize=15, pos="800,830!"];
+  phones [label="Owner / public callers\nSIP providers and home phone", pos="800,750!", width=4.7];
+  pbx [label="Existing Asterisk\nNative channel ownership, dialplan, bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="800,630!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
+  owner [label="Owner ingress :9092\nSeparate managed-media registry\nPIN gate for private email tools", pos="400,480!", width=4.9, fillcolor="#f1eaf8", color="#9674b2"];
+  public [label="Public ingress :9093\nSeparate registry and restricted session\nScreen / decline / take message only", pos="1170,480!", width=5.0, fillcolor="#fff1e5", color="#b98b65"];
+  home [label="Home route :4573\nPure destination policy\nNo model-selected dialplan", pos="1510,635!", width=3.25, fillcolor="#eaf2ed"];
+  pure [label="Pure decisions and typed data\nRouting · call transitions · tool validation\nTranscript selection · protocol reduction\nJSON codecs · provider normalization", pos="800,305!", width=5.4, height=1.35, fillcolor="#ffffff", color="#527fa5", penwidth=2.0];
+  live [label="Speech providers\nLive WebSocket\nLegacy STT → chat → TTS", pos="130,300!", width=3.25];
+  providers [label="Shared provider capabilities\nGmail · Calendar · Contacts\nMaps · Windguru · local profile", pos="400,135!", width=5.0];
+  notifications [label="Fixed-recipient notifications\nNo public access to owner tools\nAccepted delivery survives hangup", pos="1190,135!", width=5.1, fillcolor="#fff1e5"];
+  effects [label="Small effect interpreters\nBounded HTTP / WebSocket · OAuth refresh\nAudio / VAD / resampling · files / SQLite / logs", pos="800,-30!", width=6.7, fillcolor="#eaf2ed"];
+  state [label="Durable external state\nGmail/Calendar/SMS receipts · PBX event cursor\nPrivate profile · existing call archive", pos="800,-165!", width=6.5, fillcolor="#f3f4f6"];
+  config [label="Configuration boundary\nOne global rules + schema file\nOne private user settings file", pos="1470,305!", width=3.8, fillcolor="#f3f4f6"];
+  permissions [shape=plain, style="", label="Public caller input never grants owner capabilities\nUncertain mutations are recorded before submission and never replayed automatically", fontsize=14, pos="800,-270!"];
+  phones -> pbx [label="calls"];
+  pbx -> owner [label="authorized owner leg"];
+  pbx -> public [label="untrusted caller leg"];
+  pbx -> home [label="FastAGI"];
+  owner -> pure;
+  public -> pure;
+  home -> pure [style=dashed];
+  owner -> live;
+  public -> live [style=dashed, color="#b98b65"];
+  pure -> providers;
+  pure -> notifications;
+  config -> pure [label="parse once"];
+  providers -> effects;
+  notifications -> effects;
+  live -> effects;
+  effects -> state;
+}

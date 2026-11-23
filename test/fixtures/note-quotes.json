@@ -1,0 +1,70 @@
+[
+  {
+    "input": {
+      "phrase": "hello",
+      "fragments": [
+        {
+          "sequence": 1,
+          "text": "hello world"
+        }
+      ]
+    },
+    "expected": 1
+  },
+  {
+    "input": {
+      "phrase": "two words",
+      "fragments": [
+        {
+          "sequence": 3,
+          "text": "one tw"
+        },
+        {
+          "sequence": 4,
+          "text": "o words here"
+        }
+      ]
+    },
+    "expected": 3
+  },
+  {
+    "input": {
+      "phrase": "hello",
+      "fragments": [
+        {
+          "sequence": 1,
+          "text": "hello hello"
+        }
+      ]
+    },
+    "expected": null
+  },
+  {
+    "input": {
+      "phrase": "that's",
+      "fragments": [
+        {
+          "sequence": 5,
+          "text": "Tha"
+        },
+        {
+          "sequence": 6,
+          "text": "t’s the note"
+        }
+      ]
+    },
+    "expected": 5
+  },
+  {
+    "input": {
+      "phrase": "",
+      "fragments": [
+        {
+          "sequence": 1,
+          "text": "anything"
+        }
+      ]
+    },
+    "expected": null
+  }
+]

@@ -1,0 +1,7 @@
+# Code principles
+
+Use explicit Haskell types and Stack with GHCup. Keep functions short and self-contained. Keep computation pure; pass effects as capabilities. Return failures with Either, never throw exceptions or use error, undefined, partial indexing, head, tail or fromJust. Catch operational exceptions only at I/O boundaries; preserve cancellation. Trust internal arguments; parse external input once. Keep nesting to at most three levels (two spaces per level). Reuse functions and higher-order functions instead of duplicating logic or introducing inheritance. Keep rules and defaults in config/global.json and user settings in one private user file. Derive JSON codecs for typed records; keep protocol envelope construction central. No credentials in Git. Preserve all telephone permission boundaries, durable submission uncertainty, timeouts and cancellation semantics.
+
+Run Stack tests, GHC warnings, HLint and Haskell Language Server diagnostics. Report code line changes and the main-function diff. Never replace the running Python service until Haskell behaviour has been verified; list incomplete parity explicitly.
+
+Keep pure values and Either results out of IO unless the operation performs a real effect. Prefer pattern matching and guards to if-then-else. Use automatic derived instances where their representation matches the required format; keep codec options shared and custom parsing limited to actual wire-format differences. Keep the implementation simple and avoid introducing an abstraction framework.

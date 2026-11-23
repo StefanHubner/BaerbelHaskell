@@ -1,0 +1,3180 @@
+[
+  {
+    "label": "argument shapes and quote validation",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": null,
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "invalid_note_request"
+          }
+        ]
+      },
+      {
+        "tool": "unknown",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "unknown_note_tool"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "unknown",
+            "state": "idle",
+            "error": "unknown_note_tool"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_required"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "!"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_required"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_required"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "a\u0000b"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_required"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "",
+          "extra": 1
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_required"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {
+          "extra": 1
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "cancel",
+            "state": "idle",
+            "error": "invalid_note_request"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "completion_phrase_required",
+          "instruction": "Supply an exact quote of the owner's latest completion words. Reassess internally; no special phrase is required.",
+          "observed_tail": ""
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "idle",
+            "error": "completion_phrase_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "completion_phrase_required",
+          "instruction": "Supply an exact quote of the owner's latest completion words. Reassess internally; no special phrase is required.",
+          "observed_tail": ""
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "idle",
+            "error": "completion_phrase_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "!"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "completion_phrase_required",
+          "instruction": "Supply an exact quote of the owner's latest completion words. Reassess internally; no special phrase is required.",
+          "observed_tail": ""
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "idle",
+            "error": "completion_phrase_required"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "completion_phrase_required",
+          "instruction": "Supply an exact quote of the owner's latest completion words. Reassess internally; no special phrase is required.",
+          "observed_tail": ""
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "idle",
+            "error": "completion_phrase_required"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "archive unavailable",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": false,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "call_recording_unavailable"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "unique retroactive quote and cached receipt",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "Remember milk"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember milk, send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember milk, send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_already_sent",
+          "instruction": "The note was emailed; cancellation cannot recall it."
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember milk, send it"
+          ]
+        ],
+        "logs": [
+          {
+            "action": "cancel",
+            "state": "sent",
+            "error": "note_already_sent"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "Remember"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember milk, send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "Remember milk, send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember milk, send it"
+          ],
+          [
+            "note-2",
+            "Remember milk, send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "prospective note keeps later complete utterance",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "old words",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "old words",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "overlap",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 3,
+              "text": "New note, send it",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 3,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "old words",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "overlap",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 3,
+              "text": "New note, send it",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 3,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "New note, send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "leading quote does not select prior fragment",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "Remember this"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "'",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "Remember this, send it",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "'",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "Remember this, send it",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "'",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "Remember this, send it",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Remember this, send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "repeated apostrophes separate words",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "a b"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "a''b send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "a''b send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "a''b send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "a''b send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "missing or ambiguous start quote",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "hello"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "hello hello",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_not_unique",
+          "instruction": "Choose a unique exact opening quote from the caller's observed note content. Do not ask them to repeat it.",
+          "observed_tail": "hello hello"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_not_unique"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "missing"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "hello hello",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_not_unique",
+          "instruction": "Choose a unique exact opening quote from the caller's observed note content. Do not ask them to repeat it.",
+          "observed_tail": "hello hello"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_not_unique"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "start cannot replace active note",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_already_active"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "recording",
+            "error": "note_already_active"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "send without selected content",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_not_selected",
+          "instruction": "Select the already spoken note using owner_note_start and its opening quote, then send. Do not ask for repetition."
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "idle",
+            "error": "note_not_selected"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_has_no_transcript"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "note_has_no_transcript"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "stale completion includes current tail",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it, but add more",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "completion_phrase_not_observed",
+          "instruction": "The quote is not the end of the current caller speech. Reassess internally using observed_tail and wait for the complete utterance. Do not demand repeated completion.",
+          "observed_tail": "send it, but add more"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "completion_phrase_not_observed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "missing timing waits before rejecting",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": null,
+              "end": null
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": null,
+              "end": null
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": false,
+        "expected": {
+          "status": "error",
+          "error": "caller_still_speaking_or_note_changed",
+          "instruction": "Caller speech or the note changed. Wait for the complete utterance and reassess observed_tail internally.",
+          "observed_tail": "send it"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "caller_still_speaking_or_note_changed"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": null,
+              "end": null
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": null,
+              "end": null
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_timing_unavailable"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "call_recording_timing_unavailable"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "invalid excerpt duration",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_excerpt_duration_invalid"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "note_excerpt_duration_invalid"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "send it",
+              "start": 2,
+              "end": 603
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 2,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "send it",
+              "start": 2,
+              "end": 603
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_excerpt_duration_invalid"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "note_excerpt_duration_invalid"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "history eviction latches limit",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 1
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_selection_exceeds_history_limit"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "limit",
+            "error": "note_selection_exceeds_history_limit"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 1
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_already_active"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "limit",
+            "error": "note_already_active"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 1
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 1
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "selection changes during completion wait",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": " and another thing",
+              "start": 3,
+              "end": 4
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "caller_still_speaking_or_note_changed",
+          "instruction": "Caller speech or the note changed. Wait for the complete utterance and reassess observed_tail internally.",
+          "observed_tail": "send it and another thing"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "caller_still_speaking_or_note_changed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "new speech during completion wait",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 20.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "caller_still_speaking_or_note_changed",
+          "instruction": "Caller speech or the note changed. Wait for the complete utterance and reassess observed_tail internally.",
+          "observed_tail": "send it"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "caller_still_speaking_or_note_changed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "non-sent receipt allows fresh selection",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "not_sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "not_sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "failed receipt stays cached",
+    "audio": "ok",
+    "receipt": {
+      "status": "error",
+      "error": "note_send_failed"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_send_failed"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "note_send_failed"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "unknown receipt stays cached",
+    "audio": "ok",
+    "receipt": {
+      "status": "unknown",
+      "error": "note_send_outcome_unknown_do_not_retry"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "unknown",
+          "error": "note_send_outcome_unknown_do_not_retry"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "unknown",
+          "error": "note_send_outcome_unknown_do_not_retry"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "cancelled"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "send it"
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "archive empty",
+    "audio": "empty",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "archive large",
+    "audio": "large",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "archive error",
+    "audio": "error",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "send it",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "call_recording_excerpt_unavailable"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": []
+      }
+    ]
+  },
+  {
+    "label": "closed session rejects every request",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "__close",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": null,
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "recording",
+            "error": "invalid_note_request"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "send",
+            "state": "recording",
+            "error": "invalid_note_request"
+          }
+        ]
+      },
+      {
+        "tool": "owner_note_cancel",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "cancel",
+            "state": "recording",
+            "error": "invalid_note_request"
+          }
+        ]
+      },
+      {
+        "tool": "unknown",
+        "arguments": {},
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "invalid_note_request"
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "unknown",
+            "state": "recording",
+            "error": "invalid_note_request"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "observed tail is bounded",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": "missing"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa end words",
+              "start": 1,
+              "end": 2
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 1,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "error",
+          "error": "start_quote_not_unique",
+          "instruction": "Choose a unique exact opening quote from the caller's observed note content. Do not ask them to repeat it.",
+          "observed_tail": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa end words"
+        },
+        "pending": false,
+        "deliveries": [],
+        "logs": [
+          {
+            "action": "start",
+            "state": "idle",
+            "error": "start_quote_not_unique"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "selected transcript remains faithful",
+    "audio": "ok",
+    "receipt": {
+      "status": "ok",
+      "result": "sent"
+    },
+    "steps": [
+      {
+        "tool": "owner_note_start",
+        "arguments": {
+          "start_quote": ""
+        },
+        "snapshot": {
+          "fragments": [],
+          "last_delta": 0.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 0,
+          "dropped_through": 0
+        },
+        "later": null,
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "selected",
+          "instruction": "The note is selected from the call archive. Keep listening if dictation is unfinished. If the owner already requested sending, send it now using their observed completion words; do not ask for repeated content.",
+          "maximum_seconds": 600
+        },
+        "pending": true,
+        "deliveries": [],
+        "logs": []
+      },
+      {
+        "tool": "owner_note_send",
+        "arguments": {
+          "completion_phrase": "send it"
+        },
+        "snapshot": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "  Line one.\n",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "Line two — send it.  ",
+              "start": 2,
+              "end": 3
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "later": {
+          "fragments": [
+            {
+              "sequence": 1,
+              "text": "  Line one.\n",
+              "start": 1,
+              "end": 2
+            },
+            {
+              "sequence": 2,
+              "text": "Line two — send it.  ",
+              "start": 2,
+              "end": 3
+            }
+          ],
+          "last_delta": 10.0,
+          "voice_started": 0.0,
+          "now": 100.0,
+          "archive_bound": true,
+          "sequence": 2,
+          "dropped_through": 0
+        },
+        "settled": true,
+        "expected": {
+          "status": "ok",
+          "result": "sent"
+        },
+        "pending": false,
+        "deliveries": [
+          [
+            "note-1",
+            "Line one.\nLine two — send it."
+          ]
+        ],
+        "logs": []
+      }
+    ]
+  }
+]

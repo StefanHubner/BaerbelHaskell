@@ -1,0 +1,454 @@
+[
+  {
+    "label": "absent hours remain unavailable",
+    "body": {
+      "id": "fixture-place"
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "false open state remains available",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "openNow": false
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "available",
+      "current_opening_hours": {
+        "open_now": false
+      },
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true
+    }
+  },
+  {
+    "label": "empty periods represent meaningful schedule",
+    "body": {
+      "id": "fixture-place",
+      "regularOpeningHours": {
+        "periods": []
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "available",
+      "current_opening_hours": null,
+      "regular_opening_hours": {
+        "periods": []
+      },
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true
+    }
+  },
+  {
+    "label": "empty descriptions do not invent opening hours",
+    "body": {
+      "id": "fixture-place",
+      "regularOpeningHours": {
+        "weekdayDescriptions": []
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": {
+        "weekday_descriptions": []
+      },
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "proto zero fields retain absent close",
+    "body": {
+      "id": "fixture-place",
+      "regularOpeningHours": {
+        "periods": [
+          {
+            "open": {}
+          }
+        ]
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "available",
+      "current_opening_hours": null,
+      "regular_opening_hours": {
+        "periods": [
+          {
+            "open": {
+              "day": 0,
+              "hour": 0,
+              "minute": 0
+            }
+          }
+        ]
+      },
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true
+    }
+  },
+  {
+    "label": "special calendar dates and nanoseconds retained",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "specialDays": [
+          {
+            "date": {
+              "year": 2026,
+              "month": 12,
+              "day": 25
+            }
+          }
+        ],
+        "nextOpenTime": "2026-12-25T12:30:00.123456789Z"
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "available",
+      "current_opening_hours": {
+        "special_days": [
+          {
+            "date": "2026-12-25"
+          }
+        ],
+        "next_open_time": "2026-12-25T12:30:00.123456789Z"
+      },
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true
+    }
+  },
+  {
+    "label": "weekday list bounded and key redacted",
+    "body": {
+      "id": "fixture-place",
+      "regularOpeningHours": {
+        "weekdayDescriptions": [
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours",
+          "fixture-key opening hours"
+        ]
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "available",
+      "current_opening_hours": null,
+      "regular_opening_hours": {
+        "data_truncated": true,
+        "weekday_descriptions": [
+          "[redacted] opening hours",
+          "[redacted] opening hours",
+          "[redacted] opening hours",
+          "[redacted] opening hours",
+          "[redacted] opening hours",
+          "[redacted] opening hours",
+          "[redacted] opening hours"
+        ]
+      },
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true
+    }
+  },
+  {
+    "label": "valid phone normalized and key removed",
+    "body": {
+      "id": "fixture-place",
+      "displayName": {
+        "text": "fixture-key Cafe"
+      },
+      "formattedAddress": "fixture-key road",
+      "internationalPhoneNumber": "+44 (20) 1234-5678",
+      "businessStatus": "OPERATIONAL",
+      "timeZone": {
+        "id": "Europe/London"
+      },
+      "utcOffsetMinutes": 60
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "[redacted] Cafe",
+      "address": "[redacted] road",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": null,
+      "business_status": "OPERATIONAL",
+      "time_zone": "Europe/London",
+      "utc_offset_minutes": 60,
+      "international_phone_number": "+44 (20) 1234-5678",
+      "phone_number_e164": "+442012345678",
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "extension phone remains raw",
+    "body": {
+      "id": "fixture-place",
+      "internationalPhoneNumber": "+44 20 1234 5678 ext 3"
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": "+44 20 1234 5678 ext 3",
+      "phone_number_e164": null,
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "invalid business and time zone metadata ignored",
+    "body": {
+      "id": "fixture-place",
+      "businessStatus": "FUTURE_STATUS",
+      "timeZone": {
+        "id": 5
+      }
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "invalid offset rejected as hours error",
+    "body": {
+      "id": "fixture-place",
+      "utcOffsetMinutes": 1440
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "null offset rejected as hours error",
+    "body": {
+      "id": "fixture-place",
+      "utcOffsetMinutes": null
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "null proto integer rejected as hours error",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "periods": [
+          {
+            "open": {
+              "day": null
+            }
+          }
+        ]
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "null close rejected as hours error",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "periods": [
+          {
+            "open": {},
+            "close": null
+          }
+        ]
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "invalid leap day rejected",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "specialDays": [
+          {
+            "date": {
+              "year": 2026,
+              "month": 2,
+              "day": 29
+            }
+          }
+        ]
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "null top-level hours absent",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": null
+    },
+    "expected": {
+      "status": "ok",
+      "place_ref": "place_fixture",
+      "name": "Saved label",
+      "address": "Saved address",
+      "source": "Google Maps Places API",
+      "fetched_at": "2026-10-15T08:00:00Z",
+      "opening_hours_status": "unavailable",
+      "current_opening_hours": null,
+      "regular_opening_hours": null,
+      "business_status": null,
+      "time_zone": null,
+      "utc_offset_minutes": null,
+      "international_phone_number": null,
+      "phone_number_e164": null,
+      "untrusted_place_content": true,
+      "reason": "opening_hours_not_provided"
+    }
+  },
+  {
+    "label": "null open state rejected",
+    "body": {
+      "id": "fixture-place",
+      "currentOpeningHours": {
+        "openNow": null
+      }
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_invalid_hours_response"
+    }
+  },
+  {
+    "label": "mismatched provider place rejected",
+    "body": {
+      "id": "wrong-place"
+    },
+    "expected": {
+      "status": "error",
+      "error": "maps_place_details_mismatch"
+    }
+  }
+]

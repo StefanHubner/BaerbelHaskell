@@ -1,0 +1,30 @@
+[
+  {
+    "name": "gmail_send",
+    "arguments": {
+      "to": [
+        "owner@example.test"
+      ],
+      "subject": "Hello",
+      "body": "Grüße"
+    },
+    "fingerprint": "71e4eb8e21562b680d825a5e56d3c5dcc6f2ac5dd1060bc6e007d45e39df8056"
+  },
+  {
+    "name": "calendar_create",
+    "arguments": {
+      "summary": "Check",
+      "attendees": [],
+      "allow_conflicts": false
+    },
+    "fingerprint": "0a90891f497618b26536f9a7ea06dc8bbac0010b57a551188713c5f6b083df90"
+  },
+  {
+    "name": "owner_note_send",
+    "arguments": {
+      "note_id": "call.123",
+      "duration": 1.5
+    },
+    "fingerprint": "4e5a56b53baeffff50a7448b5a7ada52142d232bbf44aa974bac1bca8dc07134"
+  }
+]

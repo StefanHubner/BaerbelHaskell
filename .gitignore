@@ -1,0 +1,17 @@
+/.stack-work
+dist-newstyle/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+config/user.json
+*.sqlite3*
+*.wav
+*.mp3
+*.log
+.env*
+
+/.native
+/.tools
+
+/release

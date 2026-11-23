@@ -1,0 +1,28 @@
+[Unit]
+Description=Streaming telephone speech assistant
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=stefan
+Group=stefan
+WorkingDirectory=/opt/baerbel
+ExecStart=/opt/baerbel/bin/phone-assistant-server /opt/baerbel/config/global.json /etc/phone-assistant/user.json
+Restart=on-failure
+RestartSec=3s
+# Allow an explicitly completed owner note's bounded delivery to drain.
+TimeoutStopSec=40s
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/log/phone-assistant
+StateDirectory=phone-assistant
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

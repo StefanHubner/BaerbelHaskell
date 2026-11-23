@@ -1,0 +1,269 @@
+[
+  {
+    "input": {},
+    "expected": {
+      "name": "",
+      "other_names": [],
+      "names_truncated": false,
+      "phone_numbers": [],
+      "multiple_phone_numbers": false,
+      "phone_numbers_truncated": false
+    }
+  },
+  {
+    "input": {
+      "names": [
+        {
+          "displayName": "Alice"
+        },
+        {
+          "displayName": "Alice"
+        },
+        {
+          "displayName": "A. Example"
+        }
+      ],
+      "phoneNumbers": [
+        {
+          "value": "+44 20 1234 5678",
+          "canonicalForm": "+442012345678",
+          "formattedType": "Work"
+        }
+      ]
+    },
+    "expected": {
+      "name": "Alice",
+      "other_names": [
+        "A. Example"
+      ],
+      "names_truncated": false,
+      "phone_numbers": [
+        {
+          "label": "Work",
+          "number": "+44 20 1234 5678",
+          "phone_number_e164": "+442012345678",
+          "extension_present": false
+        }
+      ],
+      "multiple_phone_numbers": false,
+      "phone_numbers_truncated": false
+    }
+  },
+  {
+    "input": {
+      "names": [
+        {
+          "displayName": "<untrusted>\nname"
+        }
+      ],
+      "phoneNumbers": [
+        {
+          "value": "01234 ext. 17",
+          "canonicalForm": "+441234",
+          "type": "work"
+        },
+        {
+          "value": "07123",
+          "type": "mobile"
+        }
+      ]
+    },
+    "expected": {
+      "name": "<untrusted>name",
+      "other_names": [],
+      "names_truncated": false,
+      "phone_numbers": [
+        {
+          "label": "work",
+          "number": "01234 ext. 17",
+          "phone_number_e164": null,
+          "extension_present": true
+        },
+        {
+          "label": "mobile",
+          "number": "07123",
+          "phone_number_e164": null,
+          "extension_present": false
+        }
+      ],
+      "multiple_phone_numbers": true,
+      "phone_numbers_truncated": false
+    }
+  },
+  {
+    "input": {
+      "names": [
+        {
+          "displayName": "0"
+        },
+        {
+          "displayName": "1"
+        },
+        {
+          "displayName": "2"
+        },
+        {
+          "displayName": "3"
+        },
+        {
+          "displayName": "4"
+        },
+        {
+          "displayName": "5"
+        },
+        {
+          "displayName": "6"
+        }
+      ],
+      "phoneNumbers": [
+        {
+          "value": "0",
+          "canonicalForm": "+440"
+        },
+        {
+          "value": "1",
+          "canonicalForm": "+441"
+        },
+        {
+          "value": "2",
+          "canonicalForm": "+442"
+        },
+        {
+          "value": "3",
+          "canonicalForm": "+443"
+        },
+        {
+          "value": "4",
+          "canonicalForm": "+444"
+        },
+        {
+          "value": "5",
+          "canonicalForm": "+445"
+        },
+        {
+          "value": "6",
+          "canonicalForm": "+446"
+        },
+        {
+          "value": "7",
+          "canonicalForm": "+447"
+        },
+        {
+          "value": "8",
+          "canonicalForm": "+448"
+        },
+        {
+          "value": "9",
+          "canonicalForm": "+449"
+        },
+        {
+          "value": "10",
+          "canonicalForm": "+4410"
+        },
+        {
+          "value": "11",
+          "canonicalForm": "+4411"
+        }
+      ]
+    },
+    "expected": {
+      "name": "0",
+      "other_names": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "names_truncated": true,
+      "phone_numbers": [
+        {
+          "label": "",
+          "number": "0",
+          "phone_number_e164": "+440",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "1",
+          "phone_number_e164": "+441",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "2",
+          "phone_number_e164": "+442",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "3",
+          "phone_number_e164": "+443",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "4",
+          "phone_number_e164": "+444",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "5",
+          "phone_number_e164": "+445",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "6",
+          "phone_number_e164": "+446",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "7",
+          "phone_number_e164": "+447",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "8",
+          "phone_number_e164": "+448",
+          "extension_present": false
+        },
+        {
+          "label": "",
+          "number": "9",
+          "phone_number_e164": "+449",
+          "extension_present": false
+        }
+      ],
+      "multiple_phone_numbers": true,
+      "phone_numbers_truncated": true
+    }
+  },
+  {
+    "input": {
+      "phoneNumbers": [
+        {
+          "value": "bad unicode",
+          "canonicalForm": "+44١٢٣"
+        }
+      ]
+    },
+    "expected": {
+      "name": "",
+      "other_names": [],
+      "names_truncated": false,
+      "phone_numbers": [
+        {
+          "label": "",
+          "number": "bad unicode",
+          "phone_number_e164": null,
+          "extension_present": false
+        }
+      ],
+      "multiple_phone_numbers": false,
+      "phone_numbers_truncated": false
+    }
+  }
+]

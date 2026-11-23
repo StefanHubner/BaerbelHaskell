@@ -1,0 +1,22 @@
+/var/log/phone-assistant/utterances.jsonl {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    su stefan stefan
+    create 0640 stefan stefan
+}
+
+# The worker follows inode cursors through these uncompressed rotations. FILE
+# in the dialplan reopens the path per append; copytruncate could lose events.
+/var/lib/phone-assistant-incoming-events/calls.csv {
+    daily
+    rotate 14
+    nocompress
+    missingok
+    notifempty
+    su asterisk stefan
+    create 0640 asterisk stefan
+}

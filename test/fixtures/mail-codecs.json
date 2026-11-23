@@ -1,0 +1,226 @@
+[
+  {
+    "label": "valid utf-8",
+    "charset": "utf-8",
+    "bytes": "R3LDvMOfZSDml6XmnKzoqp4=",
+    "header": "=?utf-8?B?R3LDvMOfZSDml6XmnKzoqp4=?=",
+    "body": "Grüße 日本語",
+    "decoded_header": "Grüße 日本語"
+  },
+  {
+    "label": "valid utf_8",
+    "charset": "utf_8",
+    "bytes": "R3LDvMOfZQ==",
+    "header": "=?utf_8?B?R3LDvMOfZQ==?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid latin-1",
+    "charset": "latin-1",
+    "bytes": "R3L832U=",
+    "header": "=?latin-1?B?R3L832U=?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid windows-1252",
+    "charset": "windows-1252",
+    "bytes": "gCBHcvzfZQ==",
+    "header": "=?windows-1252?B?gCBHcvzfZQ==?=",
+    "body": "€ Grüße",
+    "decoded_header": "€ Grüße"
+  },
+  {
+    "label": "valid cp1251",
+    "charset": "cp1251",
+    "bytes": "z/Do4uXy",
+    "header": "=?cp1251?B?z/Do4uXy?=",
+    "body": "Привет",
+    "decoded_header": "Привет"
+  },
+  {
+    "label": "valid koi8-r",
+    "charset": "koi8-r",
+    "bytes": "8NLJ18XU",
+    "header": "=?koi8-r?B?8NLJ18XU?=",
+    "body": "Привет",
+    "decoded_header": "Привет"
+  },
+  {
+    "label": "valid shift_jis",
+    "charset": "shift_jis",
+    "bytes": "k/qWe4zq",
+    "header": "=?shift_jis?B?k/qWe4zq?=",
+    "body": "日本語",
+    "decoded_header": "日本語"
+  },
+  {
+    "label": "valid iso-2022-jp",
+    "charset": "iso-2022-jp",
+    "bytes": "GyRCRnxLXDhsGyhC",
+    "header": "=?iso-2022-jp?B?GyRCRnxLXDhsGyhC?=",
+    "body": "日本語",
+    "decoded_header": "日本語"
+  },
+  {
+    "label": "valid gb18030",
+    "charset": "gb18030",
+    "bytes": "1tDOxA==",
+    "header": "=?gb18030?B?1tDOxA==?=",
+    "body": "中文",
+    "decoded_header": "中文"
+  },
+  {
+    "label": "valid utf-16",
+    "charset": "utf-16",
+    "bytes": "//5HAHIA/ADfAGUA",
+    "header": "=?utf-16?B?//5HAHIA/ADfAGUA?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-16le",
+    "charset": "utf-16le",
+    "bytes": "RwByAPwA3wBlAA==",
+    "header": "=?utf-16le?B?RwByAPwA3wBlAA==?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-16be",
+    "charset": "utf-16be",
+    "bytes": "AEcAcgD8AN8AZQ==",
+    "header": "=?utf-16be?B?AEcAcgD8AN8AZQ==?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-32",
+    "charset": "utf-32",
+    "bytes": "//4AAEcAAAByAAAA/AAAAN8AAABlAAAA",
+    "header": "=?utf-32?B?//4AAEcAAAByAAAA/AAAAN8AAABlAAAA?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-32le",
+    "charset": "utf-32le",
+    "bytes": "RwAAAHIAAAD8AAAA3wAAAGUAAAA=",
+    "header": "=?utf-32le?B?RwAAAHIAAAD8AAAA3wAAAGUAAAA=?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-32be",
+    "charset": "utf-32be",
+    "bytes": "AAAARwAAAHIAAAD8AAAA3wAAAGU=",
+    "header": "=?utf-32be?B?AAAARwAAAHIAAAD8AAAA3wAAAGU=?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "valid utf-8-sig",
+    "charset": "utf-8-sig",
+    "bytes": "77u/R3LDvMOfZQ==",
+    "header": "=?utf-8-sig?B?77u/R3LDvMOfZQ==?=",
+    "body": "Grüße",
+    "decoded_header": "Grüße"
+  },
+  {
+    "label": "truncated UTF8",
+    "charset": "utf-8",
+    "bytes": "4YA=",
+    "header": "=?utf-8?B?4YA=?=",
+    "body": "�",
+    "decoded_header": null
+  },
+  {
+    "label": "interrupted UTF8",
+    "charset": "utf-8",
+    "bytes": "4YBB",
+    "header": "=?utf-8?B?4YBB?=",
+    "body": "�A",
+    "decoded_header": null
+  },
+  {
+    "label": "UTF16 surrogate",
+    "charset": "utf-16le",
+    "bytes": "ANhhAA==",
+    "header": "=?utf-16le?B?ANhhAA==?=",
+    "body": "�a",
+    "decoded_header": null
+  },
+  {
+    "label": "truncated UTF16 surrogate",
+    "charset": "utf-16le",
+    "bytes": "ANhh",
+    "header": "=?utf-16le?B?ANhh?=",
+    "body": "�",
+    "decoded_header": null
+  },
+  {
+    "label": "UTF16 native no BOM",
+    "charset": "utf-16",
+    "bytes": "YQA=",
+    "header": "=?utf-16?B?YQA=?=",
+    "body": "a",
+    "decoded_header": "a"
+  },
+  {
+    "label": "UTF32 native no BOM",
+    "charset": "utf-32",
+    "bytes": "YQAAAA==",
+    "header": "=?utf-32?B?YQAAAA==?=",
+    "body": "a",
+    "decoded_header": "a"
+  },
+  {
+    "label": "undefined CP1252",
+    "charset": "cp1252",
+    "bytes": "gQ==",
+    "header": "=?cp1252?B?gQ==?=",
+    "body": "�",
+    "decoded_header": null
+  },
+  {
+    "label": "truncated ShiftJIS",
+    "charset": "shift_jis",
+    "bytes": "gg==",
+    "header": "=?shift_jis?B?gg==?=",
+    "body": "�",
+    "decoded_header": null
+  },
+  {
+    "label": "unknown charset",
+    "charset": "unknown-test",
+    "bytes": "4YBB",
+    "header": "=?unknown-test?B?4YBB?=",
+    "body": "�A",
+    "decoded_header": null
+  },
+  {
+    "label": "unknown 8bit header",
+    "charset": "unknown-8bit",
+    "bytes": "/2E=",
+    "header": "=?unknown-8bit?B?/2E=?=",
+    "body": "�a",
+    "decoded_header": "�a"
+  },
+  {
+    "label": "ASCII invalid",
+    "charset": "ascii",
+    "bytes": "/2E=",
+    "header": "=?ascii?B?/2E=?=",
+    "body": "�a",
+    "decoded_header": null
+  },
+  {
+    "label": "UTF8 keeps BOM",
+    "charset": "utf-8",
+    "bytes": "77u/QQ==",
+    "header": "=?utf-8?B?77u/QQ==?=",
+    "body": "﻿A",
+    "decoded_header": "﻿A"
+  }
+]

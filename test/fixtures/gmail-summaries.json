@@ -1,0 +1,91 @@
+[
+  {
+    "input": {
+      "id": "abc",
+      "threadId": "thread",
+      "payload": {
+        "headers": [
+          {
+            "name": "From",
+            "value": "Alice <alice@example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "Meeting"
+          }
+        ]
+      },
+      "labelIds": [
+        "UNREAD"
+      ]
+    },
+    "expected": {
+      "message_id": "abc",
+      "thread_id": "thread",
+      "from": "Alice <alice@example.com>",
+      "to": "",
+      "subject": "Meeting",
+      "date": "",
+      "snippet": "",
+      "unread": true,
+      "reply_to": "alice@example.com",
+      "reply_to_error": null
+    }
+  },
+  {
+    "input": {
+      "id": "abc",
+      "threadId": "thread",
+      "payload": {
+        "headers": [
+          {
+            "name": "From",
+            "value": "\"A, B\" <a@example.com>"
+          },
+          {
+            "name": "Subject",
+            "value": "=?utf-8?b?Q2Fmw6kgcGxhbnM=?="
+          }
+        ]
+      }
+    },
+    "expected": {
+      "message_id": "abc",
+      "thread_id": "thread",
+      "from": "\"A, B\" <a@example.com>",
+      "to": "",
+      "subject": "Café plans",
+      "date": "",
+      "snippet": "",
+      "unread": false,
+      "reply_to": "a@example.com",
+      "reply_to_error": null
+    }
+  },
+  {
+    "input": {
+      "id": "abc",
+      "threadId": "thread",
+      "payload": {
+        "headers": [
+          {
+            "name": "From",
+            "value": "a@example.com, b@example.com"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "message_id": "abc",
+      "thread_id": "thread",
+      "from": "a@example.com, b@example.com",
+      "to": "",
+      "subject": "",
+      "date": "",
+      "snippet": "",
+      "unread": false,
+      "reply_to": null,
+      "reply_to_error": "reply_requires_one_recipient"
+    }
+  }
+]

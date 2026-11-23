@@ -1,0 +1,135 @@
+{-# LANGUAGE OverloadedStrings #-}
+module Baerbel.Provider
+  ( Execute, Durable, Existing, Nullable(..), renamedOptions, referenceSize, referenceByteSize, truthy, optionalField, checked, get, post, fetch, boundedMap, textParam
+  , clean, firstOr, limitJson, combine ) where
+
+import Baerbel.ProviderConfig (HttpPolicy(..))
+import Baerbel.Error (Result)
+import Baerbel.HTTP (Body(..), Request(..), Send)
+import Baerbel.JSON (decodeValue, jsonOptions)
+import Control.Concurrent (newQSem, signalQSem, waitQSem)
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Exception (bracket_)
+import Data.Aeson.Types (parseMaybe)
+import Data.Aeson (Object, Options(..), FromJSON(..), ToJSON(..), Value(..), encode)
+import qualified Data.Aeson.KeyMap as KeyMap
+import Data.ByteString (ByteString)
+import qualified Data.Aeson.Key as Key
+import Data.Char (ord)
+import Data.Maybe (fromMaybe)
+import qualified Data.Text.Encoding as Encoding
+import Data.Foldable (toList)
+import qualified Data.ByteString.Lazy as Lazy
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
+
+type Execute = Text -> Value -> Text -> IO (Result Value)
+type Durable = Text -> Text -> Value -> IO (Result Value) -> IO (Result Value)
+type Existing = Text -> Text -> Value -> IO (Result (Maybe Value))
+
+newtype Nullable a = Nullable {nullable :: Maybe a}
+
+-- Keep the default omitField=False: Nothing must remain an explicit JSON null.
+instance ToJSON a => ToJSON (Nullable a) where
+  toJSON = toJSON . nullable
+  toEncoding = toEncoding . nullable
+
+renamedOptions :: Int -> [(String, String)] -> Options
+renamedOptions prefix names = base {fieldLabelModifier = rename}
+  where
+    base = jsonOptions prefix
+    rename name = fromMaybe (fieldLabelModifier base name) (lookup name names)
+
+referenceSize :: ToJSON a => a -> Int
+referenceSize = jsonSize . toJSON
+
+referenceByteSize :: ToJSON a => a -> Int
+referenceByteSize value = referenceSize value + bytes - characters
+  where
+    encoded = Lazy.toStrict (encode value)
+    bytes = fromIntegral (Lazy.length (encode value))
+    characters = Text.length (Encoding.decodeUtf8 encoded)
+
+jsonSize :: Value -> Int
+jsonSize Null = 4
+jsonSize (Bool True) = 4
+jsonSize (Bool False) = 5
+jsonSize (String value) = 2 + Text.foldl' (\size char -> size + escapedLength char) 0 value
+jsonSize (Number value) = Text.length (Encoding.decodeUtf8 (Lazy.toStrict (encode value)))
+jsonSize (Array values) = collectionSize (map jsonSize (toList values))
+jsonSize (Object values) = collectionSize (map memberSize (KeyMap.toList values))
+  where memberSize (key, value) = jsonSize (String (Key.toText key)) + 2 + jsonSize value
+
+collectionSize :: [Int] -> Int
+collectionSize values = 2 + sum values + max 0 (length values - 1) * 2
+
+escapedLength :: Char -> Int
+escapedLength char
+  | char `elem` ("\"\\\b\f\n\r\t" :: String) = 2
+  | ord char < 32 = 6
+  | otherwise = 1
+
+checked :: FromJSON a => Text -> (a -> IO (Result Value)) -> Value -> IO (Result Value)
+checked code operation value = either (pure . Left) operation parsed
+  where parsed = decodeValue code value
+
+get :: HttpPolicy -> Send -> Text -> [(ByteString, Maybe ByteString)] -> IO (Result Value)
+get policy send url query = send request
+  where request = Request "GET" url [] query EmptyBody (httpResponseBytes policy) (httpTimeoutSeconds policy)
+
+post :: ToJSON a => HttpPolicy -> Send -> Text -> [(ByteString, Maybe ByteString)] -> a -> IO (Result Value)
+post policy send url query body = send request
+  where
+    resource = toJSON body
+    request = Request "POST" url [] query (JsonBody resource) (httpResponseBytes policy) (httpTimeoutSeconds policy)
+
+fetch :: FromJSON a => Text -> IO (Result Value) -> IO (Result a)
+fetch code = fmap (>>= decodeValue code)
+
+boundedMap :: Int -> (a -> IO b) -> [a] -> IO [b]
+boundedMap concurrency operation items = do
+  sem <- newQSem concurrency
+  let run item = bracket_ (waitQSem sem) (signalQSem sem) (operation item)
+  mapConcurrently run items
+
+textParam :: ByteString -> Text -> (ByteString, Maybe ByteString)
+textParam key value = (key, Just encoded)
+  where encoded = Text.encodeUtf8 value
+
+clean :: Int -> Text -> Text
+clean cap = Text.take cap . Text.filter visible
+  where visible char = char >= ' ' && char /= '\DEL'
+
+firstOr :: a -> [a] -> a
+firstOr fallback values = case values of
+  [] -> fallback
+  value : _ -> value
+
+limitJson :: ToJSON a => Int -> Int -> [a] -> ([a], Bool)
+limitJson count cap = go 0 []
+  where
+    go _ result [] = (reverse result, False)
+    go size result (value : rest)
+      | length result >= count || total > cap = (reverse result, True)
+      | otherwise = go total (value : result) rest
+      where total = size + referenceSize value
+
+combine :: [Value] -> Value
+combine values = Object (foldMap fields values)
+  where
+    fields (Object value) = value
+    fields _ = KeyMap.empty
+
+
+truthy :: Value -> Bool
+truthy Null = False
+truthy (Bool value) = value
+truthy (Number value) = value /= 0
+truthy (String value) = not (Text.null value)
+truthy (Array value) = not (null value)
+truthy (Object value) = not (KeyMap.null value)
+
+
+optionalField :: FromJSON a => Key.Key -> Object -> Maybe a
+optionalField key value = KeyMap.lookup key value >>= parseMaybe parseJSON

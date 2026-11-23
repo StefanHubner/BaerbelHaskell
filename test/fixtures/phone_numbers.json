@@ -1,0 +1,4325 @@
+{
+  "phonenumbers_version": "9.0.42",
+  "cases": [
+    {
+      "number": "+12015550123",
+      "result": "+12015550123",
+      "accepted": true
+    },
+    {
+      "number": "+123",
+      "result": "invalid_e164_number",
+      "accepted": false
+    },
+    {
+      "number": "+12423456789",
+      "result": "+12423456789",
+      "accepted": true
+    },
+    {
+      "number": "+12423591234",
+      "result": "+12423591234",
+      "accepted": true
+    },
+    {
+      "number": "+12462501234",
+      "result": "+12462501234",
+      "accepted": true
+    },
+    {
+      "number": "+12463101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+12464123456",
+      "result": "+12464123456",
+      "accepted": true
+    },
+    {
+      "number": "+12642351234",
+      "result": "+12642351234",
+      "accepted": true
+    },
+    {
+      "number": "+12644612345",
+      "result": "+12644612345",
+      "accepted": true
+    },
+    {
+      "number": "+12684601234",
+      "result": "+12684601234",
+      "accepted": true
+    },
+    {
+      "number": "+12684641234",
+      "result": "+12684641234",
+      "accepted": true
+    },
+    {
+      "number": "+12684801234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+12842291234",
+      "result": "+12842291234",
+      "accepted": true
+    },
+    {
+      "number": "+12843001234",
+      "result": "+12843001234",
+      "accepted": true
+    },
+    {
+      "number": "+13406421234",
+      "result": "+13406421234",
+      "accepted": true
+    },
+    {
+      "number": "+13452221234",
+      "result": "+13452221234",
+      "accepted": true
+    },
+    {
+      "number": "+13453231234",
+      "result": "+13453231234",
+      "accepted": true
+    },
+    {
+      "number": "+14413701234",
+      "result": "+14413701234",
+      "accepted": true
+    },
+    {
+      "number": "+14414123456",
+      "result": "+14414123456",
+      "accepted": true
+    },
+    {
+      "number": "+14732691234",
+      "result": "+14732691234",
+      "accepted": true
+    },
+    {
+      "number": "+14734031234",
+      "result": "+14734031234",
+      "accepted": true
+    },
+    {
+      "number": "+15002345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+15062345678",
+      "result": "+15062345678",
+      "accepted": true
+    },
+    {
+      "number": "+15219023456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+16002012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+16492311234",
+      "result": "+16492311234",
+      "accepted": true
+    },
+    {
+      "number": "+16497101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+16497121234",
+      "result": "+16497121234",
+      "accepted": true
+    },
+    {
+      "number": "+16644912345",
+      "result": "+16644912345",
+      "accepted": true
+    },
+    {
+      "number": "+16644923456",
+      "result": "+16644923456",
+      "accepted": true
+    },
+    {
+      "number": "+16702345678",
+      "result": "+16702345678",
+      "accepted": true
+    },
+    {
+      "number": "+16713001234",
+      "result": "+16713001234",
+      "accepted": true
+    },
+    {
+      "number": "+16846221234",
+      "result": "+16846221234",
+      "accepted": true
+    },
+    {
+      "number": "+16847331234",
+      "result": "+16847331234",
+      "accepted": true
+    },
+    {
+      "number": "+17215205678",
+      "result": "+17215205678",
+      "accepted": true
+    },
+    {
+      "number": "+17215425678",
+      "result": "+17215425678",
+      "accepted": true
+    },
+    {
+      "number": "+17582845678",
+      "result": "+17582845678",
+      "accepted": true
+    },
+    {
+      "number": "+17584305678",
+      "result": "+17584305678",
+      "accepted": true
+    },
+    {
+      "number": "+17672251234",
+      "result": "+17672251234",
+      "accepted": true
+    },
+    {
+      "number": "+17674201234",
+      "result": "+17674201234",
+      "accepted": true
+    },
+    {
+      "number": "+17842661234",
+      "result": "+17842661234",
+      "accepted": true
+    },
+    {
+      "number": "+17844301234",
+      "result": "+17844301234",
+      "accepted": true
+    },
+    {
+      "number": "+17845101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+17872345678",
+      "result": "+17872345678",
+      "accepted": true
+    },
+    {
+      "number": "+18002123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+18002345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+18092345678",
+      "result": "+18092345678",
+      "accepted": true
+    },
+    {
+      "number": "+18682211234",
+      "result": "+18682211234",
+      "accepted": true
+    },
+    {
+      "number": "+18682911234",
+      "result": "+18682911234",
+      "accepted": true
+    },
+    {
+      "number": "+18692361234",
+      "result": "+18692361234",
+      "accepted": true
+    },
+    {
+      "number": "+18697652917",
+      "result": "+18697652917",
+      "accepted": true
+    },
+    {
+      "number": "+18762101234",
+      "result": "+18762101234",
+      "accepted": true
+    },
+    {
+      "number": "+18765230123",
+      "result": "+18765230123",
+      "accepted": true
+    },
+    {
+      "number": "+19002123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+19002345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+201001234567",
+      "result": "+201001234567",
+      "accepted": true
+    },
+    {
+      "number": "+20234567890",
+      "result": "+20234567890",
+      "accepted": true
+    },
+    {
+      "number": "+208001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+209001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+211181234567",
+      "result": "+211181234567",
+      "accepted": true
+    },
+    {
+      "number": "+211977123456",
+      "result": "+211977123456",
+      "accepted": true
+    },
+    {
+      "number": "+212520123456",
+      "result": "+212520123456",
+      "accepted": true
+    },
+    {
+      "number": "+212528812345",
+      "result": "+212528812345",
+      "accepted": true
+    },
+    {
+      "number": "+212592401234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+212650123456",
+      "result": "+212650123456",
+      "accepted": true
+    },
+    {
+      "number": "+212801234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+212891234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+21312345678",
+      "result": "+21312345678",
+      "accepted": true
+    },
+    {
+      "number": "+213551234567",
+      "result": "+213551234567",
+      "accepted": true
+    },
+    {
+      "number": "+213800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+213808123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+213983123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+21620123456",
+      "result": "+21620123456",
+      "accepted": true
+    },
+    {
+      "number": "+21630010123",
+      "result": "+21630010123",
+      "accepted": true
+    },
+    {
+      "number": "+21680101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+21688123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+218212345678",
+      "result": "+218212345678",
+      "accepted": true
+    },
+    {
+      "number": "+218912345678",
+      "result": "+218912345678",
+      "accepted": true
+    },
+    {
+      "number": "+2203012345",
+      "result": "+2203012345",
+      "accepted": true
+    },
+    {
+      "number": "+2205661234",
+      "result": "+2205661234",
+      "accepted": true
+    },
+    {
+      "number": "+221301012345",
+      "result": "+221301012345",
+      "accepted": true
+    },
+    {
+      "number": "+221701234567",
+      "result": "+221701234567",
+      "accepted": true
+    },
+    {
+      "number": "+221800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+221884123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+221933301234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+22222123456",
+      "result": "+22222123456",
+      "accepted": true
+    },
+    {
+      "number": "+22235123456",
+      "result": "+22235123456",
+      "accepted": true
+    },
+    {
+      "number": "+22280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+22320212345",
+      "result": "+22320212345",
+      "accepted": true
+    },
+    {
+      "number": "+22365012345",
+      "result": "+22365012345",
+      "accepted": true
+    },
+    {
+      "number": "+22380012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+22430241234",
+      "result": "+22430241234",
+      "accepted": true
+    },
+    {
+      "number": "+224601123456",
+      "result": "+224601123456",
+      "accepted": true
+    },
+    {
+      "number": "+224722123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2250123456789",
+      "result": "+2250123456789",
+      "accepted": true
+    },
+    {
+      "number": "+2252123456789",
+      "result": "+2252123456789",
+      "accepted": true
+    },
+    {
+      "number": "+22620491234",
+      "result": "+22620491234",
+      "accepted": true
+    },
+    {
+      "number": "+22670123456",
+      "result": "+22670123456",
+      "accepted": true
+    },
+    {
+      "number": "+22708123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+22709123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+22720201234",
+      "result": "+22720201234",
+      "accepted": true
+    },
+    {
+      "number": "+22793123456",
+      "result": "+22793123456",
+      "accepted": true
+    },
+    {
+      "number": "+22822212345",
+      "result": "+22822212345",
+      "accepted": true
+    },
+    {
+      "number": "+22890112345",
+      "result": "+22890112345",
+      "accepted": true
+    },
+    {
+      "number": "+2290120211234",
+      "result": "+2290120211234",
+      "accepted": true
+    },
+    {
+      "number": "+2290195123456",
+      "result": "+2290195123456",
+      "accepted": true
+    },
+    {
+      "number": "+22985751234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2303012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2303201234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+23052512345",
+      "result": "+23052512345",
+      "accepted": true
+    },
+    {
+      "number": "+23054480123",
+      "result": "+23054480123",
+      "accepted": true
+    },
+    {
+      "number": "+2308001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+23121234567",
+      "result": "+23121234567",
+      "accepted": true
+    },
+    {
+      "number": "+231332021234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+231770123456",
+      "result": "+231770123456",
+      "accepted": true
+    },
+    {
+      "number": "+23222221234",
+      "result": "+23222221234",
+      "accepted": true
+    },
+    {
+      "number": "+23225123456",
+      "result": "+23225123456",
+      "accepted": true
+    },
+    {
+      "number": "+233231234567",
+      "result": "+233231234567",
+      "accepted": true
+    },
+    {
+      "number": "+233302345678",
+      "result": "+233302345678",
+      "accepted": true
+    },
+    {
+      "number": "+23380012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2342033123456",
+      "result": "+2342033123456",
+      "accepted": true
+    },
+    {
+      "number": "+23480017591759",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2348021234567",
+      "result": "+2348021234567",
+      "accepted": true
+    },
+    {
+      "number": "+23522501234",
+      "result": "+23522501234",
+      "accepted": true
+    },
+    {
+      "number": "+23563012345",
+      "result": "+23563012345",
+      "accepted": true
+    },
+    {
+      "number": "+23621612345",
+      "result": "+23621612345",
+      "accepted": true
+    },
+    {
+      "number": "+23670012345",
+      "result": "+23670012345",
+      "accepted": true
+    },
+    {
+      "number": "+23687761234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+237222123456",
+      "result": "+237222123456",
+      "accepted": true
+    },
+    {
+      "number": "+237671234567",
+      "result": "+237671234567",
+      "accepted": true
+    },
+    {
+      "number": "+23788012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2382211234",
+      "result": "+2382211234",
+      "accepted": true
+    },
+    {
+      "number": "+2383401234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2388001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2389911234",
+      "result": "+2389911234",
+      "accepted": true
+    },
+    {
+      "number": "+2392221234",
+      "result": "+2392221234",
+      "accepted": true
+    },
+    {
+      "number": "+2399812345",
+      "result": "+2399812345",
+      "accepted": true
+    },
+    {
+      "number": "+240222123456",
+      "result": "+240222123456",
+      "accepted": true
+    },
+    {
+      "number": "+240333091234",
+      "result": "+240333091234",
+      "accepted": true
+    },
+    {
+      "number": "+240800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+240900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+24101441234",
+      "result": "+24101441234",
+      "accepted": true
+    },
+    {
+      "number": "+24106031234",
+      "result": "+24106031234",
+      "accepted": true
+    },
+    {
+      "number": "+242061234567",
+      "result": "+242061234567",
+      "accepted": true
+    },
+    {
+      "number": "+242222123456",
+      "result": "+242222123456",
+      "accepted": true
+    },
+    {
+      "number": "+242800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2431234567",
+      "result": "+2431234567",
+      "accepted": true
+    },
+    {
+      "number": "+243991234567",
+      "result": "+243991234567",
+      "accepted": true
+    },
+    {
+      "number": "+244222123456",
+      "result": "+244222123456",
+      "accepted": true
+    },
+    {
+      "number": "+244923123456",
+      "result": "+244923123456",
+      "accepted": true
+    },
+    {
+      "number": "+2454012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+245443201234",
+      "result": "+245443201234",
+      "accepted": true
+    },
+    {
+      "number": "+245955012345",
+      "result": "+245955012345",
+      "accepted": true
+    },
+    {
+      "number": "+2463709100",
+      "result": "+2463709100",
+      "accepted": true
+    },
+    {
+      "number": "+2463801234",
+      "result": "+2463801234",
+      "accepted": true
+    },
+    {
+      "number": "+24740123",
+      "result": "+24740123",
+      "accepted": true
+    },
+    {
+      "number": "+24762889",
+      "result": "+24762889",
+      "accepted": true
+    },
+    {
+      "number": "+2482510123",
+      "result": "+2482510123",
+      "accepted": true
+    },
+    {
+      "number": "+2484217123",
+      "result": "+2484217123",
+      "accepted": true
+    },
+    {
+      "number": "+2486412345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2488000000",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2488512345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+249153123456",
+      "result": "+249153123456",
+      "accepted": true
+    },
+    {
+      "number": "+249911231234",
+      "result": "+249911231234",
+      "accepted": true
+    },
+    {
+      "number": "+250250123456",
+      "result": "+250250123456",
+      "accepted": true
+    },
+    {
+      "number": "+250720123456",
+      "result": "+250720123456",
+      "accepted": true
+    },
+    {
+      "number": "+250800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+250900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+251111112345",
+      "result": "+251111112345",
+      "accepted": true
+    },
+    {
+      "number": "+251911234567",
+      "result": "+251911234567",
+      "accepted": true
+    },
+    {
+      "number": "+2524012345",
+      "result": "+2524012345",
+      "accepted": true
+    },
+    {
+      "number": "+25271123456",
+      "result": "+25271123456",
+      "accepted": true
+    },
+    {
+      "number": "+25321360003",
+      "result": "+25321360003",
+      "accepted": true
+    },
+    {
+      "number": "+25377831001",
+      "result": "+25377831001",
+      "accepted": true
+    },
+    {
+      "number": "+254202012345",
+      "result": "+254202012345",
+      "accepted": true
+    },
+    {
+      "number": "+254712123456",
+      "result": "+254712123456",
+      "accepted": true
+    },
+    {
+      "number": "+254800223456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+254900223456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+255222345678",
+      "result": "+255222345678",
+      "accepted": true
+    },
+    {
+      "number": "+255412345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+255621234567",
+      "result": "+255621234567",
+      "accepted": true
+    },
+    {
+      "number": "+255800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+255900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+256312345678",
+      "result": "+256312345678",
+      "accepted": true
+    },
+    {
+      "number": "+256712345678",
+      "result": "+256712345678",
+      "accepted": true
+    },
+    {
+      "number": "+256800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+256901123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+25722201234",
+      "result": "+25722201234",
+      "accepted": true
+    },
+    {
+      "number": "+25779561234",
+      "result": "+25779561234",
+      "accepted": true
+    },
+    {
+      "number": "+25821123456",
+      "result": "+25821123456",
+      "accepted": true
+    },
+    {
+      "number": "+258800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+258821234567",
+      "result": "+258821234567",
+      "accepted": true
+    },
+    {
+      "number": "+260211234567",
+      "result": "+260211234567",
+      "accepted": true
+    },
+    {
+      "number": "+260630123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+260800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+260955123456",
+      "result": "+260955123456",
+      "accepted": true
+    },
+    {
+      "number": "+261202123456",
+      "result": "+261202123456",
+      "accepted": true
+    },
+    {
+      "number": "+261221234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+261321234567",
+      "result": "+261321234567",
+      "accepted": true
+    },
+    {
+      "number": "+262262161234",
+      "result": "+262262161234",
+      "accepted": true
+    },
+    {
+      "number": "+262269601234",
+      "result": "+262269601234",
+      "accepted": true
+    },
+    {
+      "number": "+262639012345",
+      "result": "+262639012345",
+      "accepted": true
+    },
+    {
+      "number": "+262692123456",
+      "result": "+262692123456",
+      "accepted": true
+    },
+    {
+      "number": "+262801234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+262891123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+262939801234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+262939901234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2631312345",
+      "result": "+2631312345",
+      "accepted": true
+    },
+    {
+      "number": "+263712345678",
+      "result": "+263712345678",
+      "accepted": true
+    },
+    {
+      "number": "+2638001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2638686123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+26461221234",
+      "result": "+26461221234",
+      "accepted": true
+    },
+    {
+      "number": "+264800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+264811234567",
+      "result": "+264811234567",
+      "accepted": true
+    },
+    {
+      "number": "+264870123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+26488612345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2651234567",
+      "result": "+2651234567",
+      "accepted": true
+    },
+    {
+      "number": "+265991234567",
+      "result": "+265991234567",
+      "accepted": true
+    },
+    {
+      "number": "+26622123456",
+      "result": "+26622123456",
+      "accepted": true
+    },
+    {
+      "number": "+26650123456",
+      "result": "+26650123456",
+      "accepted": true
+    },
+    {
+      "number": "+26680021234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2670800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2672401234",
+      "result": "+2672401234",
+      "accepted": true
+    },
+    {
+      "number": "+26771123456",
+      "result": "+26771123456",
+      "accepted": true
+    },
+    {
+      "number": "+2679012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+26808001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+26822171234",
+      "result": "+26822171234",
+      "accepted": true
+    },
+    {
+      "number": "+26870012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+26876123456",
+      "result": "+26876123456",
+      "accepted": true
+    },
+    {
+      "number": "+268900012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2693212345",
+      "result": "+2693212345",
+      "accepted": true
+    },
+    {
+      "number": "+2697712345",
+      "result": "+2697712345",
+      "accepted": true
+    },
+    {
+      "number": "+2698001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+27101234567",
+      "result": "+27101234567",
+      "accepted": true
+    },
+    {
+      "number": "+27711234567",
+      "result": "+27711234567",
+      "accepted": true
+    },
+    {
+      "number": "+27801234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+27862345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+27871234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+29022158",
+      "result": "+29022158",
+      "accepted": true
+    },
+    {
+      "number": "+29026212",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+29051234",
+      "result": "+29051234",
+      "accepted": true
+    },
+    {
+      "number": "+2908999",
+      "result": "+2908999",
+      "accepted": true
+    },
+    {
+      "number": "+2917123456",
+      "result": "+2917123456",
+      "accepted": true
+    },
+    {
+      "number": "+2918370362",
+      "result": "+2918370362",
+      "accepted": true
+    },
+    {
+      "number": "+2975011234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2975212345",
+      "result": "+2975212345",
+      "accepted": true
+    },
+    {
+      "number": "+2975601234",
+      "result": "+2975601234",
+      "accepted": true
+    },
+    {
+      "number": "+2978001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+2979001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+298201234",
+      "result": "+298201234",
+      "accepted": true
+    },
+    {
+      "number": "+298211234",
+      "result": "+298211234",
+      "accepted": true
+    },
+    {
+      "number": "+298601234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+298802123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+298901123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+299221234",
+      "result": "+299221234",
+      "accepted": true
+    },
+    {
+      "number": "+299321000",
+      "result": "+299321000",
+      "accepted": true
+    },
+    {
+      "number": "+299381234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+299801234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+302123456789",
+      "result": "+302123456789",
+      "accepted": true
+    },
+    {
+      "number": "+306912345678",
+      "result": "+306912345678",
+      "accepted": true
+    },
+    {
+      "number": "+307012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+308001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+309091234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+31101234567",
+      "result": "+31101234567",
+      "accepted": true
+    },
+    {
+      "number": "+31612345678",
+      "result": "+31612345678",
+      "accepted": true
+    },
+    {
+      "number": "+318001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+31851234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+319061234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3212345678",
+      "result": "+3212345678",
+      "accepted": true
+    },
+    {
+      "number": "+32450001234",
+      "result": "+32450001234",
+      "accepted": true
+    },
+    {
+      "number": "+3280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3290012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+33123456789",
+      "result": "+33123456789",
+      "accepted": true
+    },
+    {
+      "number": "+33612345678",
+      "result": "+33612345678",
+      "accepted": true
+    },
+    {
+      "number": "+33801234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+33891123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+33912345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+34612345678",
+      "result": "+34612345678",
+      "accepted": true
+    },
+    {
+      "number": "+34701234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+34800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+34803123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+34810123456",
+      "result": "+34810123456",
+      "accepted": true
+    },
+    {
+      "number": "+35020012345",
+      "result": "+35020012345",
+      "accepted": true
+    },
+    {
+      "number": "+35057123456",
+      "result": "+35057123456",
+      "accepted": true
+    },
+    {
+      "number": "+351212345678",
+      "result": "+351212345678",
+      "accepted": true
+    },
+    {
+      "number": "+351301234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+351760123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+351800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+351884123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+351912345678",
+      "result": "+351912345678",
+      "accepted": true
+    },
+    {
+      "number": "+35220201234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35227123456",
+      "result": "+35227123456",
+      "accepted": true
+    },
+    {
+      "number": "+352628123456",
+      "result": "+352628123456",
+      "accepted": true
+    },
+    {
+      "number": "+35280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35290012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3531520123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3531800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3532212345",
+      "result": "+3532212345",
+      "accepted": true
+    },
+    {
+      "number": "+353700123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+353761234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+353850123456",
+      "result": "+353850123456",
+      "accepted": true
+    },
+    {
+      "number": "+3544101234",
+      "result": "+3544101234",
+      "accepted": true
+    },
+    {
+      "number": "+3544921234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3546111234",
+      "result": "+3546111234",
+      "accepted": true
+    },
+    {
+      "number": "+3548001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3549001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35522345678",
+      "result": "+35522345678",
+      "accepted": true
+    },
+    {
+      "number": "+355672123456",
+      "result": "+355672123456",
+      "accepted": true
+    },
+    {
+      "number": "+35570021234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3558001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+355900123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35621001234",
+      "result": "+35621001234",
+      "accepted": true
+    },
+    {
+      "number": "+35635501234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35650037123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35680071234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35696961234",
+      "result": "+35696961234",
+      "accepted": true
+    },
+    {
+      "number": "+35722345678",
+      "result": "+35722345678",
+      "accepted": true
+    },
+    {
+      "number": "+35770012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35780001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35790012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35796123456",
+      "result": "+35796123456",
+      "accepted": true
+    },
+    {
+      "number": "+358131234567",
+      "result": "+358131234567",
+      "accepted": true
+    },
+    {
+      "number": "+358181234567",
+      "result": "+358181234567",
+      "accepted": true
+    },
+    {
+      "number": "+358412345678",
+      "result": "+358412345678",
+      "accepted": true
+    },
+    {
+      "number": "+358600123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+358800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3592123456",
+      "result": "+3592123456",
+      "accepted": true
+    },
+    {
+      "number": "+35943012345",
+      "result": "+35943012345",
+      "accepted": true
+    },
+    {
+      "number": "+35980012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+35990123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3612345678",
+      "result": "+3612345678",
+      "accepted": true
+    },
+    {
+      "number": "+36201234567",
+      "result": "+36201234567",
+      "accepted": true
+    },
+    {
+      "number": "+36211234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3680123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3690123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37031234567",
+      "result": "+37031234567",
+      "accepted": true
+    },
+    {
+      "number": "+37061234567",
+      "result": "+37061234567",
+      "accepted": true
+    },
+    {
+      "number": "+37070012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37080012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37080123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37090012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37121234567",
+      "result": "+37121234567",
+      "accepted": true
+    },
+    {
+      "number": "+37163123456",
+      "result": "+37163123456",
+      "accepted": true
+    },
+    {
+      "number": "+37180123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37190123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3723212345",
+      "result": "+3723212345",
+      "accepted": true
+    },
+    {
+      "number": "+37251234567",
+      "result": "+37251234567",
+      "accepted": true
+    },
+    {
+      "number": "+37270012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3729001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37322212345",
+      "result": "+37322212345",
+      "accepted": true
+    },
+    {
+      "number": "+37330123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37362112345",
+      "result": "+37362112345",
+      "accepted": true
+    },
+    {
+      "number": "+37380012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37390012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37410123456",
+      "result": "+37410123456",
+      "accepted": true
+    },
+    {
+      "number": "+37460271234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37477123456",
+      "result": "+37477123456",
+      "accepted": true
+    },
+    {
+      "number": "+37480012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37490012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+375152450911",
+      "result": "+375152450911",
+      "accepted": true
+    },
+    {
+      "number": "+375249123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+375294911911",
+      "result": "+375294911911",
+      "accepted": true
+    },
+    {
+      "number": "+3758011234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+3759021234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37618001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+376312345",
+      "result": "+376312345",
+      "accepted": true
+    },
+    {
+      "number": "+376712345",
+      "result": "+376712345",
+      "accepted": true
+    },
+    {
+      "number": "+376912345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+377612345678",
+      "result": "+377612345678",
+      "accepted": true
+    },
+    {
+      "number": "+37790123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37799123456",
+      "result": "+37799123456",
+      "accepted": true
+    },
+    {
+      "number": "+3780549886377",
+      "result": "+3780549886377",
+      "accepted": true
+    },
+    {
+      "number": "+37858001110",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+37866661212",
+      "result": "+37866661212",
+      "accepted": true
+    },
+    {
+      "number": "+37871123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+380311234567",
+      "result": "+380311234567",
+      "accepted": true
+    },
+    {
+      "number": "+380501234567",
+      "result": "+380501234567",
+      "accepted": true
+    },
+    {
+      "number": "+380800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+380891234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+380900212345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38110234567",
+      "result": "+38110234567",
+      "accepted": true
+    },
+    {
+      "number": "+381601234567",
+      "result": "+381601234567",
+      "accepted": true
+    },
+    {
+      "number": "+38180012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38190012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38230234567",
+      "result": "+38230234567",
+      "accepted": true
+    },
+    {
+      "number": "+38260123456",
+      "result": "+38260123456",
+      "accepted": true
+    },
+    {
+      "number": "+38278108780",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38280080002",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38294515151",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38328012345",
+      "result": "+38328012345",
+      "accepted": true
+    },
+    {
+      "number": "+38343201234",
+      "result": "+38343201234",
+      "accepted": true
+    },
+    {
+      "number": "+38380001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38390001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38512345678",
+      "result": "+38512345678",
+      "accepted": true
+    },
+    {
+      "number": "+3856001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38574123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+385800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+385921234567",
+      "result": "+385921234567",
+      "accepted": true
+    },
+    {
+      "number": "+38612345678",
+      "result": "+38612345678",
+      "accepted": true
+    },
+    {
+      "number": "+38631234567",
+      "result": "+38631234567",
+      "accepted": true
+    },
+    {
+      "number": "+38659012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38680123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38690123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38730212345",
+      "result": "+38730212345",
+      "accepted": true
+    },
+    {
+      "number": "+38761123456",
+      "result": "+38761123456",
+      "accepted": true
+    },
+    {
+      "number": "+38780123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38790123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38922012345",
+      "result": "+38922012345",
+      "accepted": true
+    },
+    {
+      "number": "+38950012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+38972345678",
+      "result": "+38972345678",
+      "accepted": true
+    },
+    {
+      "number": "+38980012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+390212345678",
+      "result": "+390212345678",
+      "accepted": true
+    },
+    {
+      "number": "+390669812345",
+      "result": "+390669812345",
+      "accepted": true
+    },
+    {
+      "number": "+391781234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+393123456789",
+      "result": "+393123456789",
+      "accepted": true
+    },
+    {
+      "number": "+395512345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+39800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+39899123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+40211234567",
+      "result": "+40211234567",
+      "accepted": true
+    },
+    {
+      "number": "+40712034567",
+      "result": "+40712034567",
+      "accepted": true
+    },
+    {
+      "number": "+40800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+40900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+41212345678",
+      "result": "+41212345678",
+      "accepted": true
+    },
+    {
+      "number": "+41781234567",
+      "result": "+41781234567",
+      "accepted": true
+    },
+    {
+      "number": "+41800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+41878123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+41900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+420212345678",
+      "result": "+420212345678",
+      "accepted": true
+    },
+    {
+      "number": "+420601123456",
+      "result": "+420601123456",
+      "accepted": true
+    },
+    {
+      "number": "+420700123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+420800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+420900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+420910123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+421221234567",
+      "result": "+421221234567",
+      "accepted": true
+    },
+    {
+      "number": "+421690123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+421800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+421900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+421912123456",
+      "result": "+421912123456",
+      "accepted": true
+    },
+    {
+      "number": "+4232345678",
+      "result": "+4232345678",
+      "accepted": true
+    },
+    {
+      "number": "+423660234567",
+      "result": "+423660234567",
+      "accepted": true
+    },
+    {
+      "number": "+4238002222",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4239002222",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+430112345678",
+      "result": "invalid_e164_number",
+      "accepted": false
+    },
+    {
+      "number": "+4312345678",
+      "result": "+4312345678",
+      "accepted": true
+    },
+    {
+      "number": "+431234567890",
+      "result": "+431234567890",
+      "accepted": true
+    },
+    {
+      "number": "+43664123456",
+      "result": "+43664123456",
+      "accepted": true
+    },
+    {
+      "number": "+43780123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+43800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+43900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4402079460018",
+      "result": "invalid_e164_number",
+      "accepted": false
+    },
+    {
+      "number": "+441212345678",
+      "result": "+441212345678",
+      "accepted": true
+    },
+    {
+      "number": "+441481256789",
+      "result": "+441481256789",
+      "accepted": true
+    },
+    {
+      "number": "+441534456789",
+      "result": "+441534456789",
+      "accepted": true
+    },
+    {
+      "number": "+441624756789",
+      "result": "+441624756789",
+      "accepted": true
+    },
+    {
+      "number": "+442079460018",
+      "result": "+442079460018",
+      "accepted": true
+    },
+    {
+      "number": "+445612345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+447012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+447015115678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+447400123456",
+      "result": "+447400123456",
+      "accepted": true
+    },
+    {
+      "number": "+447781123456",
+      "result": "+447781123456",
+      "accepted": true
+    },
+    {
+      "number": "+447797712345",
+      "result": "+447797712345",
+      "accepted": true
+    },
+    {
+      "number": "+447924123456",
+      "result": "+447924123456",
+      "accepted": true
+    },
+    {
+      "number": "+448001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+448007354567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+448081624567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+449001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+449012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+449016247890",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+449018105678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4532123456",
+      "result": "+4532123456",
+      "accepted": true
+    },
+    {
+      "number": "+4534412345",
+      "result": "+4534412345",
+      "accepted": true
+    },
+    {
+      "number": "+4580123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4590123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4620123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+46701234567",
+      "result": "+46701234567",
+      "accepted": true
+    },
+    {
+      "number": "+46751234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+468123456",
+      "result": "+468123456",
+      "accepted": true
+    },
+    {
+      "number": "+469001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4721234567",
+      "result": "+4721234567",
+      "accepted": true
+    },
+    {
+      "number": "+4740612345",
+      "result": "+4740612345",
+      "accepted": true
+    },
+    {
+      "number": "+4741234567",
+      "result": "+4741234567",
+      "accepted": true
+    },
+    {
+      "number": "+4779123456",
+      "result": "+4779123456",
+      "accepted": true
+    },
+    {
+      "number": "+4780012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4782012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4785012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4788012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+48123456789",
+      "result": "+48123456789",
+      "accepted": true
+    },
+    {
+      "number": "+48391234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+48512345678",
+      "result": "+48512345678",
+      "accepted": true
+    },
+    {
+      "number": "+48701234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+48800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+4915123456789",
+      "result": "+4915123456789",
+      "accepted": true
+    },
+    {
+      "number": "+4930123456",
+      "result": "+4930123456",
+      "accepted": true
+    },
+    {
+      "number": "+4970012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+498001234567890",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+499001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50031234",
+      "result": "+50031234",
+      "accepted": true
+    },
+    {
+      "number": "+50051234",
+      "result": "+50051234",
+      "accepted": true
+    },
+    {
+      "number": "+50108001234123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5012221234",
+      "result": "+5012221234",
+      "accepted": true
+    },
+    {
+      "number": "+5016221234",
+      "result": "+5016221234",
+      "accepted": true
+    },
+    {
+      "number": "+50218001112222",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50219001112222",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50222456789",
+      "result": "+50222456789",
+      "accepted": true
+    },
+    {
+      "number": "+50251234567",
+      "result": "+50251234567",
+      "accepted": true
+    },
+    {
+      "number": "+50321234567",
+      "result": "+50321234567",
+      "accepted": true
+    },
+    {
+      "number": "+50370123456",
+      "result": "+50370123456",
+      "accepted": true
+    },
+    {
+      "number": "+5038001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5039001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50422123456",
+      "result": "+50422123456",
+      "accepted": true
+    },
+    {
+      "number": "+50480021234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50491234567",
+      "result": "+50491234567",
+      "accepted": true
+    },
+    {
+      "number": "+50518001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50521234567",
+      "result": "+50521234567",
+      "accepted": true
+    },
+    {
+      "number": "+50581234567",
+      "result": "+50581234567",
+      "accepted": true
+    },
+    {
+      "number": "+50622123456",
+      "result": "+50622123456",
+      "accepted": true
+    },
+    {
+      "number": "+50640001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5068001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50683123456",
+      "result": "+50683123456",
+      "accepted": true
+    },
+    {
+      "number": "+5069001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5072001234",
+      "result": "+5072001234",
+      "accepted": true
+    },
+    {
+      "number": "+50761234567",
+      "result": "+50761234567",
+      "accepted": true
+    },
+    {
+      "number": "+5078001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5078601234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+508430123",
+      "result": "+508430123",
+      "accepted": true
+    },
+    {
+      "number": "+508551234",
+      "result": "+508551234",
+      "accepted": true
+    },
+    {
+      "number": "+508800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+508810123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50922453300",
+      "result": "+50922453300",
+      "accepted": true
+    },
+    {
+      "number": "+50934101234",
+      "result": "+50934101234",
+      "accepted": true
+    },
+    {
+      "number": "+50980012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+50998901234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5111234567",
+      "result": "+5111234567",
+      "accepted": true
+    },
+    {
+      "number": "+5180012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5180212345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5180512345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+51912345678",
+      "result": "+51912345678",
+      "accepted": true
+    },
+    {
+      "number": "+522001234567",
+      "result": "+522001234567",
+      "accepted": true
+    },
+    {
+      "number": "+522221234567",
+      "result": "+522221234567",
+      "accepted": true
+    },
+    {
+      "number": "+525001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+528001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+529001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5351234567",
+      "result": "+5351234567",
+      "accepted": true
+    },
+    {
+      "number": "+5371234567",
+      "result": "+5371234567",
+      "accepted": true
+    },
+    {
+      "number": "+538001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+541123456789",
+      "result": "+541123456789",
+      "accepted": true
+    },
+    {
+      "number": "+546001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+548001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5491123456789",
+      "result": "+5491123456789",
+      "accepted": true
+    },
+    {
+      "number": "+551123456789",
+      "result": "+551123456789",
+      "accepted": true
+    },
+    {
+      "number": "+5511961234567",
+      "result": "+5511961234567",
+      "accepted": true
+    },
+    {
+      "number": "+55500123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+55800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+56221234567",
+      "result": "+56221234567",
+      "accepted": true
+    },
+    {
+      "number": "+56441234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+56600123456",
+      "result": "+56600123456",
+      "accepted": true
+    },
+    {
+      "number": "+56800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5718001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5719001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+573211234567",
+      "result": "+573211234567",
+      "accepted": true
+    },
+    {
+      "number": "+576012345678",
+      "result": "+576012345678",
+      "accepted": true
+    },
+    {
+      "number": "+582121234567",
+      "result": "+582121234567",
+      "accepted": true
+    },
+    {
+      "number": "+584121234567",
+      "result": "+584121234567",
+      "accepted": true
+    },
+    {
+      "number": "+588001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+589001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+590590201234",
+      "result": "+590590201234",
+      "accepted": true
+    },
+    {
+      "number": "+590590271234",
+      "result": "+590590271234",
+      "accepted": true
+    },
+    {
+      "number": "+590690001234",
+      "result": "+590690001234",
+      "accepted": true
+    },
+    {
+      "number": "+590800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+590810123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+590976012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59122123456",
+      "result": "+59122123456",
+      "accepted": true
+    },
+    {
+      "number": "+59150123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59171234567",
+      "result": "+59171234567",
+      "accepted": true
+    },
+    {
+      "number": "+591800171234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5922201234",
+      "result": "+5922201234",
+      "accepted": true
+    },
+    {
+      "number": "+5922891234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5925151234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5926091234",
+      "result": "+5926091234",
+      "accepted": true
+    },
+    {
+      "number": "+5929008123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59318001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59322123456",
+      "result": "+59322123456",
+      "accepted": true
+    },
+    {
+      "number": "+59328901234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+593991234567",
+      "result": "+593991234567",
+      "accepted": true
+    },
+    {
+      "number": "+594594101234",
+      "result": "+594594101234",
+      "accepted": true
+    },
+    {
+      "number": "+594694201234",
+      "result": "+594694201234",
+      "accepted": true
+    },
+    {
+      "number": "+594800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+594890123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+594976012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+595212345678",
+      "result": "+595212345678",
+      "accepted": true
+    },
+    {
+      "number": "+595870012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+595961456789",
+      "result": "+595961456789",
+      "accepted": true
+    },
+    {
+      "number": "+59598000123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+596596301234",
+      "result": "+596596301234",
+      "accepted": true
+    },
+    {
+      "number": "+596696201234",
+      "result": "+596696201234",
+      "accepted": true
+    },
+    {
+      "number": "+596800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+596810123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+596976612345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+597211234",
+      "result": "+597211234",
+      "accepted": true
+    },
+    {
+      "number": "+597561234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5977412345",
+      "result": "+5977412345",
+      "accepted": true
+    },
+    {
+      "number": "+5978012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5979012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59821231234",
+      "result": "+59821231234",
+      "accepted": true
+    },
+    {
+      "number": "+5988001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+5989001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+59894231234",
+      "result": "+59894231234",
+      "accepted": true
+    },
+    {
+      "number": "+5993181234",
+      "result": "+5993181234",
+      "accepted": true
+    },
+    {
+      "number": "+5997151234",
+      "result": "+5997151234",
+      "accepted": true
+    },
+    {
+      "number": "+59994351234",
+      "result": "+59994351234",
+      "accepted": true
+    },
+    {
+      "number": "+59995181234",
+      "result": "+59995181234",
+      "accepted": true
+    },
+    {
+      "number": "+60123456789",
+      "result": "+60123456789",
+      "accepted": true
+    },
+    {
+      "number": "+601300123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+601546012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+601600123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+60323856789",
+      "result": "+60323856789",
+      "accepted": true
+    },
+    {
+      "number": "+61147101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+611800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+611900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+61212345678",
+      "result": "+61212345678",
+      "accepted": true
+    },
+    {
+      "number": "+61412345678",
+      "result": "+61412345678",
+      "accepted": true
+    },
+    {
+      "number": "+61891621234",
+      "result": "+61891621234",
+      "accepted": true
+    },
+    {
+      "number": "+61891641234",
+      "result": "+61891641234",
+      "accepted": true
+    },
+    {
+      "number": "+62218350123",
+      "result": "+62218350123",
+      "accepted": true
+    },
+    {
+      "number": "+628001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+628091234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+62812345678",
+      "result": "+62812345678",
+      "accepted": true
+    },
+    {
+      "number": "+63180012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+63232345678",
+      "result": "+63232345678",
+      "accepted": true
+    },
+    {
+      "number": "+639051234567",
+      "result": "+639051234567",
+      "accepted": true
+    },
+    {
+      "number": "+64211234567",
+      "result": "+64211234567",
+      "accepted": true
+    },
+    {
+      "number": "+6432345678",
+      "result": "+6432345678",
+      "accepted": true
+    },
+    {
+      "number": "+64701234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+64800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+64900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6518001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6519001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6531234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6561234567",
+      "result": "+6561234567",
+      "accepted": true
+    },
+    {
+      "number": "+6581234567",
+      "result": "+6581234567",
+      "accepted": true
+    },
+    {
+      "number": "+661800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+661900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6621234567",
+      "result": "+6621234567",
+      "accepted": true
+    },
+    {
+      "number": "+66601234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+66812345678",
+      "result": "+66812345678",
+      "accepted": true
+    },
+    {
+      "number": "+6702112345",
+      "result": "+6702112345",
+      "accepted": true
+    },
+    {
+      "number": "+6707012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+67077212345",
+      "result": "+67077212345",
+      "accepted": true
+    },
+    {
+      "number": "+6708012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6709012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+672106609",
+      "result": "+672106609",
+      "accepted": true
+    },
+    {
+      "number": "+672381234",
+      "result": "+672381234",
+      "accepted": true
+    },
+    {
+      "number": "+6732345678",
+      "result": "+6732345678",
+      "accepted": true
+    },
+    {
+      "number": "+6735345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6737123456",
+      "result": "+6737123456",
+      "accepted": true
+    },
+    {
+      "number": "+6744441234",
+      "result": "+6744441234",
+      "accepted": true
+    },
+    {
+      "number": "+6745551234",
+      "result": "+6745551234",
+      "accepted": true
+    },
+    {
+      "number": "+6751801234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6752751234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6753123456",
+      "result": "+6753123456",
+      "accepted": true
+    },
+    {
+      "number": "+67570123456",
+      "result": "+67570123456",
+      "accepted": true
+    },
+    {
+      "number": "+6760800222",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+67620123",
+      "result": "+67620123",
+      "accepted": true
+    },
+    {
+      "number": "+6765510123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6767715123",
+      "result": "+6767715123",
+      "accepted": true
+    },
+    {
+      "number": "+67718123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+67740123",
+      "result": "+67740123",
+      "accepted": true
+    },
+    {
+      "number": "+67751123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6777421234",
+      "result": "+6777421234",
+      "accepted": true
+    },
+    {
+      "number": "+67822123",
+      "result": "+67822123",
+      "accepted": true
+    },
+    {
+      "number": "+6785912345",
+      "result": "+6785912345",
+      "accepted": true
+    },
+    {
+      "number": "+67881123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6789010123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+67908001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+6793212345",
+      "result": "+6793212345",
+      "accepted": true
+    },
+    {
+      "number": "+6797012345",
+      "result": "+6797012345",
+      "accepted": true
+    },
+    {
+      "number": "+6802771234",
+      "result": "+6802771234",
+      "accepted": true
+    },
+    {
+      "number": "+6806201234",
+      "result": "+6806201234",
+      "accepted": true
+    },
+    {
+      "number": "+681721234",
+      "result": "+681721234",
+      "accepted": true
+    },
+    {
+      "number": "+681800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+681821234",
+      "result": "+681821234",
+      "accepted": true
+    },
+    {
+      "number": "+681921234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+68221234",
+      "result": "+68221234",
+      "accepted": true
+    },
+    {
+      "number": "+68271234",
+      "result": "+68271234",
+      "accepted": true
+    },
+    {
+      "number": "+6837012",
+      "result": "+6837012",
+      "accepted": true
+    },
+    {
+      "number": "+6838884012",
+      "result": "+6838884012",
+      "accepted": true
+    },
+    {
+      "number": "+68522123",
+      "result": "+68522123",
+      "accepted": true
+    },
+    {
+      "number": "+6857212345",
+      "result": "+6857212345",
+      "accepted": true
+    },
+    {
+      "number": "+685800123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+68630010000",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+68631234",
+      "result": "+68631234",
+      "accepted": true
+    },
+    {
+      "number": "+68672001234",
+      "result": "+68672001234",
+      "accepted": true
+    },
+    {
+      "number": "+687050012",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+687201234",
+      "result": "+687201234",
+      "accepted": true
+    },
+    {
+      "number": "+687366711",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+687751234",
+      "result": "+687751234",
+      "accepted": true
+    },
+    {
+      "number": "+68820123",
+      "result": "+68820123",
+      "accepted": true
+    },
+    {
+      "number": "+688901234",
+      "result": "+688901234",
+      "accepted": true
+    },
+    {
+      "number": "+68940412345",
+      "result": "+68940412345",
+      "accepted": true
+    },
+    {
+      "number": "+68949901234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+689800012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+68987123456",
+      "result": "+68987123456",
+      "accepted": true
+    },
+    {
+      "number": "+6903101",
+      "result": "+6903101",
+      "accepted": true
+    },
+    {
+      "number": "+6907290",
+      "result": "+6907290",
+      "accepted": true
+    },
+    {
+      "number": "+6913201234",
+      "result": "+6913201234",
+      "accepted": true
+    },
+    {
+      "number": "+6913501234",
+      "result": "+6913501234",
+      "accepted": true
+    },
+    {
+      "number": "+6922351234",
+      "result": "+6922351234",
+      "accepted": true
+    },
+    {
+      "number": "+6922471234",
+      "result": "+6922471234",
+      "accepted": true
+    },
+    {
+      "number": "+6926351234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+73011234567",
+      "result": "+73011234567",
+      "accepted": true
+    },
+    {
+      "number": "+77123456789",
+      "result": "+77123456789",
+      "accepted": true
+    },
+    {
+      "number": "+77511234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+77710009998",
+      "result": "+77710009998",
+      "accepted": true
+    },
+    {
+      "number": "+78001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+78081234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+78091234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+79123456789",
+      "result": "+79123456789",
+      "accepted": true
+    },
+    {
+      "number": "+81120123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+81312345678",
+      "result": "+81312345678",
+      "accepted": true
+    },
+    {
+      "number": "+815012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+81601234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+819012345678",
+      "result": "+819012345678",
+      "accepted": true
+    },
+    {
+      "number": "+81990123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+821020000000",
+      "result": "+821020000000",
+      "accepted": true
+    },
+    {
+      "number": "+8222123456",
+      "result": "+8222123456",
+      "accepted": true
+    },
+    {
+      "number": "+825012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+82602345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+827012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+82801234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+841800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+841900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+842101234567",
+      "result": "+842101234567",
+      "accepted": true
+    },
+    {
+      "number": "+84672012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+84912345678",
+      "result": "+84912345678",
+      "accepted": true
+    },
+    {
+      "number": "+8501921234567",
+      "result": "+8501921234567",
+      "accepted": true
+    },
+    {
+      "number": "+85021234567",
+      "result": "+85021234567",
+      "accepted": true
+    },
+    {
+      "number": "+85221234567",
+      "result": "+85221234567",
+      "accepted": true
+    },
+    {
+      "number": "+85251234567",
+      "result": "+85251234567",
+      "accepted": true
+    },
+    {
+      "number": "+852800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+85281123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+85290012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+8530800501",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+85328212345",
+      "result": "+85328212345",
+      "accepted": true
+    },
+    {
+      "number": "+85366123456",
+      "result": "+85366123456",
+      "accepted": true
+    },
+    {
+      "number": "+8551800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+8551900123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+85523756789",
+      "result": "+85523756789",
+      "accepted": true
+    },
+    {
+      "number": "+85591234567",
+      "result": "+85591234567",
+      "accepted": true
+    },
+    {
+      "number": "+8562023123456",
+      "result": "+8562023123456",
+      "accepted": true
+    },
+    {
+      "number": "+85621212862",
+      "result": "+85621212862",
+      "accepted": true
+    },
+    {
+      "number": "+861012345678",
+      "result": "+861012345678",
+      "accepted": true
+    },
+    {
+      "number": "+8613123456789",
+      "result": "+8613123456789",
+      "accepted": true
+    },
+    {
+      "number": "+8616812345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+868001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+8801812345678",
+      "result": "+8801812345678",
+      "accepted": true
+    },
+    {
+      "number": "+88027111234",
+      "result": "+88027111234",
+      "accepted": true
+    },
+    {
+      "number": "+8808001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+8809604123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+886203123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+886221234567",
+      "result": "+886221234567",
+      "accepted": true
+    },
+    {
+      "number": "+8867012345678",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+886800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+886912345678",
+      "result": "+886912345678",
+      "accepted": true
+    },
+    {
+      "number": "+886990123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+902123456789",
+      "result": "+902123456789",
+      "accepted": true
+    },
+    {
+      "number": "+905012345678",
+      "result": "+905012345678",
+      "accepted": true
+    },
+    {
+      "number": "+905922121234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+908001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+908500123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+909001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+911800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+911861123456789",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+917410410123",
+      "result": "+917410410123",
+      "accepted": true
+    },
+    {
+      "number": "+918123456789",
+      "result": "+918123456789",
+      "accepted": true
+    },
+    {
+      "number": "+92122044444",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+922123456789",
+      "result": "+922123456789",
+      "accepted": true
+    },
+    {
+      "number": "+923012345678",
+      "result": "+923012345678",
+      "accepted": true
+    },
+    {
+      "number": "+9280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9290012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+93234567890",
+      "result": "+93234567890",
+      "accepted": true
+    },
+    {
+      "number": "+93701234567",
+      "result": "+93701234567",
+      "accepted": true
+    },
+    {
+      "number": "+94112345678",
+      "result": "+94112345678",
+      "accepted": true
+    },
+    {
+      "number": "+94712345678",
+      "result": "+94712345678",
+      "accepted": true
+    },
+    {
+      "number": "+951234567",
+      "result": "+951234567",
+      "accepted": true
+    },
+    {
+      "number": "+9513331234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+958008001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9592123456",
+      "result": "+9592123456",
+      "accepted": true
+    },
+    {
+      "number": "+9606701234",
+      "result": "+9606701234",
+      "accepted": true
+    },
+    {
+      "number": "+9607712345",
+      "result": "+9607712345",
+      "accepted": true
+    },
+    {
+      "number": "+9608001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9609001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9611123456",
+      "result": "+9611123456",
+      "accepted": true
+    },
+    {
+      "number": "+96171123456",
+      "result": "+96171123456",
+      "accepted": true
+    },
+    {
+      "number": "+96190123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+96262001234",
+      "result": "+96262001234",
+      "accepted": true
+    },
+    {
+      "number": "+962700123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+962790123456",
+      "result": "+962790123456",
+      "accepted": true
+    },
+    {
+      "number": "+96280012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+96290012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+963112345678",
+      "result": "+963112345678",
+      "accepted": true
+    },
+    {
+      "number": "+963944567890",
+      "result": "+963944567890",
+      "accepted": true
+    },
+    {
+      "number": "+96412345678",
+      "result": "+96412345678",
+      "accepted": true
+    },
+    {
+      "number": "+9647912345678",
+      "result": "+9647912345678",
+      "accepted": true
+    },
+    {
+      "number": "+9651801234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+96522345678",
+      "result": "+96522345678",
+      "accepted": true
+    },
+    {
+      "number": "+96550012345",
+      "result": "+96550012345",
+      "accepted": true
+    },
+    {
+      "number": "+966112345678",
+      "result": "+966112345678",
+      "accepted": true
+    },
+    {
+      "number": "+966512345678",
+      "result": "+966512345678",
+      "accepted": true
+    },
+    {
+      "number": "+9668001234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+966925012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9671234567",
+      "result": "+9671234567",
+      "accepted": true
+    },
+    {
+      "number": "+967712345678",
+      "result": "+967712345678",
+      "accepted": true
+    },
+    {
+      "number": "+96823123456",
+      "result": "+96823123456",
+      "accepted": true
+    },
+    {
+      "number": "+96880071234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+96890012345",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+96892123456",
+      "result": "+96892123456",
+      "accepted": true
+    },
+    {
+      "number": "+9701800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97022234567",
+      "result": "+97022234567",
+      "accepted": true
+    },
+    {
+      "number": "+970599123456",
+      "result": "+970599123456",
+      "accepted": true
+    },
+    {
+      "number": "+97122345678",
+      "result": "+97122345678",
+      "accepted": true
+    },
+    {
+      "number": "+971501234567",
+      "result": "+971501234567",
+      "accepted": true
+    },
+    {
+      "number": "+971800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+971900234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9721800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9721919123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97221234567",
+      "result": "+97221234567",
+      "accepted": true
+    },
+    {
+      "number": "+972502345678",
+      "result": "+972502345678",
+      "accepted": true
+    },
+    {
+      "number": "+972771234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97317001234",
+      "result": "+97317001234",
+      "accepted": true
+    },
+    {
+      "number": "+97336001234",
+      "result": "+97336001234",
+      "accepted": true
+    },
+    {
+      "number": "+97380123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97390123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97433123456",
+      "result": "+97433123456",
+      "accepted": true
+    },
+    {
+      "number": "+97444123456",
+      "result": "+97444123456",
+      "accepted": true
+    },
+    {
+      "number": "+9748001234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97517123456",
+      "result": "+97517123456",
+      "accepted": true
+    },
+    {
+      "number": "+9752345678",
+      "result": "+9752345678",
+      "accepted": true
+    },
+    {
+      "number": "+97653123456",
+      "result": "+97653123456",
+      "accepted": true
+    },
+    {
+      "number": "+97675123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+97688123456",
+      "result": "+97688123456",
+      "accepted": true
+    },
+    {
+      "number": "+97714567890",
+      "result": "+97714567890",
+      "accepted": true
+    },
+    {
+      "number": "+97716600101234",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+9779841234567",
+      "result": "+9779841234567",
+      "accepted": true
+    },
+    {
+      "number": "+982123456789",
+      "result": "+982123456789",
+      "accepted": true
+    },
+    {
+      "number": "+989123456789",
+      "result": "+989123456789",
+      "accepted": true
+    },
+    {
+      "number": "+992372123456",
+      "result": "+992372123456",
+      "accepted": true
+    },
+    {
+      "number": "+992917123456",
+      "result": "+992917123456",
+      "accepted": true
+    },
+    {
+      "number": "+99312345678",
+      "result": "+99312345678",
+      "accepted": true
+    },
+    {
+      "number": "+99366123456",
+      "result": "+99366123456",
+      "accepted": true
+    },
+    {
+      "number": "+994123123456",
+      "result": "+994123123456",
+      "accepted": true
+    },
+    {
+      "number": "+994401234567",
+      "result": "+994401234567",
+      "accepted": true
+    },
+    {
+      "number": "+994881234567",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+994900200123",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+995322123456",
+      "result": "+995322123456",
+      "accepted": true
+    },
+    {
+      "number": "+995555123456",
+      "result": "+995555123456",
+      "accepted": true
+    },
+    {
+      "number": "+995706123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+995800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+996312123456",
+      "result": "+996312123456",
+      "accepted": true
+    },
+    {
+      "number": "+996700123456",
+      "result": "+996700123456",
+      "accepted": true
+    },
+    {
+      "number": "+996800123456",
+      "result": "destination_class_not_permitted",
+      "accepted": false
+    },
+    {
+      "number": "+998669050123",
+      "result": "+998669050123",
+      "accepted": true
+    },
+    {
+      "number": "+998912345678",
+      "result": "+998912345678",
+      "accepted": true
+    },
+    {
+      "number": "+999123456789",
+      "result": "invalid_e164_number",
+      "accepted": false
+    }
+  ]
+}
