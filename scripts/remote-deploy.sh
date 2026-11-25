@@ -195,7 +195,10 @@ activate_pbx_database() {
   if install_pbx_database "$installer" "$backup" "$release" "$service_user"; then
     mv -- "$legacy_global_config" "$backup/active-global.json"
     mv -- "$legacy_routes" "$backup/legacy-account-routes"
+    move_legacy "$work/account-routes" "$backup/staged-account-routes"
+    move_legacy "$work/global.json" "$backup/staged-global.json"
     move_legacy /etc/phone-assistant/telematica.env "$backup/telematica.env"
+    move_legacy /home/stefan/.config/phone-assistant/telematica.pending.env "$backup/telematica.pending.env"
     printf 'Asterisk configuration installed from YAML and SQLite. Backup %s\n' "$backup"
     return
   fi
