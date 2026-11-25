@@ -21,6 +21,19 @@ not expose the voice, model or reasoning effort. Standard accounts use the
 shared number. The current dedicated route supports one Pro account and can
 use the existing handset if enabled.
 
+On the current server the Google token paths point into
+`~/.config/phone-assistant/`. The profile and delivery receipts live under
+`/var/lib/phone-assistant/`. The migrated Pro account keeps those paths.
+New accounts get separate paths. The account file points to them and
+contains their PIN hashes.
+
+Asterisk's inbound SIP settings are in
+`/etc/asterisk/phone-assistant-pjsip.conf`. The outbound endpoint and
+handset settings are in `/etc/asterisk/phone-assistant-outbound.conf`.
+Telematica uses its own `phone-assistant-telematica-pjsip.conf` and
+`phone-assistant-telematica-extensions.conf` in the same directory. Bärbel
+can request the configured Telematica route for an Austrian destination.
+
 The registered calling number selects an account. The existing keypad PIN
 still gates protected Gmail tools. Ordinary conversations and Calendar keep
 their existing flow, including Calendar's separate confirmation before
