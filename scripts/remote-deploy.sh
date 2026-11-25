@@ -37,7 +37,8 @@ prepare_config() {
 
 require_idle() {
   local channels
-  channels=$(asterisk -rx 'core show channels concise')
+  channels=$(asterisk -rx 'core show channels concise') || return
+  asterisk -rx 'core show uptime' | grep -F 'System uptime:' >/dev/null || return
   [[ -z "$channels" ]] || { printf 'Asterisk has active calls; the service was not restarted.\n' >&2; return 1; }
 }
 
