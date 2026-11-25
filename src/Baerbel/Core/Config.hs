@@ -9,7 +9,7 @@ import Data.Text ( Text )
 import GHC.Generics ( Generic )
 import Text.Read ( readMaybe )
 import qualified Data.Map.Strict as Map
-    ( empty, insert, lookup, union, unionWith, findWithDefault, adjust )
+    ( empty, insert, lookup, union, unions, unionWith, findWithDefault, adjust )
 import qualified Data.Text as Text ( toLower, unpack, replace, null )
 
 data Global = Global
@@ -28,20 +28,33 @@ instance FromJSON Global where
 data Instructions = Instructions
   { instructionsDefaults :: Map Text Text
   , instructionsRules :: Map Text (Map Text Value)
-  , instructionsTools :: Map Text [Value]
   } deriving (Generic)
 
 instance FromJSON Instructions where
   parseJSON = genericParseJSON ((camelOptions 12) {rejectUnknownFields = True})
 
 withInstructions :: Global -> Instructions -> Global
-withInstructions global content = global {globalDefaults = defaults, globalRules = rules, globalTools = tools}
+withInstructions global content = global {globalDefaults = defaults, globalRules = rules}
   where
     defaults = Map.union (instructionsDefaults content) (globalDefaults global)
     rules = Map.unionWith (Map.unionWith mergeRule) (instructionsRules content) (globalRules global)
-    tools = Map.union (instructionsTools content) (globalTools global)
     mergeRule (Object prompt) (Object policy) = Object (KeyMap.unionWith mergeRule prompt policy)
     mergeRule prompt _ = prompt
+
+data ToolSettings = ToolSettings
+  { toolSettingsTools :: Map Text [Value]
+  , toolSettingsProviders :: Map Text (Map Text Value)
+  } deriving (Generic)
+
+instance FromJSON ToolSettings where
+  parseJSON = genericParseJSON ((camelOptions 12) {rejectUnknownFields = True})
+
+withToolSettings :: Global -> [ToolSettings] -> Global
+withToolSettings global configs = global {globalRules = rules, globalTools = tools}
+  where
+    tools = Map.unions (map toolSettingsTools configs)
+    providers = Map.unions (map toolSettingsProviders configs)
+    rules = Map.insert "providers" (toJSON <$> providers) (globalRules global)
 
 data Installation = Installation
   { installationEnvironment :: Map Text Text, installationDatabase :: FilePath }

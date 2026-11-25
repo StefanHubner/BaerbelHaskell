@@ -29,7 +29,7 @@ prepare_release() {
     mv "$stage/baerbel" "$release"
     rmdir "$stage"
   fi
-  install -m 0644 "$release/config/instructions.yaml" "$work/instructions.yaml"
+  install_config_assets "$release" "$work"
   prepare_config "$release/config/global.yaml"
   env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server" "$release/bin/asteriskconfig"
   if [[ -f "$work/global.yaml" && -f "$release/deploy/migrate-users.py" ]]; then
@@ -42,16 +42,21 @@ prepare_release() {
   printf 'Prepared and checked release: %s\nThe running service has not changed.\n' "$release"
 }
 
+install_config_assets() {
+  local release=$1 target=$2
+  install -d -m 0755 "$target/tools" || return
+  install -m 0644 "$release/config/instructions.yaml" "$release/config/phone-numbers.json" "$target/" || return
+  install -m 0644 "$release/config/tools/"*.yaml "$target/tools/"
+}
+
 prepare_config() {
   local global=$1 migration installed
   migration=$(dirname "$global")/../deploy/migrate-users.py
   if [[ -f "$global_config" || -f "$legacy_global_config" ]]; then
     installed=$global_config
     [[ -f "$installed" ]] || installed=$legacy_global_config
-    install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
     python3 "$migration" merge "$global" "$installed" "$work/global.yaml"
   elif [[ -f "$user_config" && -f "$migration" ]]; then
-    install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
     python3 "$migration" prepare "$global" "$user_config" "$work/global.yaml" "$user_database"
   elif [[ -f "$user_config" ]]; then
     install -m 0600 "$user_config" "$work/user.json"
@@ -78,7 +83,7 @@ activate_release() {
   if [[ "$target_config" == "$global_config" ]]; then
     config=("$prepared_user")
     active_config=("$target_config")
-    install -m 0644 "$release/config/phone-numbers.json" "$release/config/instructions.yaml" "${global_config%/*}/" || return
+    install_config_assets "$release" "${global_config%/*}" || return
   else
     config=("$release/config/global.yaml" "$prepared_user")
     active_config=("$release/config/global.yaml" "$target_config")

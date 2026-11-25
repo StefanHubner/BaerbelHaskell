@@ -10,6 +10,7 @@ import Baerbel.Core.Config
       resolveSettings,
       withPhoneNumbers,
       withInstructions,
+      withToolSettings,
       withFileStorage,
       setting,
       integerSetting,
@@ -48,10 +49,18 @@ loadGlobal path = do
   pure (withPhoneNumbers <$> phones <*> global)
 
 readGlobal :: FilePath -> IO (Result Global)
-readGlobal path = liftA2 (liftA2 withInstructions) global instructions
+readGlobal path = do
+  global <- readYaml "global_config" path
+  instructions <- readYaml "instructions" instructionPath
+  tools <- traverse readProvider providers
+  let configured = withInstructions <$> global <*> instructions
+      catalogue = sequenceA tools
+  pure (withToolSettings <$> configured <*> catalogue)
   where
-    global = readYaml "global_config" path
-    instructions = readYaml "instructions" (replaceFileName path "instructions.yaml")
+    instructionPath = replaceFileName path "instructions.yaml"
+    providers = ["assistant", "google", "windguru"]
+    readProvider name = readYaml "tool_config" (toolDirectory </> (name <> ".yaml"))
+    toolDirectory = takeDirectory path </> "tools"
 
 readYaml :: FromJSON a => Text -> FilePath -> IO (Result a)
 readYaml name = readWith name decode

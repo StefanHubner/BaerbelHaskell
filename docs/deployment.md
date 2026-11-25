@@ -11,7 +11,7 @@ See [migration](migration.md) for the verification record.
 
 ## Check and package
 
-Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared settings live in `config/global.yaml`, with prompts and tool schemas in `config/instructions.yaml`. `config/phone-numbers.json` supplies reference metadata. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
+Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared settings live in `config/global.yaml`, with prompts in `config/instructions.yaml` and tool schemas and provider settings in `config/tools/`. `config/phone-numbers.json` supplies reference metadata. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
 
 ```sh
 make check
@@ -46,7 +46,7 @@ make activate
 ```
 
 This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the combined configuration at
-`/etc/phone-assistant/global.yaml`, installs `instructions.yaml` alongside it, and repeats the executable's `--check` as
+`/etc/phone-assistant/global.yaml`, installs `instructions.yaml` and the `tools/` directory alongside it, and repeats the executable's `--check` as
 the service user. The first migration stops the assistant before refreshing
 the imported state so the database captures completed writes. The former account JSON is archived under
 `/var/backups/phone-assistant-users.*`; the source state files are retained

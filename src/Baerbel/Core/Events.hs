@@ -9,6 +9,8 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Csv as CSV
 import Data.Char (isAscii, isAlphaNum, isDigit, isUpper)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
@@ -17,7 +19,7 @@ import Text.Read (readMaybe)
 
 data EventRules = EventRules
   { eventMaximumLine :: Int, eventMaximumBatch :: Int, eventRotations :: Int
-  , eventAnchorBytes :: Int, eventPollMicros :: Int, eventReasons :: [Text]
+  , eventAnchorBytes :: Int, eventPollMicros :: Int, eventReasons :: Map Text Text
   , eventIdentifierChars :: Int, eventSuffixChars :: Int, eventReasonChars :: Int, eventMaximumTimestamp :: Integer } deriving (Generic)
 instance FromJSON EventRules where parseJSON = genericParseJSON (jsonOptions 5)
 data Event = Event
@@ -46,7 +48,7 @@ validateEvent rules (schema, ident, ended, privacy, number, reason, answered)
   instant = readMaybe (Text.unpack ended) :: Maybe Integer
   validTime = not (Text.null ended) && Text.all (\char -> isAscii char && isDigit char) ended && maybe False (\value -> value > 0 && value < eventMaximumTimestamp rules) instant
   validReason = not (Text.null reason) && Text.length reason <= eventReasonChars rules && Text.all (\char -> isAscii char && isUpper char || char == '_') reason
-  selected | reason `elem` eventReasons rules = reason
+  selected | Map.member reason (eventReasons rules) = reason
            | otherwise = "UNKNOWN"
 
 validIdentifier :: EventRules -> Text -> Bool

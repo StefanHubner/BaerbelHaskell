@@ -3,7 +3,8 @@
 | Source in the checkout | Installed location | Contents |
 |---|---|---|
 | `config/global.yaml` | `/etc/phone-assistant/global.yaml` | Shared application settings. The installed file includes private service credentials. Chat uses `gpt-6.2-sol`, low reasoning and Fast mode (API tier `priority`). |
-| `config/instructions.yaml` | `/etc/phone-assistant/instructions.yaml` | Prompts, spoken copy and tool schemas. |
+| `config/instructions.yaml` | `/etc/phone-assistant/instructions.yaml` | Prompts, spoken copy and shared outcome messages. |
+| `config/tools/` | `/etc/phone-assistant/tools/` | Tool schemas and provider settings grouped in `google.yaml`, `windguru.yaml` and `assistant.yaml`. |
 | `config/asterisk.yaml` | `/etc/phone-assistant/asterisk.yaml` | Private site settings for the network, AMI, handset, Telematica and routing. The checkout copy is Git-ignored. |
 | `config/asterisk/*.conf.in` | Release `config/asterisk/` | Reusable Asterisk templates. The installer writes the rendered modules under `/etc/asterisk/phone-assistant/`. |
 | `config/users.sql` | `/var/lib/phone-assistant/users.sqlite3` | User accounts and SIP assignments, Google authorisations, memory, delivery receipts and the event cursor. |

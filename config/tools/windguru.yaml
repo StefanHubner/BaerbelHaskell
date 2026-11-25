@@ -1,0 +1,235 @@
+tools:
+  WINDGURU_TOOLS:
+  - type: function
+    name: windguru_search_spots
+    description: "Find named Windguru forecast spots. Country filtering uses all returned provider rows before limiting matches. Use the country established in conversation or saved area, otherwise null; available_countries helps resolve provider labels. This is not a proximity or suitability ranking. Do not invent spot IDs."
+    strict: true
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 2
+          maxLength: 120
+        country:
+          type:
+          - string
+          - 'null'
+          minLength: 2
+          maxLength: 100
+          description: "Full provider country label, compared case-insensitively, or null for all countries. Use available_countries to resolve labels. Never assume a country from server location."
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 10
+      required:
+      - query
+      - country
+      - limit
+  - type: function
+    name: windguru_spot
+    description: "Read a Windguru spot's coordinates, timezone, available forecast models and undated sunrise/sunset metadata. Weather and wave models are separate; choose suitable available models for the question. Tide predictions and saved account forecast sets are not available through this tool."
+    strict: true
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        spot_id:
+          type: integer
+          minimum: 1
+          maximum: 100000000
+          description: Verified Windguru spot ID from lookup, conversation or a Windguru spot link.
+      required:
+      - spot_id
+  - type: function
+    name: windguru_forecast
+    description: "Read up to 72 forecast points within a 1–72 hour time window for an available Windguru spot/model. Wind/gusts are knots, wave heights metres and periods seconds. Wind direction is FROM; wave direction is raw provider degrees unless a verified convention is reported. This returns predictions, not live observations. Compare wind and wave models for sea/wave windsurfing; do not treat missing values as zero. Preserve local dates/timezones, model age and any missing coverage. No tide calculations or autonomous go/no-go decisions."
+    strict: true
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        spot_id:
+          type: integer
+          minimum: 1
+          maximum: 100000000
+          description: Verified Windguru spot ID from lookup, conversation or a Windguru spot link.
+        model_id:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          description: An available weather or wave model ID returned for this spot.
+        start:
+          type:
+          - string
+          - 'null'
+          description: "ISO 8601 start timestamp with an explicit timezone offset, or null for now. Resolve the requested local day/time before calling."
+        hours:
+          type: integer
+          minimum: 1
+          maximum: 72
+      required:
+      - spot_id
+      - model_id
+      - start
+      - hours
+  WINDGURU_SET_TOOL:
+  - type: function
+    name: windguru_forecast_set
+    description: "Read the caller's saved Windguru forecast set in one comparison. Reads the numeric set ID from shared memory key windguru_forecast_set, then fetches its actual selected spot/model pairs concurrently. Prefer this for comparing the caller's usual spots; do not rediscover or substitute spots. Returns compact time series, source models, freshness and partial failures. Only publicly readable sets/forecasts are supported; no account login or PRO bypass. Missing or invalid saved ID needs clarification. Wave/tide/daylight limits are the same as the individual forecast tool."
+    strict: true
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        start:
+          type:
+          - string
+          - 'null'
+          description: "ISO 8601 start with explicit timezone offset, or null for now; resolve the requested local day/time first."
+        hours:
+          type: integer
+          minimum: 1
+          maximum: 72
+      required:
+      - start
+      - hours
+
+providers:
+  windguru:
+    base_url: https://www.windguru.cz/
+    api_url: https://www.windguru.cz/int/iapi.php
+    http_bytes: 1048576
+    http_timeout: 20
+    user_agent: phone-assistant/0.1 (public forecast lookup)
+    cache_entries: 40
+    cache_seconds: 300.0
+    maximum_points: 72
+    maximum_source_points: 2000
+    maximum_set_pairs: 32
+    set_concurrency: 4
+    future_tolerance_seconds: 900.0
+    country_limit: 20
+    name_chars: 200
+    country_chars: 100
+    model_chars: 160
+    search_scope: "Named spots; country filter covers returned provider rows only. Not distance or suitability ranking. No saved account sets."
+    sun_source: Windguru spot metadata; no date supplied
+    tide_reason: "This integration does not compute tide predictions from harmonic coefficients. Use a current authoritative tide source for the requested place and date."
+    metadata_tide_reason: "Harmonic coefficients are not computed high/low tide times; use an authoritative current tide source."
+    wind_direction_convention: from, degrees clockwise from true north
+    wave_direction_convention: raw provider degrees; from/to convention not verified
+    model_interpretation: "Separate selected source models; provider table blending and display transformations are not reproduced."
+    comparison_columns:
+    - wind_knots
+    - gust_knots
+    - wind_from_degrees
+    - temperature_c
+    - wave_height_m
+    - wave_period_s
+    - wave_direction_degrees_raw
+    omitted_columns:
+    - wind_wave_height_m
+    - wind_wave_period_s
+    - wind_wave_direction_degrees_raw
+    - swell_1_height_m
+    - swell_1_period_s
+    - swell_1_direction_degrees_raw
+    - swell_2_height_m
+    - swell_2_period_s
+    - swell_2_direction_degrees_raw
+    comparison_bytes: 40000
+    result_bytes: 60000
+    detail_hint: "Tables preserve chronological points without averaging. Missing cells are unknown. For omitted rows or wave components, request a shorter comparison window or use windguru_forecast for one spot/model. Do not treat partial coverage as a full forecast."
+    query_chars: 120
+    search_limit: 10
+    spot_limit: 100000000
+    model_limit: 100000
+    provider_rows: 200
+    fields:
+    - - WINDSPD
+      - wind_knots
+      - 0
+      - 300
+    - - GUST
+      - gust_knots
+      - 0
+      - 350
+    - - WINDDIR
+      - wind_from_degrees
+      - 0
+      - 360
+    - - TMP
+      - temperature_c
+      - -100
+      - 70
+    - - TMPE
+      - temperature_c
+      - -100
+      - 70
+    - - HTSGW
+      - wave_height_m
+      - 0
+      - 50
+    - - PERPW
+      - wave_period_s
+      - 0
+      - 100
+    - - DIRPW
+      - wave_direction_degrees_raw
+      - 0
+      - 360
+    - - WVHGT
+      - wind_wave_height_m
+      - 0
+      - 50
+    - - WVPER
+      - wind_wave_period_s
+      - 0
+      - 100
+    - - WVDIR
+      - wind_wave_direction_degrees_raw
+      - 0
+      - 360
+    - - SWELL1
+      - swell_1_height_m
+      - 0
+      - 50
+    - - SWPER1
+      - swell_1_period_s
+      - 0
+      - 100
+    - - SWDIR1
+      - swell_1_direction_degrees_raw
+      - 0
+      - 360
+    - - SWELL2
+      - swell_2_height_m
+      - 0
+      - 50
+    - - SWPER2
+      - swell_2_period_s
+      - 0
+      - 100
+    - - SWDIR2
+      - swell_2_direction_degrees_raw
+      - 0
+      - 360
+    units:
+      wind: knots
+      wave_height: metres
+      wave_period: seconds
+      temperature: celsius
+    required_fields:
+    - WINDSPD
+    - GUST
+    - HTSGW
+    - WVHGT
+    - SWELL1
+    - SWELL2
+    minimum_timestamp: 946684800
+    maximum_timestamp: 4102444800
+    maximum_source_hours: 1000
+    resolution_limit: 1000
+    start_chars: 40

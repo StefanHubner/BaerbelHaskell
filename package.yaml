@@ -8,6 +8,7 @@ synopsis: Functional telephone assistant
 extra-source-files:
 - config/global.yaml
 - config/instructions.yaml
+- config/tools/*.yaml
 - config/asterisk/*.conf.in
 - config/users.sql
 - config/phone-numbers.json
