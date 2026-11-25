@@ -1,5 +1,17 @@
 # Migration evidence
 
+## Provider tool files and shared outcome messages
+
+On 2026-11-25 at 23:51 UTC, the miniserver ran release
+`21d9a94492de2717260a9bdf3d01c54cecd4d222a180321ae52f5f6cf467ca14`
+from source `27e84ed`. The installed instruction and provider files
+matched the release, and SQLite passed its integrity and foreign-key
+checks. Bärbel and Asterisk were active with zero restarts after startup.
+Asterisk kept the same process during this release. FastAGI checks
+exercised both allowed routes and rejected Pro and unknown callers from
+the shared route. No real carrier calls were placed during these checks.
+
+
 ## Portable site configuration and instructions
 
 On 2026-11-25 at 23:36 UTC, the miniserver ran release

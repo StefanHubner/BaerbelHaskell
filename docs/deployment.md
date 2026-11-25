@@ -2,12 +2,13 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-Release `1309600e…` from source `8e73e71` is active as of
-2026-11-25T23:36Z. Bärbel loaded the split global and instruction files.
-Asterisk applied the local site YAML with the shared and Pro SIP entries.
-Both services were active with zero restarts after cutover. Production
-FastAGI selected both accounts and SQLite passed its integrity checks.
-See [migration](migration.md) for the verification record.
+Release `21d9a944…` from source `27e84ed` is active as of
+2026-11-25T23:51Z. Bärbel loaded the split global, instruction and provider
+files. Asterisk continued running with the installed site YAML and
+generated SIP entries. Production FastAGI admitted the Standard caller on
+the shared route and the Pro caller on the dedicated route. It rejected the
+Pro and an unknown caller on the shared route. SQLite passed its integrity
+checks. See [migration](migration.md) for the verification record.
 
 ## Check and package
 
