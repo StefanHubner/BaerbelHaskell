@@ -36,7 +36,7 @@ data SessionRole = Owner | Restricted | Announcement deriving (Eq, Show)
 data SessionSettings = SessionSettings
   { sessionRole :: SessionRole, voiceModel :: Text, voiceName :: Text
   , voiceInstructions :: Text, backendModel :: Text, backendInstructions :: Text
-  , backendReasoning :: Text, backendTokenLimit :: Int, sessionTools :: [Value]
+  , backendReasoning :: Text, backendServiceTier :: Text, backendTokenLimit :: Int, sessionTools :: [Value]
   , providerSampleRate :: Int
   } deriving (Eq, Show)
 
@@ -53,7 +53,7 @@ sessionConfig settings = object
       _ -> object ["type" .= ("responses" :: Text), "responses" .= backendConfig settings]
 
 backendConfig :: SessionSettings -> Value
-backendConfig settings = object (base ++ reasoning)
+backendConfig settings = object (base ++ reasoning ++ tier)
   where
     tools = allowedTools (sessionRole settings) (sessionTools settings)
     choice = case tools of
@@ -65,6 +65,7 @@ backendConfig settings = object (base ++ reasoning)
     supportsReasoning = any (`T.isPrefixOf` backendModel settings) ["gpt-5", "gpt-6"]
     reasoning = ["reasoning" .= object ["effort" .= backendReasoning settings] |
                  supportsReasoning && not (T.null (backendReasoning settings))]
+    tier = ["service_tier" .= backendServiceTier settings | not (T.null (backendServiceTier settings))]
 
 allowedTools :: SessionRole -> [Value] -> [Value]
 allowedTools Owner tools = tools
@@ -147,6 +148,7 @@ makeOwnerSession settings tools (voice, backend) = do
     , voiceName = setting settings "OPENAI_LIVE_VOICE", voiceInstructions = voice
     , backendModel = setting settings "OPENAI_CHAT_MODEL", backendInstructions = backend
     , backendReasoning = setting settings "OPENAI_CHAT_REASONING_EFFORT"
+    , backendServiceTier = setting settings "OPENAI_CHAT_SERVICE_TIER"
     , backendTokenLimit = tokens, sessionTools = tools, providerSampleRate = 24000
     }
 

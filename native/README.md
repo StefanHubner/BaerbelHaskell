@@ -1,9 +1,10 @@
 # Telephone metadata and native codecs
 
 Telephone validation is pure Haskell in `Baerbel.Core.PhoneNumber`. The shared
-`config/global.json` contains the same libphonenumber 9.0.42 metadata as the
-preserved Python baseline, with the upstream URL and XML SHA-256 under
-`rules.phone_numbers.metadata`. Regular expressions are compiled when the
+`config/phone-numbers.json` contains the same libphonenumber 9.0.42 metadata as
+the preserved Python baseline, with the upstream URL and XML SHA-256 under
+`metadata`. The runtime loads this reference file beside the supplied global
+configuration; it is shared application data, not user credentials or state. Regular expressions are compiled when the
 validator is constructed at application startup and shared across calls;
 regex-tdfa constructs its matching automata lazily on first use.
 
@@ -19,7 +20,7 @@ To refresh the metadata after reviewing an upstream revision, download its
 `resources/PhoneNumberMetadata.xml`, then run:
 
 ```sh
-python3 scripts/update-phone-metadata.py 9.0.42 /tmp/PhoneNumberMetadata.xml config/global.json
+python3 scripts/update-phone-metadata.py 9.0.42 /tmp/PhoneNumberMetadata.xml config/phone-numbers.json
 make test
 ```
 

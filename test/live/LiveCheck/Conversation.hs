@@ -11,7 +11,7 @@ import Baerbel.Core.Profile (ProfileState(..))
 import Baerbel.Core.Session (announcementConfig, endConfiguration, liveConfiguration, takeLast)
 import Baerbel.Runtime.EndCall (EndConfig, EndContext(..), EndEffects(..), executeEndCall, parseEndReason)
 import Baerbel.Runtime.Effects (continue, within)
-import Baerbel.Runtime.HTTP (RawSend, Send, newRawSender)
+import Baerbel.Runtime.HTTP (Send, newRawSender)
 import Baerbel.Runtime.Live (LiveControls(..), finishCall)
 import Baerbel.Runtime.Profile (ProfileStore(..), profile)
 import Baerbel.Runtime.Provider (Execute)
@@ -28,7 +28,8 @@ import Data.Time (getCurrentTime)
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 import LiveCheck.Check (CheckResult, check, ensure, skip)
-import LiveCheck.Conversation.Audio (spoken, speechPair)
+import LiveCheck.Config (Development(..))
+import LiveCheck.Conversation.Audio (Speech, synthesise, spoken, speechPair)
 import LiveCheck.Conversation.Pin (pinCheck)
 import LiveCheck.Conversation.Soak (soakCheck)
 import LiveCheck.Conversation.Model
@@ -39,9 +40,10 @@ import System.Posix.Files (setFileMode)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
-conversationChecks :: Settings -> Send -> IO [CheckResult]
-conversationChecks settings _ = do
-  speech <- newRawSender
+conversationChecks :: Development -> Settings -> Send -> IO [CheckResult]
+conversationChecks development settings _ = do
+  sender <- newRawSender
+  let speech = synthesise (developmentSpeech development) settings sender
   sequence
     [ greetingResult settings
     , check "live_owner_schema_acceptance" (schemaCheck settings)
@@ -71,7 +73,7 @@ schemaCheck settings = withConversation settings schemas (const unavailable) ins
       observed <- await running "live_check_audio_input_timeout" 5000000 (\_ -> seen "check.input.audio")
       pure (object ["accepted_tool_schemas" .= length schemas] <$ observed)
 
-generalCheck :: Settings -> RawSend -> IO (Result Value)
+generalCheck :: Settings -> Speech -> IO (Result Value)
 generalCheck settings sender = speechPair settings sender firstText secondText >>= continue run
   where
     firstText = "What is two plus two? Please answer in one short sentence."
@@ -108,7 +110,7 @@ profileSchemas :: Settings -> [Text] -> [Value]
 profileSchemas settings names = filter named (toolDefinitions settings "PROFILE_TOOLS")
   where named schema = textField "name" schema `elem` map Just names
 
-profileCheck :: Settings -> RawSend -> IO (Result Value)
+profileCheck :: Settings -> Speech -> IO (Result Value)
 profileCheck settings sender = withProfile settings prepare
   where
     prepare store execute = speechPair settings sender putText getText >>= continue (run store execute)
@@ -145,7 +147,7 @@ codeSpoken since now trace = matched && audibleSince since trace && quietAfter s
     content = answerSince since trace
     matched = hasPhrase "violet badger seven" content || hasPhrase "violet badger 7" content
 
-backgroundCheck :: Settings -> RawSend -> IO (Result Value)
+backgroundCheck :: Settings -> Speech -> IO (Result Value)
 backgroundCheck settings sender = withProfile settings prepare
   where
     prepare _ execute = execute "profile_set" seed "live-check-seed" >>= continue (const (clips execute))
@@ -185,7 +187,7 @@ backgroundResult since acknowledged completed = do
   Right (object ["injected_delay_ms" .= (20000 :: Int), "acknowledgement" .= turnTiming since acknowledged,
     "result_spoken_after_completion" .= seen "check.tool.submitted" trace])
 
-interruptionCheck :: Settings -> RawSend -> IO (Result Value)
+interruptionCheck :: Settings -> Speech -> IO (Result Value)
 interruptionCheck settings sender = spoken settings sender text >>= continue run
   where
     text = "Stop please. I have another question. What is two plus two?"
@@ -229,7 +231,7 @@ interruptedPreview (Right (ended, Right False)) = Right ended
 interruptedPreview (Right (_, Left issue)) = Left issue
 interruptedPreview _ = Left (failure "live_check_preview_was_not_interrupted")
 
-hangupCheck :: Settings -> RawSend -> IO (Result Value)
+hangupCheck :: Settings -> Speech -> IO (Result Value)
 hangupCheck settings sender = spoken settings sender "Please hang up now." >>= continue prepare
   where
     prepare clip = continue (run clip) (endConfiguration settings)
@@ -277,7 +279,7 @@ hangupResult end now trace finished = do
   ensure "live_check_farewell_not_audible" (audibleSince end trace)
   Right (object ["hangup_ms" .= milliseconds end now])
 
-screeningCheck :: Settings -> RawSend -> IO (Result Value)
+screeningCheck :: Settings -> Speech -> IO (Result Value)
 screeningCheck settings sender = spoken settings sender text >>= continue prepare
   where
     text = "Hello, my name is Alex. This is an unsolicited marketing call to sell solar panels. I do not know Sam personally."
@@ -354,13 +356,13 @@ greetingHeard expected since now trace = announcementComplete True ending (answe
   && audibleSince since trace && quietAfter since now trace
   where ending = Text.unwords (takeLast 5 (Text.words expected))
 
-webResult :: Settings -> RawSend -> IO CheckResult
+webResult :: Settings -> Speech -> IO CheckResult
 webResult settings sender = case booleanSetting settings "PHONE_ASSISTANT_WEB_SEARCH" of
   Right True -> check "live_hosted_web_search" (webCheck settings sender)
   Right False -> skip "live_hosted_web_search" "web_search_disabled"
   Left issue -> check "live_hosted_web_search" (pure (Left issue))
 
-webCheck :: Settings -> RawSend -> IO (Result Value)
+webCheck :: Settings -> Speech -> IO (Result Value)
 webCheck settings sender = spoken settings sender question >>= continue prepare
   where
     question = "Please search the web using the official Science Museum London website. Tell me the street and district it is on, in one sentence."

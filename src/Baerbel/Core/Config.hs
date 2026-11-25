@@ -8,7 +8,7 @@ import Data.Text ( Text )
 import GHC.Generics ( Generic )
 import Text.Read ( readMaybe )
 import qualified Data.Map.Strict as Map
-    ( empty, lookup, union, findWithDefault )
+    ( empty, insert, lookup, union, findWithDefault )
 import qualified Data.Text as Text ( toLower, unpack )
 
 data Global = Global
@@ -30,6 +30,9 @@ data Settings = Settings
   { settingsGlobal :: Global
   , settingsValues :: Map Text Text
   }
+
+withPhoneNumbers :: Map Text Value -> Global -> Global
+withPhoneNumbers phones global = global {globalRules = Map.insert "phone_numbers" phones (globalRules global)}
 
 resolveSettings :: Global -> User -> Settings
 resolveSettings global user = Settings global values

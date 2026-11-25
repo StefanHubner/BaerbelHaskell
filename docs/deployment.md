@@ -2,17 +2,11 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-The corrective release from commit `21d47c7` is installed and passed target preflight. It fixes accumulating audio delay/overflow and Windguru's trailing forecast arrays. Activation stopped because sudo requires a password; the previous Haskell release still serves calls. From the workstation, run:
-
-```sh
-make -C ~/Dropbox/baerbel_hs activate
-```
-
-The helper checks for active calls before switching. See [the staged release record](migration.md#corrective-release-staged) for exact revisions and verification.
+The corrective release from commit `21d47c7` is active as of 2026-11-25T17:18:47Z. It corrects accumulating audio delay and Windguru's trailing forecast arrays. Read-only inspection verified the exact installed executable at PID 219249, zero restarts and active Asterisk. See [the activated release record](migration.md#corrective-release-activated). The newer live-only/configuration/backend changes are not yet deployed.
 
 ## Check and package
 
-Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared rules remain in `config/global.json`.
+Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared application rules remain in `config/global.json`; `config/phone-numbers.json` supplies reference metadata beside it. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
 
 ```sh
 make check
@@ -22,7 +16,7 @@ make package
 
 `make check` runs tests, HLint, HLS and the offline configuration/native check. `make live-check` exercises configured providers and synthetic speech, including OAuth refresh and billed model/audio requests. It does not send messages or create calendar events. The separately requested `make live-delivery-check` sends one labelled self-email and creates, verifies and deletes one private test event each time it runs. See [live-checks.md](live-checks.md) for measured results.
 
-Packaging requires committed source and writes `release/baerbel-linux-x86_64.tar.gz`. The archive contains compiled commands, global configuration, license notices and templates, with its source revision and platform recorded in `BUILD.txt`. Credentials and runtime state stay outside the archive. Build products are kept outside Dropbox under `~/.cache/baerbel-hs/`; prerequisites are described in [the README](../README.md#development-checks) and [native/README.md](../native/README.md).
+Packaging requires committed source and writes `release/baerbel-linux-x86_64.tar.gz`. The archive contains production commands, global configuration, phone-number reference metadata, license notices and templates, with its source revision and platform recorded in `BUILD.txt`. Credentials, runtime state, the development checker and its TTS configuration stay outside the archive. Build products are kept outside Dropbox under `~/.cache/baerbel-hs/`; prerequisites are described in [the README](../README.md#development-checks) and [native/README.md](../native/README.md).
 
 ## Prepare the server without sudo
 

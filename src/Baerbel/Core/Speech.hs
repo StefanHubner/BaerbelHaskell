@@ -1,10 +1,8 @@
 module Baerbel.Core.Speech where
 
 import Baerbel.Core.Error ( Result, failure )
-import Data.Aeson ( Value, object, (.=) )
 import Data.Bits ( (.|.), shiftL, shiftR )
 import Data.Int ( Int16 )
-import Data.Text ( Text )
 import Data.Word ( Word8 )
 import Foreign.C.Types ( CFloat )
 import qualified Data.ByteString as BS
@@ -57,18 +55,3 @@ audiblePCM bytes = either (const False) audible (decodePCM bytes)
     audible samples = let squares = map (\sample -> (fromIntegral sample :: Double) ** 2) samples
                           rms = sqrt (sum squares / fromIntegral (length samples))
                       in rms >= 100
-
-speechRequest :: Text -> Text -> Text -> Text -> Value
-speechRequest model voice instructions input = object (base ++ style)
-  where
-    base = ["model" .= model, "voice" .= voice, "input" .= input, "response_format" .= ("pcm" :: Text)]
-    style = ["instructions" .= instructions | instructions /= "" && model `notElem` ["tts-1", "tts-1-hd"]]
-
-transcriptionConfig :: Text -> Value
-transcriptionConfig model = object ["type" .= ("session.update" :: Text), "session" .= session]
-  where
-    delay = ["delay" .= ("low" :: Text) | model == "gpt-live-transcribe"]
-    transcription = object (("model" .= model) : delay)
-    input = object ["format" .= object ["type" .= ("audio/pcm" :: Text), "rate" .= (24000 :: Int)],
-                    "transcription" .= transcription, "turn_detection" .= (Nothing :: Maybe Value)]
-    session = object ["type" .= ("transcription" :: Text), "audio" .= object ["input" .= input]]

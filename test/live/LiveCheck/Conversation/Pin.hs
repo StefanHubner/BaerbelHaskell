@@ -6,7 +6,6 @@ import Baerbel.Core.JSON (jsonOptions, textField)
 import Baerbel.Core.Protocol (buildSession)
 import Baerbel.Core.Session (liveConfiguration, pinConfiguration)
 import Baerbel.Runtime.Effects (continue)
-import Baerbel.Runtime.HTTP (RawSend)
 import Baerbel.Runtime.Live (Media(..))
 import Baerbel.Runtime.Pin (PinConfig(..), PinGate)
 import Baerbel.Runtime.Provider (Execute)
@@ -24,7 +23,7 @@ import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Generics (Generic)
 import LiveCheck.Check (ensure)
-import LiveCheck.Conversation.Audio (speechPair)
+import LiveCheck.Conversation.Audio (Speech, speechPair)
 import LiveCheck.Conversation.Model
 import LiveCheck.Conversation.Session
 import qualified Baerbel.Runtime.Pin as Pin
@@ -42,14 +41,14 @@ syntheticHash = "pbkdf2_sha256:600000:" <> hex salt <> ":" <> hex digest
     hex :: ByteString -> Text
     hex = Text.decodeUtf8 . convertToBase Base16
 
-pinCheck :: Settings -> RawSend -> IO (Result Value)
+pinCheck :: Settings -> Speech -> IO (Result Value)
 pinCheck settings sender = continue open (pinConfiguration selected)
   where
     selected = settings {settingsValues = Map.insert "PHONE_ASSISTANT_PRIVATE_PIN_HASH" syntheticHash (settingsValues settings)}
     open cfg = Pin.newPinGate cfg >>= continue (scoped cfg)
     scoped cfg gate = finally (prepare selected sender cfg gate) (Pin.closePin gate)
 
-prepare :: Settings -> RawSend -> PinConfig -> PinGate -> IO (Result Value)
+prepare :: Settings -> Speech -> PinConfig -> PinGate -> IO (Result Value)
 prepare settings sender cfg gate = speechPair settings sender request spokenPin >>= continue start
   where
     request = "Please use gmail_search to check my inbox and tell me the subject of the newest email."

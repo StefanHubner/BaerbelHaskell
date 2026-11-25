@@ -38,13 +38,10 @@ spec = describe "shared HTTP outcome boundary" $ do
   it "rejects malformed URLs before transport, with a definite outcome" $ do
     sender <- newSenderWith mutationPolicy
     raw <- newRawSender
-    stream <- newStreamSender
     let request = testRequest "POST" "not a URL" 64
         rejected = Left (failure "connection_failed")
-        unexpected _ = expectationFailure "stream callback was reached" >> pure (Right ())
     sender request `shouldReturn` rejected
     raw request `shouldReturn` rejected
-    stream request unexpected `shouldReturn` rejected
   it "never marks a failed token refresh as an attempted mutation" $ do
     let token = pure (Left (failure "refresh_scopes_rejected"))
         unexpected :: Send

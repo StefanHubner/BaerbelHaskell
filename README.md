@@ -15,13 +15,15 @@ The build uses the tested LTS package set. Package requirements specify minimum 
 
 ## Configuration and execution
 
-`config/global.json` contains shared defaults, policy, tool schemas and prompts. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
+`config/global.json` contains shared defaults, policy, tool schemas and prompts. `config/phone-numbers.json` holds shared numbering reference metadata and is loaded beside the supplied global file. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
 
 ```sh
 stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbel/user.json
 ```
 
-`--check` validates local configuration and native dependencies without making provider requests. Deployment uses the existing service and fixed server paths described below.
+`--check` validates local configuration and native dependencies without making provider requests. Production uses Live speech; the unused alternate STT/chat/TTS pipeline has been removed from the current source. The new backend settings are `gpt-6.2-sol`, `low` reasoning and `priority` service tier (Fast); the Live speech model is unchanged. These new source/configuration changes are not deployed yet.
+
+The service currently loads one private user configuration. Shared application/reference files are separate from user credentials and state; future multi-user routing and shared versus separate telephone numbers remain undecided.
 
 Haskell now runs in the existing `phone-assistant.service` on the miniserver. The Python application is preserved for rollback. Process, listener and startup-log checks passed. Real tests verified the owner Gmail path and known-caller forwarding/ringing, followed by caller hangup and an accepted outcome SMS. Answered bridging and other call paths remain unverified. See the migration and live-verification records for the behavior actually exercised.
 
@@ -41,13 +43,13 @@ make check
 make live-check
 ```
 
-This command makes real API requests, including OAuth refresh and billed model/audio requests. It reports redacted results, timings and cache assertions; it does not activate a service, send email/SMS, or create calendar events. Disabled integrations are reported separately. See [live-checks.md](docs/live-checks.md) for coverage and measured outcomes; a local live check does not verify an Asterisk call.
+The live-check executable takes `GLOBAL USER DEVELOPMENT` arguments; the Make target supplies `test/live/config.json` for synthetic TTS. That development file and the checker are excluded from production releases. This command makes real API requests, including OAuth refresh and billed model/audio requests. It reports redacted results, timings and cache assertions; it does not activate a service, send email/SMS, or create calendar events. Disabled integrations are reported separately. See [live-checks.md](docs/live-checks.md) for coverage and measured outcomes; a local live check does not verify an Asterisk call.
 
 For an explicitly requested end-to-end delivery check, run `make live-delivery-check`. It sends one labelled self-email with synthetic audio and creates, reads and deletes one private calendar test event. Delivery and cleanup are reported separately.
 
 ## Release and deployment
 
-After committing the validated source, `make package` creates `release/baerbel-linux-x86_64.tar.gz`. It contains both compiled commands, global configuration, a private-user-file example, native license notices and reviewable systemd/logrotate files. Packaging refuses uncommitted source changes. It does not install or restart anything. The existing Asterisk deployment is maintained separately.
+After committing the validated source, `make package` creates `release/baerbel-linux-x86_64.tar.gz`. It contains both production commands, global configuration, shared phone-number metadata, a private-user-file example, native license notices and reviewable systemd/logrotate files. Packaging refuses uncommitted source changes. It does not install or restart anything. The existing Asterisk deployment is maintained separately.
 
 The server command uses the global and private user files shown above. The preserved authorization command is `phone-assistant-gmail-auth GLOBAL_CONFIG --client-secrets FILE`; its existing integration selection, browser, port and timeout options remain available. Authorization performs a real consent flow and is separate from offline validation.
 
@@ -62,4 +64,4 @@ make activate
 
 `make rollback` removes that override and restores the same Python service. The Python application in `/home/stefan/apps/assistant`, its virtual environment and shared state are preserved; no second service is installed. The server supplies Asterisk, libsoxr and ffmpeg. See [deployment.md](docs/deployment.md) for the workflow and [migration.md](docs/migration.md) for what has actually been exercised. Installation, target checks and activation passed on 2026-11-25. The Haskell process is active with zero restarts, its three loopback listeners are bound, Asterisk is active and the old Python process has exited. Real owner Gmail and known-caller forwarding/ringing checks passed; the forwarded caller ended before answer. Answered bridging and other call paths still need verification.
 
-The audio-pacing and Windguru corrections in `21d47c7` are installed and checked on the miniserver. Activation requires sudo authentication; run `make activate` from this checkout. See [the release record](docs/migration.md#corrective-release-staged).
+The audio-pacing and Windguru corrections from `21d47c7` are active as of 2026-11-25T17:18:47Z. Read-only inspection confirmed the exact release executable, zero restarts and active Asterisk. The newer live-only/configuration/backend changes described above are not yet deployed. See [the release record](docs/migration.md#corrective-release-activated).

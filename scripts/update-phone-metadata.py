@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert reviewed libphonenumber XML into the shared Haskell rule data."""
+"""Convert reviewed libphonenumber XML into the separate Haskell phone reference data."""
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +8,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, Iterable, TypeAlias, TypeVar, TypedDict, cast
+from typing import Generic, Iterable, TypeAlias, TypeVar, TypedDict
 from xml.etree import ElementTree as XML
 
 RESTRICTED: tuple[str, ...] = ("premiumRate", "tollFree", "sharedCost", "voip", "personalNumber", "pager", "uan", "voicemail")
@@ -53,18 +53,6 @@ class Metadata(TypedDict):
     source: str
     sha256: str
     countries: dict[str, list[Region]]
-
-
-class PhoneNumbers(TypedDict):
-    metadata: Metadata
-
-
-class Rules(TypedDict, total=False):
-    phone_numbers: PhoneNumbers
-
-
-class Configuration(TypedDict):
-    rules: Rules
 
 
 def collect(values: Iterable[Result[T]]) -> Result[list[T]]:
@@ -239,9 +227,7 @@ def save(target: str, parsed: Result[Metadata]) -> Result[None]:
             return problem
         case Parsed(value):
             path = Path(target)
-            config = cast(Configuration, json.loads(path.read_text()))
-            config["rules"]["phone_numbers"] = {"metadata": value}
-            output = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
+            output = json.dumps({"metadata": value}, indent=2, ensure_ascii=False) + "\n"
             path.write_text(output)
             return Parsed(None)
 
@@ -252,7 +238,7 @@ def main(arguments: list[str]) -> None:
             result = update(version, source, target)
             report(result)
         case _:
-            report(Problem("usage: update-phone-metadata.py VERSION XML GLOBAL_JSON"))
+            report(Problem("usage: update-phone-metadata.py VERSION XML PHONE_JSON"))
 
 
 def report(result: Result[None]) -> None:

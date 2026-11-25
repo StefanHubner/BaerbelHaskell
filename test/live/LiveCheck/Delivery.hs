@@ -8,15 +8,16 @@ import Baerbel.Runtime.HTTP (Send, RawSend)
 import Data.Aeson (Value)
 import Data.Text (Text)
 import LiveCheck.Check (CheckResult, check, skip)
+import LiveCheck.Config (Development(..))
 import LiveCheck.Delivery.Calendar (temporaryEvent)
 import LiveCheck.Delivery.Common (withGoogle)
 import LiveCheck.Delivery.Email (selfEmail)
 import qualified Data.Text as Text
 
 -- Invoked only by the separately selected, explicitly approved delivery command.
-deliveryChecks :: Settings -> Send -> IO [CheckResult]
-deliveryChecks settings sender = sequence
-  [ delivery "gmail" "PHONE_ASSISTANT_GMAIL_TOKEN_FILE" (\json _ -> selfEmail settings json)
+deliveryChecks :: Development -> Settings -> Send -> IO [CheckResult]
+deliveryChecks development settings sender = sequence
+  [ delivery "gmail" "PHONE_ASSISTANT_GMAIL_TOKEN_FILE" (\json _ -> selfEmail (developmentSpeech development) settings json)
   , delivery "calendar" "PHONE_ASSISTANT_CALENDAR_TOKEN_FILE" (temporaryEvent settings)
   ]
   where

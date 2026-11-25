@@ -13,7 +13,7 @@ mkdir -p "$stage/baerbel/bin" "$stage/baerbel/config" "$stage/baerbel/native" "$
 install -m 0755 "$install_root/bin/phone-assistant-server" "$stage/baerbel/bin/"
 install -m 0755 "$install_root/bin/phone-assistant-gmail-auth" "$stage/baerbel/bin/"
 strip "$stage/baerbel/bin/phone-assistant-server" "$stage/baerbel/bin/phone-assistant-gmail-auth"
-install -m 0644 config/global.json config/user.example.json "$stage/baerbel/config/"
+install -m 0644 config/global.json config/phone-numbers.json config/user.example.json "$stage/baerbel/config/"
 cp -r native/licenses "$stage/baerbel/native/"
 install -m 0644 deploy/phone-assistant.service deploy/phone-assistant.logrotate "$stage/baerbel/deploy/"
 {

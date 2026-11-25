@@ -1,6 +1,6 @@
 
 module Baerbel.Runtime.HTTP
-  ( module Core, Send, RawSend, StreamSend, newSender, newSenderWith, newRawSender, newStreamSender, send, rawSend, streamSend, authenticated, requestJSON ) where
+  ( module Core, Send, RawSend, newSender, newSenderWith, newRawSender, send, rawSend, authenticated, requestJSON ) where
 
 import Baerbel.Core.Error ( Failure(..), Result, failure )
 import Baerbel.Runtime.Effects ( continue, mapResult )
@@ -44,7 +44,6 @@ import qualified Data.Text.Encoding as Text ( encodeUtf8 )
 
 type RawSend = Request -> IO (Result Response)
 type Send = Request -> IO (Result Value)
-type StreamSend = Request -> (ByteString -> IO (Result ())) -> IO (Result ())
 
 requestJSON :: Send -> Request -> (Value -> Result a) -> IO (Result a)
 requestJSON sender request parse = mapResult parse (sender request)
@@ -57,9 +56,6 @@ newSenderWith mutation = sendWith mutation <$> newTransportManager
 
 newRawSender :: IO RawSend
 newRawSender = rawSend <$> newTransportManager
-
-newStreamSender :: IO StreamSend
-newStreamSender = streamSend <$> newTransportManager
 
 newTransportManager :: IO HTTP.Manager
 newTransportManager = HTTP.newManager configured
@@ -88,14 +84,6 @@ rawSend :: HTTP.Manager -> RawSend
 rawSend manager spec = withResponse True manager spec readRaw
   where
   readRaw response = readResponse response <$> readBounded (requestLimit spec) (HTTP.responseBody response)
-
-streamSend :: HTTP.Manager -> StreamSend
-streamSend manager spec sink = withResponse False manager spec consumeResponse
-  where
-  consumeResponse response = continue stream checked
-    where
-    checked = responseStatusResult (const False) (statusCode (HTTP.responseStatus response))
-    stream () = consume (\() chunk -> sink chunk) () (requestLimit spec) (HTTP.responseBody response)
 
 withResponse :: Bool -> HTTP.Manager -> Request -> (HTTP.Response HTTP.BodyReader -> IO (Result a)) -> IO (Result a)
 withResponse uncertain manager spec consumeResponse = continue exchange (prepare spec)

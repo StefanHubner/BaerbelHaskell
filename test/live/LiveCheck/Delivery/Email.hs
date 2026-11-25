@@ -26,7 +26,8 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Time (getCurrentTime)
 import LiveCheck.Check (ensure, emit)
-import LiveCheck.Conversation.Audio (spoken)
+import LiveCheck.Config (SpeechSettings)
+import LiveCheck.Conversation.Audio (synthesise, spoken)
 import LiveCheck.Delivery.Common (freshId, withReceiptLedger)
 import LiveCheck.Native (decoder)
 import LiveCheck.Providers.Common (member)
@@ -38,21 +39,22 @@ import qualified Data.Text.Encoding as Text
 subject :: Text
 subject = "Bärbel Haskell live check"
 
-selfEmail :: Settings -> Send -> IO (Result Value)
-selfEmail settings sender = runExceptT $ do
+selfEmail :: SpeechSettings -> Settings -> Send -> IO (Result Value)
+selfEmail speechRules settings sender = runExceptT $ do
   mailRules <- except (rule settings "notes" "mail")
   gmailRules <- except (rule settings "providers" "gmail")
   let labelled = mailRules {noteMailSubject = subject}
-  pcm <- ExceptT (syntheticClip settings)
+  pcm <- ExceptT (syntheticClip speechRules settings)
   ident <- lift freshId
   ExceptT (withReceiptLedger (sendAndVerify labelled gmailRules sender ident pcm))
 
-syntheticClip :: Settings -> IO (Result ByteString)
-syntheticClip settings = runExceptT $ do
+syntheticClip :: SpeechSettings -> Settings -> IO (Result ByteString)
+syntheticClip speechRules settings = runExceptT $ do
   rate <- except (rule settings "runtime" "input_rate" :: Result Int)
   raw <- lift newRawSender
   let text = "This is Bärbel's authorised Haskell voice note delivery check."
-  clip <- ExceptT (spoken settings raw text)
+      speech = synthesise speechRules settings raw
+  clip <- ExceptT (spoken settings speech text)
   let size = rate * 2 * 6
       silence = Bytes.replicate size 0
       bounded = Bytes.take size (clip <> silence)

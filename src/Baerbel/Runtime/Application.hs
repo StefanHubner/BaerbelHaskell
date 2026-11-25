@@ -13,8 +13,6 @@ import Baerbel.Runtime.Messages ( Messages, withMessages )
 import Baerbel.Core.PhoneNumber ( numberValidator )
 import Baerbel.Core.Routing ( NumberValidator )
 import Baerbel.Runtime.Pin ( parsePinHash )
-import Baerbel.Runtime.Pipeline
-    ( preparePipeline, pipelineSession )
 import Baerbel.Runtime.SMS ( SMSCredentials(..), withSMS )
 import Baerbel.Runtime.Server
     ( ServerConfig(..), CallHandler, serve )
@@ -112,13 +110,7 @@ runConfigured settings validate services output messages = Effects.continue star
     let public = IncomingServices (lookupPublicCaller services) messages
         incoming = incomingSession settings public output publicRegistry handoffs
         owner = ownerSession settings validate services output ownerRegistry handoffs
-    selected <- chooseOwner settings output owner
-    Effects.continue (startServer settings validate output incoming) selected
-
-chooseOwner :: Settings -> Report -> CallHandler -> IO (Result CallHandler)
-chooseOwner settings output native
-  | setting settings "PHONE_ASSISTANT_VOICE_MODE" == "pipeline" = fmap (fmap (`pipelineSession` output)) (preparePipeline settings)
-  | otherwise = pure (Right native)
+    startServer settings validate output incoming owner
 
 startServer :: Settings -> NumberValidator -> Report -> CallHandler -> CallHandler -> IO (Result ())
 startServer settings validate output incoming owner = case serverConfiguration settings validate output incoming owner of

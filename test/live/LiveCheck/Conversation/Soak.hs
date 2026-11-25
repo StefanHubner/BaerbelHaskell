@@ -5,7 +5,6 @@ import Baerbel.Core.Error (Result)
 import Baerbel.Core.JSON (field, jsonOptions, numberField)
 import Baerbel.Core.Live (LiveConfig(..))
 import Baerbel.Runtime.Effects (continue)
-import Baerbel.Runtime.HTTP (RawSend)
 import Baerbel.Runtime.Services (dispatch)
 import Data.Aeson (ToJSON(..), Value, genericToJSON, object, (.=))
 import Data.ByteString (ByteString)
@@ -13,11 +12,11 @@ import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Generics (Generic)
 import LiveCheck.Check (emit, ensure)
-import LiveCheck.Conversation.Audio (speechPair)
+import LiveCheck.Conversation.Audio (Speech, speechPair)
 import LiveCheck.Conversation.Model
 import LiveCheck.Conversation.Session
 
-soakCheck :: Settings -> RawSend -> IO (Result Value)
+soakCheck :: Settings -> Speech -> IO (Result Value)
 soakCheck settings sender = speechPair settings sender firstText nextText >>= continue run
   where
     firstText = "What is two plus two? Please answer in one short sentence."

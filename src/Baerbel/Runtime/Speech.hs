@@ -29,9 +29,7 @@ import Baerbel.Core.Speech as Core
       decodeSamples,
       encodePCM,
       splitFrames,
-      audiblePCM,
-      speechRequest,
-      transcriptionConfig )
+      audiblePCM )
 import qualified Data.ByteString as BS ( ByteString, empty )
 
 type Create = CDouble -> CDouble -> CUInt -> Ptr CString -> Ptr () -> Ptr () -> Ptr () -> IO (Ptr ())

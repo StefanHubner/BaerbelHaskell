@@ -57,7 +57,7 @@ announcementConfig settings line = do
   rate <- rule settings "runtime" "provider_rate"
   let session = SessionSettings Announcement (setting settings "OPENAI_LIVE_MODEL")
         (setting settings "OPENAI_LIVE_VOICE") (identity <> "\n\n" <> instructions)
-        "" "" "" 0 [] rate
+        "" "" "" "" 0 [] rate
   liveConfiguration settings session line
 
 handoffAnnouncement :: Settings -> Text -> Result (LiveConfig, Text, Int, Int)
@@ -132,7 +132,7 @@ sampleConfiguration settings sample = do
   rate <- rule settings "runtime" "provider_rate"
   let content = instructions <> sampleInstructions sample <> "\nLine: " <> sampleText sample
       session = SessionSettings Announcement (setting settings "OPENAI_LIVE_MODEL")
-        (sampleVoice sample) content "" "" "" 0 [] rate
+        (sampleVoice sample) content "" "" "" "" 0 [] rate
   cfg <- liveConfiguration settings session (sampleText sample)
   (,,,) cfg <$> rule settings "voice_audition" "sampleQuietMicros"
     <*> rule settings "voice_audition" "sampleMicros" <*> rule settings "voice_audition" "sampleGapMicros"

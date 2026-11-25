@@ -11,6 +11,8 @@ license:        NONE
 build-type:     Custom
 extra-source-files:
     config/global.json
+    config/phone-numbers.json
+    test/live/config.json
     config/user.example.json
     test/fixtures/calendar-tools.json
     test/fixtures/contacts-candidates.json
@@ -70,7 +72,6 @@ library
       Baerbel.Core.Cache
       Baerbel.Core.Calendar
       Baerbel.Core.CallState
-      Baerbel.Core.Chat
       Baerbel.Core.Concurrent
       Baerbel.Core.Config
       Baerbel.Core.ConfigPaths
@@ -103,7 +104,6 @@ library
       Baerbel.Core.OpeningHours
       Baerbel.Core.PhoneNumber
       Baerbel.Core.Pin
-      Baerbel.Core.Pipeline
       Baerbel.Core.Profile
       Baerbel.Core.Protocol
       Baerbel.Core.Provider
@@ -156,7 +156,6 @@ library
       Baerbel.Runtime.Notes
       Baerbel.Runtime.OAuth
       Baerbel.Runtime.Pin
-      Baerbel.Runtime.Pipeline
       Baerbel.Runtime.Profile
       Baerbel.Runtime.Provider
       Baerbel.Runtime.Recording
@@ -236,6 +235,7 @@ executable baerbel-live-check
   main-is: Main.hs
   other-modules:
       LiveCheck.Check
+      LiveCheck.Config
       LiveCheck.Conversation
       LiveCheck.Conversation.Audio
       LiveCheck.Conversation.Model

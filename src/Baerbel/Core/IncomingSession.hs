@@ -75,7 +75,8 @@ restrictedSettings settings allowMessages messageOnly = do
       tools = restrictTools allowMessages messageOnly schemas
       session = SessionSettings Restricted (setting settings "OPENAI_LIVE_MODEL")
         (setting settings "OPENAI_LIVE_VOICE") instructions (setting settings "OPENAI_CHAT_MODEL")
-        instructions (setting settings "OPENAI_CHAT_REASONING_EFFORT") tokens tools rate
+        instructions (setting settings "OPENAI_CHAT_REASONING_EFFORT")
+        (setting settings "OPENAI_CHAT_SERVICE_TIER") tokens tools rate
   liveConfiguration settings session greeting
   where
     greetingKey :: Text

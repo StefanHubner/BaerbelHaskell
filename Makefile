@@ -24,10 +24,10 @@ check: test
 	stack exec phone-assistant-server -- --check config/global.json "$(user_config)"
 
 live-check: build
-	stack exec baerbel-live-check -- config/global.json "$(user_config)"
+	stack exec baerbel-live-check -- config/global.json "$(user_config)" test/live/config.json
 
 live-delivery-check: build
-	stack exec baerbel-live-check -- delivery config/global.json "$(user_config)"
+	stack exec baerbel-live-check -- delivery config/global.json "$(user_config)" test/live/config.json
 
 package: native
 	./scripts/package-release.sh

@@ -4,13 +4,11 @@ module LiveSpec (spec) where
 import Baerbel.Core.Concurrent (hasElapsed)
 import Baerbel.Core.Background (BackgroundRules(..), Progress(..), progressStep)
 import qualified Data.Set as Set
-import qualified Baerbel.Runtime.Pipeline as Pipeline
 import qualified Baerbel.Runtime.Config as Config
 import qualified Baerbel.Runtime.Ringback as Ring
 import qualified Data.Map.Strict as Map
 import qualified Baerbel.Runtime.Pin as Pin
 import qualified Baerbel.Runtime.EndCall as End
-import qualified Baerbel.Core.Chat as Chat
 import Control.Concurrent.Async (withAsync, wait)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (finally)
@@ -18,10 +16,11 @@ import System.Timeout (timeout)
 import Data.IORef (newIORef, readIORef, writeIORef)
 import qualified Data.Text as T
 import Baerbel.Core.Error (Failure(..), failure)
+import Baerbel.Core.JSON (field)
 import Baerbel.Runtime.Live
 import Baerbel.Core.Protocol
 import Baerbel.Runtime.Speech
-import Data.Aeson (Value(..), object, (.=), eitherDecodeFileStrict')
+import Data.Aeson (Value(..), object, (.=), toJSON, eitherDecodeFileStrict')
 import qualified Data.ByteString as BS
 import Data.Either (isLeft)
 import Data.Text (Text)
@@ -125,6 +124,8 @@ spec = do
         screening = object ["name" .= ("screen_call" :: Text)]
         message = object ["name" .= ("take_message" :: Text)]
         tools = [owner, screening, message, object ["type" .= ("web_search" :: Text)]]
+        session = SessionSettings Owner "gpt-live-1" "willow" "voice" "gpt-6.2-sol" "backend" "low" "priority" 100 tools 24000
+        responses role = field "delegation" (sessionConfig session {sessionRole = role}) >>= field "responses"
     it "restricts public sessions to screening and messages" $ do
       allowedTools Restricted tools `shouldBe` [screening, message]
     it "gives announcements no tools" $ do
@@ -133,6 +134,19 @@ spec = do
       allowedTools Owner tools `shouldBe` tools
     it "does not inject an empty greeting" $ do
       greetingCommand "Say {greeting}" "" `shouldBe` Nothing
+    it "configures Sol with low reasoning and priority for managed delegation" $ do
+      let backend = responses Owner
+      (backend >>= field "model") `shouldBe` Just (String "gpt-6.2-sol")
+      (backend >>= field "reasoning" >>= field "effort") `shouldBe` Just (String "low")
+      (backend >>= field "service_tier") `shouldBe` Just (String "priority")
+    it "retains the restricted tool boundary when priority is selected" $ do
+      let backend = responses Restricted
+      (backend >>= field "service_tier") `shouldBe` Just (String "priority")
+      (backend >>= field "tools") `shouldBe` Just (toJSON [screening, message])
+    it "keeps announcements on client delegation without a backend tier" $ do
+      let configured = sessionConfig session {sessionRole = Announcement}
+          client = object ["type" .= ("client" :: Text)]
+      field "delegation" configured `shouldBe` Just client
   describe "local PIN state" $ do
     it "clears digits with star and never submits an overlong PIN" $ do
       let entered = Pin.PinState "12345678" False False
@@ -181,26 +195,6 @@ spec = do
           config = End.EndConfig "Goodbye" "Goodbye" 100000
       _ <- End.executeEndCall config (pure ready) effects End.OwnerRequested
       readIORef ended `shouldReturn` True
-  describe "streaming chat sentences" $ do
-    let rules = Chat.ChunkRules 220 ["dr", "mr", "e.g", "i.e"]
-    it "retains lookahead for decimals split across events" $ do
-      Chat.takeChunk rules False "It is 3." `shouldBe` Nothing
-      Chat.takeChunk rules False "It is 3.14. Next" `shouldBe` Just ("It is 3.14.", "Next")
-    it "keeps abbreviations and initials within a sentence" $ do
-      Chat.takeChunk rules False "Dr. A. Smith is here. Next" `shouldBe` Just ("Dr. A. Smith is here.", "Next")
-    it "flushes the final sentence only once" $ do
-      let delta = object ["type" .= ("response.output_text.delta" :: Text), "delta" .= ("Hello." :: Text)]
-          done = object ["type" .= ("response.output_text.done" :: Text)]
-          first = Chat.chatEvent rules delta Chat.emptyChat
-          second = first >>= \(state, _) -> Chat.chatEvent rules done state
-      fmap snd first `shouldBe` Right []
-      fmap snd second `shouldBe` Right ["Hello."]
-      fmap snd (second >>= \(state, _) -> Chat.chatEvent rules done state) `shouldBe` Right []
-    it "retains incomplete SSE lines across arbitrary network chunks" $ do
-      let first = Chat.splitEvents "data: {\"type\":\"response."
-      fmap fst first `shouldBe` Right []
-      let second = first >>= \(_, rest) -> Chat.splitEvents (rest <> "created\"}\n\n")
-      fmap (length . fst) second `shouldBe` Right 1
   describe "announcement completion" $ do
     it "waits for delivered speech to finish and the exact quiet interval to elapse" $ do
       let ready now = announcementReady False "Goodbye" 600000 now "Goodbye!" (Just 1000000000)
@@ -220,25 +214,6 @@ spec = do
       announcementComplete False "What can I do for you" "What can I do for you?" `shouldBe` True
       announcementComplete False "What can I do for you" "What can I do for you? Extra words" `shouldBe` False
       announcementComplete True "Bye bye" "Okay. Bye bye!" `shouldBe` True
-  describe "legacy local voice turns" $ do
-    it "keeps initial consonants and starts on the third voiced frame" $ withPipelineRules $ \rules -> do
-      let frame = BS.replicate (Pipeline.pipelineFrameBytes rules) 0
-          addVoiced state = fst (Pipeline.stepFrame rules 20 1500 1 True frame state)
-          second = addVoiced (addVoiced (Pipeline.Listening [] 0))
-          (third, actions) = Pipeline.stepFrame rules 20 1500 1 True frame second
-      third `shouldBe` Pipeline.Recording 3 0
-      actions `shouldBe` [Pipeline.Begin (BS.concat [frame, frame, frame])]
-    it "commits once at the configured silence or maximum duration" $ withPipelineRules $ \rules -> do
-      let frame = BS.replicate (Pipeline.pipelineFrameBytes rules) 0
-          (committed, actions) = Pipeline.stepFrame rules 20 1500 12 False frame (Pipeline.Recording 100 19)
-      committed `shouldBe` Pipeline.Committed 12 ""
-      actions `shouldBe` [Pipeline.Append frame, Pipeline.Commit]
-      snd (Pipeline.stepFrame rules 20 1500 13 True frame committed) `shouldBe` []
-      snd (Pipeline.stepFrame rules 20 1500 14 True frame (Pipeline.Recording 1499 0)) `shouldBe` [Pipeline.Append frame, Pipeline.Commit]
-    it "suppresses echo and caller audio while a response is playing" $ withPipelineRules $ \rules -> do
-      let frame = BS.replicate (Pipeline.pipelineFrameBytes rules) 0
-      Pipeline.stepFrame rules 20 1500 1 True frame Pipeline.Replying `shouldBe` (Pipeline.Replying, [])
-      Pipeline.stepFrame rules 20 1500 1 True frame (Pipeline.Echo 2) `shouldBe` (Pipeline.Echo 2, [])
   describe "startup ringback" $ do
     it "uses the original UK cadence without mixing silence into speech" $ do
       let rules = Ring.RingRules [400, 450] 1200 160 8000 20000 150 [(0,20),(30,50)]
@@ -277,8 +252,8 @@ spec = do
       let (_, messages) = progressStep rules 10000000000 0 True True (Progress True 0)
       messages `shouldBe` []
 
-  describe "original session configuration parity" $ do
-    it "matches the complete default Python session at a fixed clock" $ do
+  describe "configured session payloads" $ do
+    it "matches the complete default session at a fixed clock" $ do
       global <- eitherDecodeFileStrict' "config/global.json" :: IO (Either String Config.Global)
       original <- eitherDecodeFileStrict' "test/fixtures/live-session.json" :: IO (Either String Value)
       case (global, original) of
@@ -313,16 +288,6 @@ integratedSession global = do
     pin = "pbkdf2_sha256:600000:" <> T.replicate 32 "0" <> ":" <> T.replicate 64 "0"
     user = Config.User (Map.singleton "PHONE_ASSISTANT_PRIVATE_PIN_HASH" pin)
     settings = Config.resolveSettings global user
-
-withPipelineRules :: (Pipeline.PipelineRules -> Expectation) -> Expectation
-withPipelineRules action = do
-  loaded <- eitherDecodeFileStrict' "config/global.json" :: IO (Either String Config.Global)
-  case loaded of
-    Left message -> expectationFailure message
-    Right global -> do
-      let settings = Config.resolveSettings global (Config.User Map.empty)
-      either (expectationFailure . show) action (Config.ruleSection settings "pipeline")
-
 
 exercisePin :: Pin.PinGate -> IO (Either Failure ())
 exercisePin gate = do

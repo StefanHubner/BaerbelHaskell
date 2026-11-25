@@ -2,8 +2,9 @@
 
 Later production calls exposed a long-call input overflow and slow responses
 across multiple backend tool steps. The audio-pacing and Windguru corrections
-passed local checks and focused target-provider reruns. Activation of the
-corrected release is pending; the running service still uses the earlier release.
+passed local checks and focused target-provider reruns. The corrected release
+is active as of 2026-11-25T17:18:47Z. Newer live-only/configuration/backend changes
+are not yet deployed and are outside the results below.
 
 Run the local checks using the private user file at `~/.config/baerbel/user.json`:
 
@@ -175,7 +176,8 @@ accumulate wake-up delay. The corrective source uses absolute frame deadlines
 for input and playback, preserves epoch/pause suppression across waits, and adds
 a 210-second continuous-input check with a late spoken follow-up. Its telephone
 transport is simulated; it does not establish target Asterisk/network behavior.
-No corrected production behavior is claimed yet.
+The corrective release is active; a subsequent real Asterisk call has not yet
+verified the corrected long-call behavior.
 
 The `windguru_forecast_set` tool returned `ok` at **16:12:45 UTC**. Forecast attempts at
 **16:13:19/21** returned errors, followed by successful results at **16:13:23/25**.
@@ -200,8 +202,8 @@ The actual saved-set tool was rerun on the miniserver after the correction:
 
 The remaining member returned a provider error with only a message string and
 no useful error code. Its cause is undetermined; it is not evidence of a PRO,
-access or missing-forecast restriction. These direct target probes do not mean
-the corrected release is active in the production service.
+access or missing-forecast restriction. These direct target probes preceded the corrective release activation at
+2026-11-25T17:18:47Z; they do not constitute a real telephone-call test.
 
 Maps requests returned successfully, but the caller experienced excessive wait.
 The observed intervals from the final caller transcript event to the first answer
@@ -246,5 +248,6 @@ against wall time. Its focused target rerun **passed**:
 This exercises the production Live runtime and actual speech provider on the
 target, with simulated telephone transport and continuous input beyond the
 observed 149-second failure. It does not replace a real Asterisk call after
-activation. The corrected release is installed and checked under `~/apps/baerbel`; activation
-is waiting for sudo authentication. See [deployment.md](deployment.md).
+activation. The corrected release became active at 2026-11-25T17:18:47Z;
+read-only inspection confirmed its exact executable, zero restarts and active
+Asterisk. See [deployment.md](deployment.md).
