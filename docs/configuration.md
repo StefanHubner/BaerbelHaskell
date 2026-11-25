@@ -27,10 +27,19 @@ On the current server the Google token paths point into
 New accounts get separate paths. The account file points to them and
 contains their PIN hashes.
 
-Asterisk's inbound SIP settings are in
-`/etc/asterisk/phone-assistant-pjsip.conf`. The outbound endpoint and
-handset settings are in `/etc/asterisk/phone-assistant-outbound.conf`.
-Telematica uses its own `phone-assistant-telematica-pjsip.conf` and
+SIP accounts and Bärbel user accounts are separate. Standard users share
+the old number's SIP endpoint and credentials. The Bristol Pro number
+has its own Asterisk endpoint and inbound password. Its SIP To number
+selects that endpoint before digest authentication. Asterisk also checks
+the carrier's source address. Bärbel selects the individual user only
+after Asterisk accepts the call.
+
+The shared inbound SIP settings are in
+`/etc/asterisk/phone-assistant-pjsip.conf`. The separate Pro endpoint and its
+password live in `/etc/asterisk/phone-assistant-bristol-pjsip.conf` with mode
+`0640`. The outbound endpoint and handset settings are in
+`/etc/asterisk/phone-assistant-outbound.conf`. Telematica uses its own
+`phone-assistant-telematica-pjsip.conf` and
 `phone-assistant-telematica-extensions.conf` in the same directory. Bärbel
 can request the configured Telematica route for an Austrian destination.
 
@@ -48,3 +57,13 @@ Until the privileged cutover, the private candidates are
 `~/.cache/baerbel-hs/deploy/account-routes` on the miniserver. The active
 service reads its existing private file until `make activate-accounts`
 installs the candidates. See [deployment](deployment.md).
+
+
+Asterisk's routing trace is controlled by `baerbel/account-routing-trace`
+in its database. The Bristol repair enables it. It appends only time,
+route and outcome to
+`/var/lib/phone-assistant-incoming-events/account-routing.log`. The service
+account can read the file. Use
+`sudo asterisk -rx 'database put baerbel account-routing-trace 0'` on the server
+to disable it. For failures before the dialplan, `make trace-carrier`
+captures a short redacted A&A SIP summary under `/run`.

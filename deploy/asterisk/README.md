@@ -8,9 +8,13 @@ reloads it, restarts the assistant, and keeps the previous files for recovery.
   on one line. Both numbers use international format. The installer keeps a
   copy under `/etc/phone-assistant/`.
 
-The A&A incoming SIP target must preserve the called number in the Request-URI
-or To URI. A shared contact without a distinct called number is rejected. Use
-the existing authenticated A&A endpoint. Check both numbers with separate real
+The Bristol A&A account sends its called number in the SIP To header.
+Asterisk uses that header and a carrier address allowlist to select the
+separate Bristol endpoint and its digest password. The shared number keeps
+the existing endpoint and password. Run `make install-account-routing` after
+staging the corrected release. It verifies the SIP endpoint and identifier
+order after restarting idle Asterisk and checks the Haskell executable after
+activation. Check both numbers with separate real
 calls during cutover. Telematica continues through its existing provider
 endpoint and can reach the dedicated account's screening route. The existing
 handset can keep its trusted Home route when the dedicated account enables it.

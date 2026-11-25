@@ -5,7 +5,7 @@ digraph Baerbel {
   title [shape=plain, style="", label="BÄRBEL · HASKELL IMPLEMENTATION", fontsize=26, pos="900,1030!"];
   status [shape=plain, style="", label="Haskell active · live-only speech · gpt-6.2-sol / low / priority\nCurrent release: provider tool round trip verified · account routing prepared\nEarlier owner Gmail + known-caller ringing verified · forwarded caller ended before answer", fontsize=15, pos="900,965!"];
   phones [label="Owner / public callers\nShared Standard number · dedicated Pro number\nSIP providers and optional home handset", pos="900,870!", width=4.7];
-  pbx [label="Existing Asterisk\nNative channel ownership, dialplan, bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="900,750!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
+  pbx [label="Existing Asterisk\nSeparate shared and Pro SIP credentials\nNative dialplan and media bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="900,750!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
   owner [label="Owner ingress :9092\nAccount selected from Asterisk channel\nExisting Gmail keypad PIN gate", pos="420,570!", width=5.2, fillcolor="#f1eaf8", color="#9674b2"];
   public [label="Public ingress :9093\nDedicated Pro route in account mode\nScreen / decline / take message only", pos="1380,570!", width=5.2, fillcolor="#fff1e5", color="#b98b65"];
   shell [label="Imperative Shell · Baerbel.Runtime.*\nEffects, capabilities and resource lifetimes\nHTTP / WebSocket / AMI · audio / files / SQLite\nWorkers stop → Live close/ack → final log", pos="900,340!", width=6.5, height=1.35, fillcolor="#eaf2ed", color="#618d73", penwidth=2.0];

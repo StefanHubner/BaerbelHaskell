@@ -23,7 +23,7 @@ def endpoint(text: str, name: str) -> str | None:
 
 def identifier_order(text: str) -> str | None:
     if GLOBAL.search(text) is None:
-        return text.rstrip() + "\n\n[baerbel-identification]\ntype=global\nendpoint_identifier_order=request_uri," + DEFAULT + "\n"
+        return text.rstrip() + "\n\n[baerbel-identification]\ntype=global\nendpoint_identifier_order=header," + DEFAULT + "\n"
     sections = list(SECTION.finditer(text))
     for current, following in zip(sections, sections[1:] + [None]):
         start = current.end()
@@ -33,7 +33,7 @@ def identifier_order(text: str) -> str | None:
             continue
         setting = ORDER.search(block)
         order = setting[2].strip() if setting else DEFAULT
-        ordered = ",".join(["request_uri"] + [item.strip() for item in order.split(",") if item.strip() != "request_uri"])
+        ordered = ",".join(["header"] + [item.strip() for item in order.split(",") if item.strip() != "header"])
         updated = ORDER.sub(lambda match: match[1] + ordered, block, count=1) if setting else block.rstrip() + "\nendpoint_identifier_order=" + ordered + "\n\n"
         return text[:start] + updated + text[end:]
     return None
@@ -50,17 +50,17 @@ def render(parent: str, trunk: str, dedicated: str, username: str, password: str
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", username) or not re.fullmatch(r"[A-Za-z0-9_.+-]{12,128}", password):
         return None
     clone = re.sub(r"^auth=.*$", "auth=phone-assistant-aa-bristol-auth", existing, flags=re.MULTILINE)
-    clone = re.sub(r"^identify_by=.*$", "identify_by=request_uri", clone, flags=re.MULTILINE)
-    if clone == existing or "identify_by=request_uri" not in clone or "auth=phone-assistant-aa-bristol-auth" not in clone:
+    clone = re.sub(r"^identify_by=.*$", "identify_by=header", clone, flags=re.MULTILINE)
+    if clone == existing or "identify_by=header" not in clone or "auth=phone-assistant-aa-bristol-auth" not in clone:
         return None
     permit = "\n".join("permit=" + network for network in carrier[1].split(","))
     national = dedicated[3:]
-    match = f"/^sips?:(0|0044|[+]?44){national}@/"
+    match = f"/sips?:(0|0044|[+]?44){national}@/"
     include = (
         f"[phone-assistant-aa-bristol]\n{clone}\ndeny=0.0.0.0/0\ndeny=::/0\n{permit}\n\n"
         f"[phone-assistant-aa-bristol-auth]\ntype=auth\nauth_type=userpass\nusername={username}\npassword={password}\n\n"
         "[phone-assistant-aa-bristol-identify]\ntype=identify\nendpoint=phone-assistant-aa-bristol\n"
-        f"match_request_uri={match}\n"
+        f"match_header=To: {match}\n"
     )
     updated = identifier_order(parent)
     if updated is None:

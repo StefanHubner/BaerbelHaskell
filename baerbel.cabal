@@ -47,8 +47,11 @@ extra-source-files:
     scripts/package-release.sh
     scripts/prepare-build.sh
     scripts/remote-deploy.sh
+    scripts/account-incident.py
     scripts/prepare-user-config.py
     scripts/render-asterisk-accounts.py
+    scripts/render-bristol-sip.py
+    scripts/trace-carrier.py
     scripts/update-phone-metadata.py
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service

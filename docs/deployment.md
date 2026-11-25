@@ -53,6 +53,15 @@ with the account file. Confirm separate carrier delivery to the two numbers
 and check a Standard assistant call and a Pro incoming call after cutover.
 See [the routing template notes](../deploy/asterisk/README.md).
 
+## Repair Bristol SIP authentication
+
+If the account split is already active, stage the Bristol repair and run
+`make install-account-routing`. The installer preserves the user account
+file, splits the inbound SIP credentials and restarts Asterisk only after
+checking for active calls. It checks the new endpoint, SIP identifier order,
+dialplan and Haskell service. The trace is available to the service account
+as described in [the configuration reference](configuration.md).
+
 ## Restore Python
 
 ```sh

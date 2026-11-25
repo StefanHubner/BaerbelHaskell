@@ -127,7 +127,7 @@ install_account_routing() {
   if install -o root -g asterisk -m 0640 "$candidate/phone-assistant-bristol-pjsip.conf" "$bristol" &&
     install -o root -g asterisk -m 0640 "$candidate/pjsip.conf" "$sip" &&
     install -o root -g asterisk -m 0640 "$candidate/extensions.conf" "$route" &&
-    reload_account_routing && activate_release; then
+    restart_account_routing && activate_release; then
     enable_routing_trace
     rm -f "$work/bristol-sip-password"
     printf 'Bristol SIP authentication and account routing installed. Backup: %s\n' "$backup"
@@ -142,21 +142,20 @@ install_account_routing() {
   else
     rm -f "$bristol"
   fi
-  asterisk -rx 'pjsip reload'
-  asterisk -rx 'dialplan reload'
+  systemctl restart asterisk.service
   systemctl daemon-reload
   systemctl restart "$service"
   printf 'Bristol installation failed; restored the previous files.\n' >&2
   return 1
 }
 
-reload_account_routing() {
-  asterisk -rx 'pjsip reload' || return
+restart_account_routing() {
+  systemctl restart asterisk.service || return
+  timeout 20 asterisk -rx 'core waitfullybooted' >/dev/null || return
   asterisk -rx 'pjsip show endpoint phone-assistant-aa-bristol' |
     grep -E 'Endpoint:[[:space:]]+phone-assistant-aa-bristol([ /]|$)' >/dev/null || return
   asterisk -rx 'pjsip show identifiers' |
-    awk '$1 == "request_uri" {uri=NR} $1 == "ip" {ip=NR} END {exit !(uri && ip && uri < ip)}' || return
-  asterisk -rx 'dialplan reload' || return
+    awk '$1 == "header" {header=NR} $1 == "ip" {ip=NR} END {exit !(header && ip && header < ip)}' || return
   asterisk -rx 'dialplan show baerbel-routing-trace' | grep -F '[ Context' >/dev/null
 }
 

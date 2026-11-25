@@ -12,31 +12,31 @@
 <!-- phones&#45;&gt;pbx -->
 <g id="edge1" class="edge">
 <title>phones&#45;&gt;pbx</title>
-<path fill="none" stroke="#586f86" d="M851.5,-1130.84C851.5,-1118.74 851.5,-1105.14 851.5,-1092.49"/>
-<polygon fill="#586f86" stroke="#586f86" points="854.3,-1092.34 851.5,-1084.35 848.7,-1092.35 854.3,-1092.34"/>
-<text text-anchor="middle" x="838" y="-1115.07" font-family="DejaVu Sans" font-size="12.00">calls</text>
+<path fill="none" stroke="#586f86" d="M851.5,-1130.84C851.5,-1121.38 851.5,-1111 851.5,-1100.87"/>
+<polygon fill="#586f86" stroke="#586f86" points="854.3,-1100.83 851.5,-1092.83 848.7,-1100.83 854.3,-1100.83"/>
+<text text-anchor="middle" x="838" y="-1119.26" font-family="DejaVu Sans" font-size="12.00">calls</text>
 </g>
 <!-- pbx&#45;&gt;owner -->
 <g id="edge2" class="edge">
 <title>pbx&#45;&gt;owner</title>
-<path fill="none" stroke="#586f86" d="M754.08,-1010.97C673.64,-980.8 559.69,-938.07 477.09,-907.1"/>
-<polygon fill="#586f86" stroke="#586f86" points="477.67,-904.32 469.2,-904.14 475.7,-909.57 477.67,-904.32"/>
-<text text-anchor="middle" x="552.08" y="-962.43" font-family="DejaVu Sans" font-size="12.00">authorized owner leg</text>
+<path fill="none" stroke="#586f86" d="M731.3,-1002.43C653.04,-973.08 551.93,-935.16 476.82,-907"/>
+<polygon fill="#586f86" stroke="#586f86" points="477.65,-904.32 469.18,-904.13 475.69,-909.56 477.65,-904.32"/>
+<text text-anchor="middle" x="540.56" y="-958.11" font-family="DejaVu Sans" font-size="12.00">authorized owner leg</text>
 </g>
 <!-- pbx&#45;&gt;public -->
 <g id="edge3" class="edge">
 <title>pbx&#45;&gt;public</title>
-<path fill="none" stroke="#586f86" d="M948.92,-1010.97C1029.36,-980.8 1143.31,-938.07 1225.91,-907.1"/>
-<polygon fill="#586f86" stroke="#586f86" points="1227.3,-909.57 1233.8,-904.14 1225.33,-904.32 1227.3,-909.57"/>
-<text text-anchor="middle" x="1028.92" y="-962.43" font-family="DejaVu Sans" font-size="12.00">untrusted caller leg</text>
+<path fill="none" stroke="#586f86" d="M971.7,-1002.43C1049.96,-973.08 1151.07,-935.16 1226.18,-907"/>
+<polygon fill="#586f86" stroke="#586f86" points="1227.31,-909.56 1233.82,-904.13 1225.35,-904.32 1227.31,-909.56"/>
+<text text-anchor="middle" x="1040.44" y="-958.11" font-family="DejaVu Sans" font-size="12.00">untrusted caller leg</text>
 </g>
 <!-- pbx&#45;&gt;shell -->
 <g id="edge4" class="edge">
 <title>pbx&#45;&gt;shell</title>
-<path fill="none" stroke="#586f86" d="M851.5,-1010.75C851.5,-938.97 851.5,-779.68 851.5,-694.24"/>
-<polygon fill="#586f86" stroke="#586f86" points="854.3,-694.21 851.5,-686.21 848.7,-694.21 854.3,-694.21"/>
-<text text-anchor="middle" x="758" y="-868.9" font-family="DejaVu Sans" font-size="12.00">FastAGI :4573</text>
-<text text-anchor="middle" x="758" y="-855.9" font-family="DejaVu Sans" font-size="12.00">phone lookup / handset routing</text>
+<path fill="none" stroke="#586f86" d="M851.5,-1002.45C851.5,-927.33 851.5,-776.64 851.5,-694.34"/>
+<polygon fill="#586f86" stroke="#586f86" points="854.3,-694.11 851.5,-686.11 848.7,-694.11 854.3,-694.11"/>
+<text text-anchor="middle" x="758" y="-864.8" font-family="DejaVu Sans" font-size="12.00">FastAGI :4573</text>
+<text text-anchor="middle" x="758" y="-851.8" font-family="DejaVu Sans" font-size="12.00">phone lookup / handset routing</text>
 </g>
 <!-- owner&#45;&gt;shell -->
 <g id="edge5" class="edge">
@@ -118,10 +118,11 @@
 <!-- pbx -->
 <g id="node4" class="node">
 <title>pbx</title>
-<path fill="#eaf2ed" stroke="#618d73" stroke-width="1.4" d="M1052,-1084C1052,-1084 651,-1084 651,-1084 645,-1084 639,-1078 639,-1072 639,-1072 639,-1023 639,-1023 639,-1017 645,-1011 651,-1011 651,-1011 1052,-1011 1052,-1011 1058,-1011 1064,-1017 1064,-1023 1064,-1023 1064,-1072 1064,-1072 1064,-1078 1058,-1084 1052,-1084"/>
-<text text-anchor="middle" x="851.5" y="-1061" font-family="DejaVu Sans" font-size="15.00">Existing Asterisk</text>
-<text text-anchor="middle" x="851.5" y="-1044" font-family="DejaVu Sans" font-size="15.00">Native channel ownership, dialplan, bridge</text>
-<text text-anchor="middle" x="851.5" y="-1027" font-family="DejaVu Sans" font-size="15.00">AudioSocket · AMI · FastAGI · full&#45;call WAV</text>
+<path fill="#eaf2ed" stroke="#618d73" stroke-width="1.4" d="M1052,-1092.5C1052,-1092.5 651,-1092.5 651,-1092.5 645,-1092.5 639,-1086.5 639,-1080.5 639,-1080.5 639,-1014.5 639,-1014.5 639,-1008.5 645,-1002.5 651,-1002.5 651,-1002.5 1052,-1002.5 1052,-1002.5 1058,-1002.5 1064,-1008.5 1064,-1014.5 1064,-1014.5 1064,-1080.5 1064,-1080.5 1064,-1086.5 1058,-1092.5 1052,-1092.5"/>
+<text text-anchor="middle" x="851.5" y="-1069.5" font-family="DejaVu Sans" font-size="15.00">Existing Asterisk</text>
+<text text-anchor="middle" x="851.5" y="-1052.5" font-family="DejaVu Sans" font-size="15.00">Separate shared and Pro SIP credentials</text>
+<text text-anchor="middle" x="851.5" y="-1035.5" font-family="DejaVu Sans" font-size="15.00">Native dialplan and media bridge</text>
+<text text-anchor="middle" x="851.5" y="-1018.5" font-family="DejaVu Sans" font-size="15.00">AudioSocket · AMI · FastAGI · full&#45;call WAV</text>
 </g>
 <!-- owner -->
 <g id="node5" class="node">
