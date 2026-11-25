@@ -16,8 +16,7 @@ handling. Bärbel selects a user by their registered caller number.
 The AMI password lets Bärbel connect to local Asterisk. The A&A SMS
 password is for PIN and notification texts. OpenAI and Maps use their own
 API keys. Google refresh credentials belong to the user in SQLite.
-The long PIN hash stores a four-digit PIN, which gates protected Gmail
-tools.
+A salted hash verifies the four-digit PIN for protected Gmail tools.
 
 ## Connect a Google service
 
@@ -31,6 +30,15 @@ phone-assistant-server --connect-google /etc/phone-assistant/global.json ACCOUNT
 Use `gmail`, `calendar` or `contacts` for `SERVICE`. Restart Bärbel after
 import, then remove the temporary export. Each user gets the Google tools
 they have connected.
+
+## Asterisk installer inputs
+
+Both files are under `/etc/phone-assistant/`.
+
+- `telematica.env` holds carrier credentials and forwarding settings. The
+  installer renders these into Asterisk’s Telematica SIP and dialplan files.
+- `account-routes` holds one line in the order `SHARED_DID PRO_DID PRO_ACCOUNT_ID`.
+  The routing installer uses it to generate the shared and dedicated routes.
 
 ## Recovery files
 
