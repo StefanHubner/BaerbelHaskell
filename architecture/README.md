@@ -18,4 +18,4 @@ The source now has one production speech path: Live WebSocket audio with its del
 
 The design preserves existing call paths and owner/public permissions; deployment reuses the existing service. The detailed module and effect boundaries are described in [architecture.md](../docs/architecture.md). Keep policy, call flow and deployment claims consistent across those files. No private numbers, credentials or tokens belong here.
 
-The prepared account mode adds a shared Standard entry number and a dedicated Pro route on the existing Asterisk service. The diagram marks these routes as prepared. FastAGI verifies the registered phone and PIN, and AMI supplies the account for each authorized or restricted call. The running single-user routing remains in place until the privileged account cutover.
+The prepared account mode adds a shared Standard entry number and a dedicated Pro route on the existing Asterisk service. The diagram marks these routes as prepared. FastAGI matches the registered caller number, and AMI supplies the account for each authorized or restricted call. The running single-user routing remains in place until the privileged account cutover.

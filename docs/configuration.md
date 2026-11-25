@@ -1,0 +1,37 @@
+# Bärbel configuration
+
+| File | Location | Contents |
+|---|---|---|
+| Global rules | `config/global.json` in Git. On the server, `~/apps/baerbel/releases/<release>/config/global.json` | Voice and model, reasoning effort, prompts, tools, policies and defaults. |
+| Phone reference data | `config/phone-numbers.json` beside the global file | Generated numbering metadata used to validate outbound destinations. |
+| Private configuration | `~/.config/baerbel/user.json` for local checks. On the server, `/etc/phone-assistant/user.json` | Service credentials and private account settings. Mode `0600`. |
+| Asterisk routing | `deploy/asterisk/account-entry.conf.in` in Git. The prepared cutover updates `/etc/asterisk/phone-assistant-extensions.conf` and saves the private number mapping at `/etc/phone-assistant/account-routes` | Shared and dedicated entry numbers. The existing Asterisk files hold SIP credentials, carrier routes and handset settings. |
+| Development checks | `test/live/config.json` | Synthetic caller audio. The production archive excludes it. |
+
+The private server file has one top-level `environment` for service-wide
+access such as OpenAI, Google Maps, Asterisk AMI and the SMS sender. With
+account routing enabled, the same file has an `accounts` map keyed by a
+stable ID. Each entry has `plan` (`Standard` or `Pro`), `name`, `phone` in
+international format, and an `environment` for personal settings.
+
+Put the account's Google token references, profile path, calendar and mail
+receipt paths, and `PHONE_ASSISTANT_PRIVATE_PIN_HASH` in its personal
+`environment`. Each account owns its state. The account configuration does
+not expose the voice, model or reasoning effort. Standard accounts use the
+shared number. The current dedicated route supports one Pro account and can
+use the existing handset if enabled.
+
+The registered calling number selects an account. The existing keypad PIN
+still gates protected Gmail tools. Ordinary conversations and Calendar keep
+their existing flow, including Calendar's separate confirmation before
+creating an event. The existing PIN hash is carried over during migration.
+For a new account, `phone-assistant-server --issue-pin GLOBAL_CONFIG
+USER_CONFIG ACCOUNT` generates a four-digit PIN, saves its hash to the private
+file and sends the PIN to that account's registered UK mobile. Apply PIN
+changes at service start.
+
+Until the privileged cutover, the private candidates are
+`~/.cache/baerbel-hs/deploy/accounts.json` and
+`~/.cache/baerbel-hs/deploy/account-routes` on the miniserver. The active
+service reads its existing private file until `make activate-accounts`
+installs the candidates. See [deployment](deployment.md).

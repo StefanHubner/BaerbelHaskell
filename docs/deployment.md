@@ -50,7 +50,7 @@ private account file and confirms Asterisk is idle before replacing the managed
 entry dialplan. It backs up the existing dialplan, private settings and service
 override. The command reloads the dialplan and starts the same Haskell service
 with the account file. Confirm separate carrier delivery to the two numbers
-and check a Standard PIN login and a Pro incoming call after cutover.
+and check a Standard assistant call and a Pro incoming call after cutover.
 See [the routing template notes](../deploy/asterisk/README.md).
 
 ## Restore Python

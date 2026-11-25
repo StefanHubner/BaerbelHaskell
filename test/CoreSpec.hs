@@ -35,9 +35,9 @@ spec = do
       let duplicated = accountConfig {installationAccounts = Just (Map.fromList [("pilot", pilot), ("other", pilot)])}
       fmap Map.size (accountSettings accountGlobal duplicated) `shouldBe` Left (failure "invalid_accounts")
     it "verifies the generated PIN hash with the existing verifier" $ do
-      let encoded = encodePinHash "0123456789abcdef" "73910426"
-      fmap (`verifyPin` "73910426") (parsePinHash encoded) `shouldBe` Right True
-      fmap (`verifyPin` "12345678") (parsePinHash encoded) `shouldBe` Right False
+      let encoded = encodePinHash "0123456789abcdef" "7391"
+      fmap (`verifyPin` "7391") (parsePinHash encoded) `shouldBe` Right True
+      fmap (`verifyPin` "1234") (parsePinHash encoded) `shouldBe` Right False
   describe "durable compatibility" $ do
     it "matches Python's persisted request fingerprints" $ do
       loaded <- eitherDecodeFileStrict' "test/fixtures/ledger.json" :: IO (Either String [FingerprintCase])

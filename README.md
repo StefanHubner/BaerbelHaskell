@@ -23,7 +23,7 @@ stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbe
 
 `--check` validates local configuration and native dependencies without making provider requests. Production uses Live speech; the unused alternate STT/chat/TTS pipeline has been removed from the current source. The deployed backend settings are `gpt-6.2-sol`, `low` reasoning and `priority` service tier (reported as `fast` by the provider); the Live speech model is unchanged.
 
-The service currently loads one private user configuration. Shared application/reference files are separate from user credentials and state; future multi-user routing and shared versus separate telephone numbers remain undecided.
+The current service loads one private configuration. The staged account mode adds a private account map and keeps models, voice and policy in the shared configuration. See the [configuration reference](docs/configuration.md).
 
 Haskell now runs in the existing `phone-assistant.service` on the miniserver. The Python application is preserved for rollback. Process and listener checks passed. Real tests on an earlier release verified the owner Gmail path and known-caller forwarding/ringing, followed by caller hangup and an accepted outcome SMS. Answered bridging and other call paths remain unverified. See the migration and live-verification records for the behavior actually exercised.
 

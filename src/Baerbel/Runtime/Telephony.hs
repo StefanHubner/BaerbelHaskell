@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 module Baerbel.Runtime.Telephony
   ( TelephonyConfig(..), TelephonyRules(..), TelephonyMedia(..), OwnerControl(..), IncomingControl(..), IncomingEnd(..)
-  , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler, agiSession, routeHome, agiCommand, readAgiLine
+  , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler, agiSession, routeHome, agiCommand
   ) where
 
 import Baerbel.Core.CallState

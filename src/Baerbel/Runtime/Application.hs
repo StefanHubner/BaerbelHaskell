@@ -1,7 +1,7 @@
 module Baerbel.Runtime.Application (checkConfiguration, runApplication, checkAccounts, runAccounts) where
 
 import Baerbel.Core.Accounts (Subscriber(..))
-import Baerbel.Core.Config (Settings(..))
+import Baerbel.Core.Config (Settings)
 import Baerbel.Runtime.Accounts (AccountIngress(..), accountIngress)
 import Baerbel.Runtime.Config
     ( setting, rule, booleanSetting )
@@ -135,19 +135,16 @@ runAccounts shared accounts = withLogging logPath (withShutdown . start)
     logPath | Text.null path = Nothing
             | otherwise = Just (Text.unpack path)
     start output = Effects.continue (open output) (numberValidator shared)
-    open output validate = do
-      ingress <- accountIngress shared accounts validate
-      let run entry = withAccounts validate output (Map.toList accounts) Map.empty (startAccounts shared validate output entry)
-      Effects.continue run ingress
+    open output validate = Effects.continue run (accountIngress shared accounts validate)
+      where
+      run entry = withAccounts validate output (Map.toList accounts) Map.empty (startAccounts shared validate output entry)
 
 withAccounts :: NumberValidator -> Report -> [(Text, Subscriber)] -> Map Text AccountCalls -> (Map Text AccountCalls -> IO (Result ())) -> IO (Result ())
 withAccounts _ _ [] prepared action = action prepared
 withAccounts validate output ((ident, sub) : rest) prepared action =
   withServices settings withNotificationsFor
   where
-    source = subscriberSettings sub
-    values = Map.delete "PHONE_ASSISTANT_PRIVATE_PIN_HASH" (settingsValues source)
-    settings = source {settingsValues = values}
+    settings = subscriberSettings sub
     withNotificationsFor services = withNotifications settings output (handlers services)
     handlers services messages = withHandlers settings validate services output messages register
     register incoming owner = withAccounts validate output rest updated action

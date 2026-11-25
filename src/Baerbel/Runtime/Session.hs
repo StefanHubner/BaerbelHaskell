@@ -149,16 +149,20 @@ openOwnerSession settings validate factories native identifier managed = case pi
 bindOwner :: Settings -> NumberValidator -> Services -> TelephonyConfig -> Text -> ManagedCall -> Pin.PinGate -> IO (Result ())
 bindOwner settings validate factories native identifier managed pin = do
   setKeypad managed (Pin.feedDigit pin)
-  bind (directEnabled native)
+  bind nativeRequired
   where
+    nativeRequired = directEnabled native || not (T.null (setting settings "PHONE_ASSISTANT_PRIVATE_PIN_HASH"))
     bind False = runOwner settings factories managed pin Nothing
     bind True = do
       let hooks = nativeMedia settings managed pin
       opened <- openOwner native validate hooks identifier
       Effects.continue runBound opened
-    runBound owner = do
-      setReattachAllowed managed (ownerCanResume owner)
-      finally (runOwner settings factories managed pin (Just owner)) (closeOwner owner)
+    runBound owner = finally (runBoundSession owner) (closeOwner owner)
+    runBoundSession owner
+      | directEnabled native = do
+          setReattachAllowed managed (ownerCanResume owner)
+          runOwner settings factories managed pin (Just owner)
+      | otherwise = runOwner settings factories managed pin Nothing
 
 ownerCanResume :: OwnerControl -> IO Bool
 ownerCanResume owner = do

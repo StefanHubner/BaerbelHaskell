@@ -4,26 +4,24 @@ import Baerbel.Core.Accounts
 import Baerbel.Core.Config (Global, Settings, User(..), resolveSettings, rule, setting)
 import Baerbel.Core.Error (Failure(..), Result, failure)
 import Baerbel.Core.JSON (encodeBytes)
-import Baerbel.Core.Pin (encodePinHash, parsePinHash, verifyPin)
+import Baerbel.Core.Pin (encodePinHash)
 import Baerbel.Core.Telephony (TelephonyConfig(..), TelephonyRules(..))
 import Baerbel.Runtime.AMI (AMI(..), connectAMI, field, incomingMatch, ownerMatch, variable)
 import Baerbel.Runtime.Config (loadGlobal, readConfig)
 import Baerbel.Runtime.ConfigPaths (validatePaths)
-import Baerbel.Runtime.Effects (continue, mapResult, monotonicSeconds, withResult)
+import Baerbel.Runtime.Effects (continue, mapResult, withResult)
 import Baerbel.Runtime.HTTP (newRawSender)
 import Baerbel.Core.SMS (SMSCredentials(..), Delivery(Sent, Uncertain), classify, smsRequest)
 import Baerbel.Runtime.Storage (atomicWrite)
-import Baerbel.Runtime.Telephony (agiCommand, agiSession, readAgiLine, routeHome)
+import Baerbel.Runtime.Telephony (agiCommand, agiSession, routeHome)
 import Baerbel.Core.Routing (NumberValidator, homeEnabled)
 import Baerbel.Core.Session (telephonyConfiguration)
 import Baerbel.Core.Validation (validateSettings)
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, stateTVar)
 import Control.Monad (unless)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import Crypto.Random (getRandomBytes)
 import qualified Data.ByteString as Bytes
-import Data.Char (isDigit)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
@@ -32,7 +30,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as Text
 import Network.Socket (Socket)
-import qualified Network.Socket.ByteString as Net
 import System.Directory (canonicalizePath)
 import Baerbel.Runtime.Error (ioResult)
 
@@ -85,17 +82,16 @@ data AccountIngress = AccountIngress
   , accountAGI :: Socket -> IO (Result ())
   }
 
-accountIngress :: Settings -> Map Text Subscriber -> NumberValidator -> IO (Result AccountIngress)
-accountIngress shared accounts validate = continue prepare config
+accountIngress :: Settings -> Map Text Subscriber -> NumberValidator -> Result AccountIngress
+accountIngress shared accounts validate = prepare <$> config
   where
-    config = (,,) <$> telephonyConfiguration shared <*> traverse (telephonyConfiguration . subscriberSettings) accounts
-      <*> rule shared "pin" "entryMicros"
-    prepare (native, natives, duration) = do
-      attempts <- newTVarIO Map.empty
-      let route socket = agiSession (telephonyRules native) duration socket (dispatch natives attempts native socket)
-      pure (Right (AccountIngress (findAccount native) route))
-    dispatch natives attempts native socket headers = case Map.lookup "agi_network_script" headers of
-      Just "account" -> authorize accounts attempts (telephonyRules native) socket headers
+    config = (,) <$> telephonyConfiguration shared <*> traverse (telephonyConfiguration . subscriberSettings) accounts
+    prepare (native, natives) = AccountIngress (findAccount native) route
+      where
+      rules = telephonyRules native
+      route socket = agiSession rules (nativeAGIMicros rules) socket (dispatch natives rules socket)
+    dispatch natives rules socket headers = case Map.lookup "agi_network_script" headers of
+      Just "account" -> identifyCaller accounts rules socket headers
       Just "home-dial" | [cfg] <- filter (homeEnabled . routeSettings) (Map.elems natives) ->
         routeHome cfg validate socket headers
       Just "home-dial" -> except (Left (failure "home_channel_required"))
@@ -117,21 +113,13 @@ findAccount native owner ident = withResult connect amiClose lookupCall
       && field "Application" event == "AudioSocket" && variable "PA_CALL_ID" event == ident
       && variable "PA_PERMISSION" event == "handoff" && variable "PA_OWNER_AUTHORIZED" event == "0"
 
-authorize :: Map Text Subscriber -> TVar (Map Text [Double]) -> TelephonyRules -> Socket -> Map Text Text -> ExceptT Failure IO ()
-authorize accounts attempts rules socket headers = do
-  (ident, sub) <- except (callerAccount accounts headers)
-  ExceptT (reserveAttempt attempts ident)
-  let encoded = setting (subscriberSettings sub) "PHONE_ASSISTANT_PRIVATE_PIN_HASH"
-  pinHash <- except (parsePinHash encoded)
-  lift (Net.sendAll socket "GET DATA agent-pass 8000 8\n")
-  reply <- ExceptT (readAgiLine rules socket)
-  digits <- except (pinDigitsReply reply)
-  unless (verifyPin pinHash digits) (except denied)
+identifyCaller :: Map Text Subscriber -> TelephonyRules -> Socket -> Map Text Text -> ExceptT Failure IO ()
+identifyCaller accounts rules socket headers = do
+  ident <- except (callerAccount accounts headers)
   let command = "SET VARIABLE PA_ACCOUNT " <> ident
   ExceptT (agiCommand rules socket command "200 result=1")
-  lift (atomically (modifyTVar' attempts (Map.delete ident)))
 
-callerAccount :: Map Text Subscriber -> Map Text Text -> Result (Text, Subscriber)
+callerAccount :: Map Text Subscriber -> Map Text Text -> Result Text
 callerAccount accounts headers = case Map.lookup "agi_context" headers of
   Just "baerbel-account-entry" -> maybe denied permitted candidate
   _ -> denied
@@ -139,28 +127,13 @@ callerAccount accounts headers = case Map.lookup "agi_context" headers of
     phone = Map.findWithDefault "" "agi_arg_1" headers
     entry = Map.findWithDefault "" "agi_arg_2" headers
     candidate = accountForPhone accounts phone
-    permitted pair@(ident, sub)
-      | entry == "shared" && accountPlan (subscriberAccount sub) == Standard = Right pair
-      | entry == ident && accountPlan (subscriberAccount sub) == Pro = Right pair
+    permitted (ident, sub)
+      | entry == "shared" && accountPlan (subscriberAccount sub) == Standard = Right ident
+      | entry == ident && accountPlan (subscriberAccount sub) == Pro = Right ident
       | otherwise = denied
 
 denied :: Result a
 denied = Left (failure "account_authentication_failed")
-
-pinDigitsReply :: Text -> Result Bytes.ByteString
-pinDigitsReply reply = case T.stripPrefix "200 result=" reply of
-  Just digits | T.length digits >= 4 && T.length digits <= 8 && T.all isDigit digits -> Right (Text.encodeUtf8 digits)
-  _ -> denied
-
-reserveAttempt :: TVar (Map Text [Double]) -> Text -> IO (Result ())
-reserveAttempt state ident = do
-  now <- monotonicSeconds
-  atomically (stateTVar state (reserve now))
-  where
-    reserve now entries
-      | length recent >= 5 = (denied, entries)
-      | otherwise = (Right (), Map.insert ident (now : recent) entries)
-      where recent = filter (> now - 900) (Map.findWithDefault [] ident entries)
 
 issuePin :: FilePath -> FilePath -> Text -> IO (Result ())
 issuePin globalPath path ident = runExceptT $ do
@@ -168,7 +141,7 @@ issuePin globalPath path ident = runExceptT $ do
   config <- ExceptT (readConfig "user_config" path)
   let accounts = fromMaybe Map.empty (installationAccounts config)
   account <- except (maybe (Left (failure "unknown_account")) Right (Map.lookup ident accounts))
-  digits <- lift (randomDigits 8)
+  digits <- lift (randomDigits 4)
   salt <- lift (getRandomBytes 16)
   let encoded = encodePinHash salt digits
       values = Map.insert "PHONE_ASSISTANT_PRIVATE_PIN_HASH" encoded (accountEnvironment account)

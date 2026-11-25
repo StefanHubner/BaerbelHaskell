@@ -35,8 +35,8 @@
 <title>pbx&#45;&gt;shell</title>
 <path fill="none" stroke="#586f86" d="M851.5,-1010.75C851.5,-938.97 851.5,-779.68 851.5,-694.24"/>
 <polygon fill="#586f86" stroke="#586f86" points="854.3,-694.21 851.5,-686.21 848.7,-694.21 854.3,-694.21"/>
-<text text-anchor="middle" x="762.5" y="-868.9" font-family="DejaVu Sans" font-size="12.00">FastAGI :4573</text>
-<text text-anchor="middle" x="762.5" y="-855.9" font-family="DejaVu Sans" font-size="12.00">account PIN / handset routing</text>
+<text text-anchor="middle" x="758" y="-868.9" font-family="DejaVu Sans" font-size="12.00">FastAGI :4573</text>
+<text text-anchor="middle" x="758" y="-855.9" font-family="DejaVu Sans" font-size="12.00">phone lookup / handset routing</text>
 </g>
 <!-- owner&#45;&gt;shell -->
 <g id="edge5" class="edge">
@@ -129,7 +129,7 @@
 <path fill="#f1eaf8" stroke="#9674b2" stroke-width="1.4" d="M546.5,-904C546.5,-904 196.5,-904 196.5,-904 190.5,-904 184.5,-898 184.5,-892 184.5,-892 184.5,-843 184.5,-843 184.5,-837 190.5,-831 196.5,-831 196.5,-831 546.5,-831 546.5,-831 552.5,-831 558.5,-837 558.5,-843 558.5,-843 558.5,-892 558.5,-892 558.5,-898 552.5,-904 546.5,-904"/>
 <text text-anchor="middle" x="371.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Owner ingress :9092</text>
 <text text-anchor="middle" x="371.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Account selected from Asterisk channel</text>
-<text text-anchor="middle" x="371.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Account mode: phone and keypad PIN</text>
+<text text-anchor="middle" x="371.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Existing Gmail keypad PIN gate</text>
 </g>
 <!-- public -->
 <g id="node6" class="node">
