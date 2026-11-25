@@ -1,6 +1,10 @@
 # Architecture source
 
-The diagram includes the YAML and Asterisk installer layout. The normalized user database and combined JSON configuration were activated at 2026-11-25T22:01:36Z. The existing `phone-assistant.service` owns all three loopback listeners. Production FastAGI selected the Standard and Pro users on their respective routes while Asterisk kept the same process. Real-call evidence for the Bristol owner route and earlier Gmail and forwarding paths is described in the [migration record](../docs/migration.md).
+The diagram shows the live Asterisk YAML and SQLite-backed SIP layout
+activated at 2026-11-25T22:58:48Z. The loaded FastAGI listener matched both
+users. A repeat `make config` left Asterisk and Bärbel on the same
+processes while archiving the superseded inputs. See the [migration
+record](../docs/migration.md) for deployment and real-call evidence.
 
 Edit `BAERBEL_SYSTEM_ARCHITECTURE.dot`, then run `./architecture/render.sh`. The source uses explicit coordinates; preserve the owner/public columns and use Graphviz `neato -n2`. Use DejaVu Sans and inspect both generated views for clipping and crossing labels. Commit the DOT, SVG and PNG together. Do not edit generated views by hand.
 

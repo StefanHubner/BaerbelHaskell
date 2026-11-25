@@ -1,6 +1,22 @@
 # Migration evidence
 
-The current release is `0dd48e38…` from source `06d2f54`, activated
+Release `49448f75…` from source `4a41916` activated at
+2026-11-25T22:58:48Z. The service uses `/etc/phone-assistant/global.yaml`.
+The Haskell `asteriskconfig` executable installed the managed configuration
+in `/etc/asterisk/phone-assistant/`. The private Asterisk YAML carries the
+local handset and Telematica rules. SQLite links the two user types to
+their SIP accounts, with the existing Pro state under `stefan`. The
+provider and caller numbers are separate fields.
+
+After the repeat `make config`, Bärbel was active at PID 233114 and
+Asterisk at PID 232923, both with zero restarts. The former JSON,
+`account-routes`, and Telematica installer inputs were archived.
+Production FastAGI matched both users, and the active executable passed
+its configuration check. The real carrier-call evidence below belongs
+to the earlier releases.
+
+
+The previous user database release was `0dd48e38…` from source `06d2f54`, activated
 at 2026-11-25T22:01:36Z. The running Haskell service loaded one private
 `global.json` and `users.sqlite3`, both mode `0600`. The former account JSON
 was archived. Local checks passed 409 examples, HLint and 160 HLS file

@@ -2,15 +2,12 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-Release `0dd48e38…` from source `06d2f54` is active as of
-2026-11-25T22:01:36Z. The service loaded the combined private
-`global.json` and normalized SQLite user database. Production FastAGI
-selected the Standard and Pro accounts on their respective routes.
-Verified PID 229128 with zero restarts and listeners on loopback ports
-9092, 9093 and 4573. Asterisk kept PID 226605. The migrated Google grants
-refreshed successfully on the miniserver. The current verification used
-the FastAGI socket; carrier-call evidence for Bristol comes from the
-previous release.
+Release `49448f75…` from source `4a41916` is active as of 2026-11-25T22:58:48Z.
+Bärbel loaded `global.yaml` and Asterisk loaded its grouped managed directory.
+SQLite holds the shared Standard SIP assignment and Stefan’s Pro
+assignment. Production FastAGI selected both accounts. A repeat
+`make config` archived the replaced inputs with both process IDs unchanged.
+See [migration](migration.md) for the verification record.
 
 ## Check and package
 
