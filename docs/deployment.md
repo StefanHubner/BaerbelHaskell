@@ -55,8 +55,16 @@ See [the routing template notes](../deploy/asterisk/README.md).
 
 ## Repair Bristol SIP authentication
 
-If the account split is already active, stage the Bristol repair and run
-`make install-account-routing`. The installer preserves the user account
+The Bristol repair is active as of 2026-11-25 21:08:57 UTC. The first
+Bristol attempt reached Asterisk and received repeated `401` responses
+after A&A supplied a digest. The two SIP accounts use separate passwords.
+The corrected release `75b0c02` loaded both endpoints. The route trace
+recorded selection of Bristol and entry into the owner session on a real
+call, which the owner confirmed worked. Both running services reported
+zero restarts after activation.
+
+If the account split is already active and its SIP routing needs repair,
+stage the release and run `make install-account-routing`. The installer preserves the user account
 file, splits the inbound SIP credentials and restarts Asterisk only after
 checking for active calls. It checks the new endpoint, SIP identifier order,
 dialplan and Haskell service. The trace is available to the service account

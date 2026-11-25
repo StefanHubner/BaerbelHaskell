@@ -52,11 +52,11 @@ USER_CONFIG ACCOUNT` generates a four-digit PIN, saves its hash to the private
 file and sends the PIN to that account's registered UK mobile. Apply PIN
 changes at service start.
 
-Until the privileged cutover, the private candidates are
+The deployment workspace keeps private candidates at
 `~/.cache/baerbel-hs/deploy/accounts.json` and
 `~/.cache/baerbel-hs/deploy/account-routes` on the miniserver. The active
-service reads its existing private file until `make activate-accounts`
-installs the candidates. See [deployment](deployment.md).
+service reads `/etc/phone-assistant/user.json`. The current Bristol route uses
+the separate SIP configuration installed by `make install-account-routing`. See [deployment](deployment.md).
 
 
 Asterisk's routing trace is controlled by `baerbel/account-routing-trace`
