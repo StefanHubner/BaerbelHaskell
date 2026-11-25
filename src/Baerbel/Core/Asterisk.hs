@@ -53,7 +53,7 @@ render pbx roster = do
       filled = Map.insert "extensions.conf" (replaceAll replacements routes) prepared
       files = Map.insert "bristol-pjsip.conf" sip filled
   case all validFile (Map.toList files) of
-    True -> Right files
+    True -> Right (Map.map (includePaths (Map.keys files)) files)
     False -> Left (failure "invalid_asterisk_templates")
 
 validFile :: (FilePath, Text) -> Bool
@@ -130,5 +130,11 @@ extendRoutes source extra
       <> " same => n,Set(PA_TRACE_ROUTE=pro-" <> ident <> ")\n same => n,Goto(baerbel-account-entry,s,1)\n"
 
 includePaths :: [FilePath] -> Text -> Text
-includePaths paths = replaceAll (map relocation paths)
-  where relocation name = ("phone-assistant-" <> Text.pack name, "phone-assistant/" <> Text.pack name)
+includePaths paths source = Text.intercalate "\n" (map change rows)
+  where
+    rows = Text.splitOn "\n" source
+    fields = map relocation paths
+    relocation name = ("phone-assistant-" <> Text.pack name, "phone-assistant/" <> Text.pack name)
+    change line
+      | any (\prefix -> Text.isPrefixOf prefix (Text.stripStart line)) ["#include", "#tryinclude"] = replaceAll fields line
+      | otherwise = line

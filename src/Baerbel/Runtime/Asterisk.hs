@@ -9,6 +9,8 @@ import Baerbel.Runtime.Error (ioResult)
 import Baerbel.Runtime.Storage (atomicWrite, databaseResult)
 import Control.Monad (unless, void, when)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
+import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Char8 as Bytes8
 import Data.Char (isDigit)
 import Data.List (isSuffixOf)
 import qualified Data.Map.Strict as Map
@@ -114,10 +116,13 @@ preview config database destination = do
   continue (\(_, files) -> saveFiles destination files) plan
 
 saveFiles :: FilePath -> Map FilePath Text -> IO (Result ())
-saveFiles folder files = runExceptT $ do
+saveFiles folder = saveBytes folder . Map.map Text.encodeUtf8
+
+saveBytes :: FilePath -> Map FilePath Bytes.ByteString -> IO (Result ())
+saveBytes folder files = runExceptT $ do
   ExceptT (command "install" ["-d", "-m", "0700", folder])
   ExceptT (fmap sequence_ (Map.traverseWithKey save files))
-  where save name = atomicWrite (folder </> name) . Text.encodeUtf8
+  where save name = atomicWrite (folder </> name)
 
 install :: FilePath -> FilePath -> FilePath -> IO (Result ())
 install config database backup = do
@@ -133,18 +138,18 @@ applyPlan backup pbx files = runExceptT $ do
   ExceptT (backupPaths root backup names (Map.keys parents))
   ExceptT (applyOrRestore root backup files parents)
 
-readParents :: FilePath -> [FilePath] -> IO (Map FilePath Text)
+readParents :: FilePath -> [FilePath] -> IO (Map FilePath Bytes.ByteString)
 readParents root names = do
   paths <- listDirectory root
   let parents = filter (\name -> isSuffixOf ".conf" name && isNothing (managedName name)) paths
       sources = Map.fromList [(path, root </> path) | path <- parents]
-  original <- Map.traverseWithKey (const Text.readFile) sources
+  original <- Map.traverseWithKey (const Bytes.readFile) sources
   pure (Map.mapMaybe changed original)
   where
     changed old
       | new == old = Nothing
       | otherwise = Just new
-      where new = includePaths names old
+      where new = Bytes8.pack (Text.unpack (includePaths names (Text.decodeLatin1 old)))
 
 backupPaths :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> IO (Result ())
 backupPaths root backup names parents = runExceptT $ do
@@ -165,7 +170,7 @@ copyPresent from to paths = fmap sequence_ (traverse copy paths)
     transfer _ False = pure (Right ())
     present path = (||) <$> doesFileExist path <*> doesDirectoryExist path
 
-applyOrRestore :: FilePath -> FilePath -> Map FilePath Text -> Map FilePath Text -> IO (Result ())
+applyOrRestore :: FilePath -> FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -> IO (Result ())
 applyOrRestore root backup files parents = do
   result <- withSystemTempDirectory "baerbel-asterisk" (installFiles root files parents)
   archived <- continue (const (removeOld root (Map.keys files))) result
@@ -174,14 +179,15 @@ applyOrRestore root backup files parents = do
     Right () -> pure (Right ())
     Left issue -> restore root backup >> pure (Left issue)
 
-installFiles :: FilePath -> Map FilePath Text -> Map FilePath Text -> FilePath -> IO (Result ())
+installFiles :: FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -> FilePath -> IO (Result ())
 installFiles root files parents staging = runExceptT $ do
   let target = root </> "phone-assistant"
-  ExceptT (saveFiles staging (Map.union files parentsForStage))
+  ExceptT (saveBytes staging (Map.union contents parentsForStage))
   ExceptT (command "install" ["-d", "-m", "0750", "-g", "asterisk", target])
   ExceptT (fmap sequence_ (traverse (copyManaged target) (Map.keys files)))
   ExceptT (fmap sequence_ (traverse copyParent (Map.keys parents)))
   where
+    contents = Map.map Text.encodeUtf8 files
     parentsForStage = Map.mapKeys ("parent-" <>) parents
     copyManaged target name = command "install" ["-m", "0640", "-g", "asterisk", staging </> name, target </> name]
     copyParent name = command "dd" ["if=" <> (staging </> ("parent-" <> name)), "of=" <> (root </> name), "status=none"]
