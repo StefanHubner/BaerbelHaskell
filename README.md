@@ -15,7 +15,7 @@ The build uses the tested LTS package set. Package requirements specify minimum 
 
 ## Configuration and execution
 
-`config/global.yaml` contains shared defaults, policy, tool schemas and prompts. `config/phone-numbers.json` holds shared numbering reference metadata and is loaded beside the supplied global file. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
+Shared defaults and runtime policy live in `config/global.yaml`. Prompts live in `config/instructions.yaml`, and provider settings live in `config/tools/`. Local checks use the private `~/.config/baerbel/user.json`. See [configuration](docs/configuration.md) for the production layout.
 
 ```sh
 stack exec phone-assistant-server -- --check config/global.yaml ~/.config/baerbel/user.json
