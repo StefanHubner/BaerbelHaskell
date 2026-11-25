@@ -57,7 +57,12 @@ for recovery. The database release reads user state from SQLite.
 
 Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf`, reloads systemd and restarts the existing `phone-assistant.service`. Systemd stops the previous assistant before starting the selected release; no second assistant service is installed. The helper verifies both assistant and Asterisk are active, checks `/proc/MainPID/exe` against the installed executable, waits three seconds and verifies the same PID again. It reports the executable and effective command.
 
-The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. On an earlier Haskell release, a real owner Gmail call was verified against its executable: both Gmail searches succeeded and provider closure was acknowledged. A known external caller also exercised forwarding/ringing as expected, then hung up before answer; its outcome SMS was accepted. Answered bridging, unknown-caller screening, home-phone behavior and in-call voice notes remain unverified in real calls. Independent inspection of the loaded Asterisk dialplan was unavailable: the current SSH session lacks noninteractive sudo and the AMI account rejects the scoped dialplan query.
+The Python application under `/home/stefan/apps/assistant`, its virtual
+environment and its original unit are available for recovery. Asterisk
+continues to run the existing dialplan. The active provider and
+notification workers use the migrated user database. See
+[migration.md](migration.md) for the record of real calls and production
+checks.
 
 ## Activate the two account routes
 
@@ -87,6 +92,21 @@ checking for active calls. It checks the new endpoint, SIP identifier order,
 dialplan and Haskell service. The trace is available to the service account
 as described in [the configuration reference](configuration.md).
 
+## Archive legacy files
+
+```sh
+make archive-legacy
+```
+
+This moves the standalone OAuth exports, receipt databases, profile,
+old voice audition files and account staging JSON to
+`~/apps/baerbel/legacy/`. The sudo step moves the old Python environment to
+`/var/backups/phone-assistant-legacy/assistant.env`. Both archive roots
+are private. The archive action checks the running Haskell command line
+and database before moving files. It runs while the services continue
+handling calls. The Python and account rollback commands restore the
+archived files before restarting the corresponding service.
+
 ## Restore Python
 
 ```sh
@@ -98,6 +118,6 @@ pre-cutover Asterisk dialplan, private configuration and Haskell systemd
 override. It saves a redacted summary of recent Asterisk routing to
 `/run/baerbel-account-incident.json` for troubleshooting.
 
-The separate `make rollback` command returns to Python. It uses sudo, checks that Asterisk has no active calls, removes only the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. Releases and the private JSON remain available; shared state is not rewound, so accepted actions are not replayed.
+The separate `make rollback` command returns to Python. It uses sudo, checks that Asterisk has no active calls, restores archived legacy files, removes the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. The archived profile and receipts reflect the state at the database cutover. The current SQLite database stays available for the Haskell release.
 
-Only activation and rollback require privileged access. No configuration conversion, upload or target binary check needs to be performed manually. See [migration.md](migration.md) for actual deployment status and [live-checks.md](live-checks.md) for provider, synthetic-session and verified real-call evidence.
+Activation, archival of the root-owned Python environment, and rollback require privileged access. No configuration conversion, upload or target binary check needs to be performed manually. See [migration.md](migration.md) for actual deployment status and [live-checks.md](live-checks.md) for provider, synthetic-session and verified real-call evidence.

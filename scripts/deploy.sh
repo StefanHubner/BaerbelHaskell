@@ -15,6 +15,11 @@ case "$action" in
     scp -- "$root/scripts/remote-deploy.sh" "$root/scripts/render-asterisk-accounts.py" "$root/scripts/render-bristol-sip.py" "$root/deploy/asterisk/account-entry.conf.in" "$target:$work/"
     ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' install-account-routing"
     ;;
+  archive-legacy)
+    scp -- "$root/scripts/remote-deploy.sh" "$target:$work/"
+    ssh -- "$target" "bash '$work/remote-deploy.sh' archive-legacy-state"
+    ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' archive-legacy-env"
+    ;;
   trace-carrier)
     scp -- "$root/scripts/trace-carrier.py" "$target:$work/baerbel-sip-capture.py"
     ssh -t -- "$target" "sudo python3 '$work/baerbel-sip-capture.py'"

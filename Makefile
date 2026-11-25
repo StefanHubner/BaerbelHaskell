@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 user_config := $(HOME)/.config/baerbel/user.json
 
-.PHONY: prepare native build test check live-check live-delivery-check package install activate activate-accounts install-account-routing trace-carrier rollback-accounts rollback
+.PHONY: prepare native build test check live-check live-delivery-check package install activate activate-accounts install-account-routing archive-legacy trace-carrier rollback-accounts rollback
 
 prepare:
 	./scripts/prepare-build.sh
@@ -44,6 +44,9 @@ activate-accounts:
 
 install-account-routing:
 	./scripts/deploy.sh install-account-routing
+
+archive-legacy:
+	./scripts/deploy.sh archive-legacy
 
 trace-carrier:
 	./scripts/deploy.sh trace-carrier

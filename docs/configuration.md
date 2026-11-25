@@ -21,6 +21,17 @@ ID scopes queries, and foreign keys prevent a connection from using another
 user's OAuth grant. Refresh and per-call caches live in memory within each
 account's service instance. Bärbel rejects unsupported account settings.
 
+The shared AMI password lets Bärbel sign in to the local Asterisk Manager
+Interface. The shared SMS password authenticates PIN texts and notification
+texts with A&A. OpenAI and Maps use their own API keys. Google refresh
+credentials and the hashed four-digit PIN belong to each user in SQLite.
+SIP and handset authentication live with Asterisk.
+
+The old Python environment, standalone token exports, receipt databases
+and profile are recovery files. OpenAI Luna, TTS and STT entries in the
+former `assistant.env` belong to that Python configuration. See
+[legacy archival](deployment.md#archive-legacy-files) for their locations.
+
 ## Connect Google
 
 After consent with the existing authorization helper, import each selected

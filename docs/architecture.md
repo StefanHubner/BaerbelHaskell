@@ -61,9 +61,19 @@ The shared `phone.tool` log projection includes the tool failure code alongside 
 
 ## Persistence
 
-SQLite is used for receipts and positions, not as a conversational database: Gmail sends, Calendar creates, SMS notifications and the PBX event-feed cursor. The schemas and request fingerprints preserve compatibility with the Python version. A reservation is written before a side effect. A duplicate can return the existing receipt without repeating the side effect. Calendar checks an existing receipt before scanning conflicts.
+The production SQLite database holds each account's Google connections,
+memory entries, Gmail and Calendar receipts, SMS receipts and PBX event
+cursor. Every row for these resources is scoped by account ID. A
+reservation is written before a side effect. A duplicate returns the
+existing receipt without repeating the side effect. Calendar checks the
+receipt before scanning conflicts.
 
-The saved profile remains a private JSON document with atomic replacement. Typed read and update capabilities share one prepared store; reads obtain a coherent descriptor snapshot without creating a mutation lock or reading the clock. Context and Windguru consume typed profile state directly. Write preparation is pure: it returns either no content for an unchanged state or bounded serialized bytes for the existing atomic writer. Its existing directory/file ownership, mode and link restrictions are preserved. Saved values are reference facts, never permissions. Note audio comes from the existing Asterisk mixed-call WAV. Notes select an excerpt rather than starting a second recorder; only the VAD remainder and bounded transcript history are retained in memory.
+Profile reads see a coherent transaction and updates persist atomically.
+Context and Windguru consume typed profile state directly. Saved values
+are reference facts. The Python-era JSON profile, token exports and separate
+databases are archived for recovery. Note audio comes from the existing
+Asterisk mixed-call WAV. Notes select an excerpt from that recording.
+The VAD remainder and bounded transcript history are retained in memory.
 
 Windguru forecast parsing uses timestamps to address readings. A forecast array must cover every timestamp; trailing readings with no timestamp are ignored, while short arrays remain invalid. Saved-set results retain each member's independent provider failure, so one failed member does not hide available forecasts. The target checks and corrective release activation are recorded in [live-checks.md](live-checks.md#production-incidents-under-investigation).
 

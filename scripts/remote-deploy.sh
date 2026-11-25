@@ -8,6 +8,9 @@ override=/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf
 user_config=/etc/phone-assistant/user.json
 global_config=/etc/phone-assistant/global.json
 user_database=/var/lib/phone-assistant/users.sqlite3
+legacy_state="$prefix/legacy"
+legacy_env=/etc/phone-assistant/assistant.env
+legacy_env_backup=/var/backups/phone-assistant-legacy/assistant.env
 
 prepare_release() {
   local digest release stage
@@ -46,7 +49,7 @@ prepare_config() {
   elif [[ -f "$user_config" ]]; then
     install -m 0600 "$user_config" "$work/user.json"
   else
-    /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" /etc/phone-assistant/assistant.env "$work/user.json" "$global"
+    /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" "$legacy_env" "$work/user.json" "$global"
   fi
 }
 
@@ -219,6 +222,55 @@ restart_account_routing() {
   asterisk -rx 'dialplan show baerbel-routing-trace' | grep -F '[ Context' >/dev/null
 }
 
+move_legacy() {
+  local source=$1 destination=$2
+  [[ -e "$source" ]] || return 0
+  [[ ! -e "$destination" ]] || { printf 'Both copies exist: %s\n' "$destination" >&2; return 1; }
+  mkdir -p -m 0700 -- "${destination%/*}" || return
+  mv -- "$source" "$destination"
+}
+
+move_legacy_state() {
+  local from=$1 to=$2 file
+  for file in \
+    var/lib/phone-assistant/{calendar-events.sqlite3,gmail-sends.sqlite3,incoming-events-cursor.sqlite3,sms-sends.sqlite3,profile.json,profile.json.lock} \
+    home/stefan/.config/phone-assistant/{contacts-token,gmail-token-all-calendars,gmail-token-calendar,gmail-token}.json \
+    home/stefan/.cache/baerbel-hs/deploy/{accounts,user}.json; do
+    move_legacy "$from/$file" "$to/$file" || return
+  done
+  for file in "$from"/var/lib/phone-assistant/voice-test{,-previous-*}; do
+    move_legacy "$file" "$to/var/lib/phone-assistant/${file##*/}" || return
+  done
+}
+
+require_live_database() {
+  local pid executable
+  pid=$(systemctl show "$service" --property=MainPID --value) || return
+  executable=$(readlink -e "/proc/$pid/exe") || return
+  [[ "$executable" == "$prefix"/releases/*/bin/phone-assistant-server && -f "$user_database" ]] || return
+  grep -zxF -- "$global_config" "/proc/$pid/cmdline" >/dev/null
+}
+
+archive_legacy_state() {
+  require_live_database || { printf 'The database release must be running.\n' >&2; return 1; }
+  install -d -m 0700 "$legacy_state" || return
+  move_legacy_state "" "$legacy_state" || return
+  printf 'Legacy account state archived under %s\n' "$legacy_state"
+}
+
+archive_legacy_env() {
+  require_live_database || { printf 'The database release must be running.\n' >&2; return 1; }
+  move_legacy "$legacy_env" "$legacy_env_backup" || return
+  printf 'Legacy Python environment archived at %s\n' "$legacy_env_backup"
+}
+
+restore_legacy() {
+  local service_user
+  service_user=$(systemctl show "$service" --property=User --value) || return
+  runuser -u "$service_user" -- bash "$work/remote-deploy.sh" restore-legacy-state || return
+  move_legacy "$legacy_env_backup" "$legacy_env"
+}
+
 rollback_accounts() {
   local backup route previous
   require_idle
@@ -231,6 +283,7 @@ rollback_accounts() {
   }
   previous=$(sed -n 's|^ExecStart=\(/home/stefan/apps/baerbel/releases/[^ ]*/bin/phone-assistant-server\) .*|\1|p' "$backup/zz-baerbel-haskell.conf")
   [[ -x "$previous" ]] || { printf 'The previous Haskell executable is missing.\n' >&2; return 1; }
+  restore_legacy
   route=/etc/asterisk/phone-assistant-extensions.conf
   python3 "$work/account-incident.py" || printf 'Optional routing trace was unavailable.\n' >&2
   cp -a "$backup/phone-assistant-extensions.conf" "$route"
@@ -247,6 +300,7 @@ rollback_release() {
   local python
   python=$(readlink -e /home/stefan/.venvs/assistant/bin/python)
   require_idle
+  restore_legacy
   rm -f "$override"
   systemctl daemon-reload
   systemctl restart "$service"
@@ -282,4 +336,7 @@ case "$action" in
   install-account-routing) install_account_routing ;;
   rollback-accounts) rollback_accounts ;;
   rollback) rollback_release ;;
+  archive-legacy-state) archive_legacy_state ;;
+  archive-legacy-env) archive_legacy_env ;;
+  restore-legacy-state) move_legacy_state "$legacy_state" "" ;;
 esac
