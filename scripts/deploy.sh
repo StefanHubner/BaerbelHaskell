@@ -4,6 +4,21 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 action=$1
 target=stefan@192.168.50.83
 work=/home/stefan/.cache/baerbel-hs/deploy
+# The same two targets can run directly on the miniserver.
+addresses=" $(hostname -I) "
+case "$addresses:$action" in
+  *" 192.168.50.83 "*:install)
+    install -d -m 0700 "$work"
+    install -m 0644 "$root/scripts/remote-deploy.sh" "$root/scripts/prepare-user-config.py" "$work/"
+    install -m 0644 "$root/release/baerbel-linux-x86_64.tar.gz" "$work/release.tar.gz"
+    exec bash "$work/remote-deploy.sh" prepare
+    ;;
+  *" 192.168.50.83 "*:install-account-routing)
+    install -m 0644 "$root/scripts/remote-deploy.sh" "$work/remote-deploy.sh"
+    exec sudo bash "$work/remote-deploy.sh" install-account-routing
+    ;;
+esac
+
 case "$action" in
   install)
     ssh -- "$target" "mkdir -p -m 0700 '$work'"

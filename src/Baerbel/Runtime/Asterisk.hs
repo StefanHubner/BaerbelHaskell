@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-module Baerbel.Runtime.Asterisk (adopt, preview, install, restore) where
+module Baerbel.Runtime.Asterisk (InstallStatus(..), adopt, preview, install, restore) where
 
 import Baerbel.Core.Accounts (validId)
 import Baerbel.Core.Asterisk
@@ -12,7 +12,7 @@ import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Bytes8
 import Data.Char (isDigit)
-import Data.List (isSuffixOf)
+import Data.List (isSuffixOf, sort)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (mapMaybe)
@@ -128,19 +128,45 @@ saveBytes folder files = runExceptT $ do
   ExceptT (fmap sequence_ (Map.traverseWithKey save files))
   where save name = atomicWrite (folder </> name)
 
-install :: FilePath -> FilePath -> FilePath -> IO (Result ())
+data InstallStatus = Updated | Current
+
+install :: FilePath -> FilePath -> FilePath -> IO (Result InstallStatus)
 install config database backup = do
   plan <- readPlan config database
   continue (uncurry (applyPlan backup)) plan
 
-applyPlan :: FilePath -> Pbx -> Map FilePath Text -> IO (Result ())
+applyPlan :: FilePath -> Pbx -> Map FilePath Text -> IO (Result InstallStatus)
 applyPlan backup pbx files = runExceptT $ do
-  let root = pbxDirectory pbx
-      names = Map.keys files
-  ExceptT idle
   parents <- ExceptT (parentFiles pbx files)
-  ExceptT (backupPaths root backup names (Map.keys parents))
-  ExceptT (applyOrRestore root backup files parents)
+  current <- ExceptT (ioResult "asterisk_configuration_unavailable" (currentFiles root files))
+  ExceptT (update parents (Map.null parents && current))
+  where
+    root = pbxDirectory pbx
+    names = Map.keys files
+    update _ True = pure (Right Current)
+    update parents False = runExceptT $ do
+      ExceptT idle
+      ExceptT (backupPaths root backup names (Map.keys parents))
+      ExceptT (applyOrRestore root backup files parents)
+      pure Updated
+
+currentFiles :: FilePath -> Map FilePath Text -> IO Bool
+currentFiles root files = doesDirectoryExist destination >>= compareDirectory
+  where
+    destination = root </> "phone-assistant"
+    names = Map.keys files
+    compareDirectory False = pure False
+    compareDirectory True = do
+      present <- sort <$> listDirectory destination
+      compareNames (present == names)
+    compareNames False = pure False
+    compareNames True = do
+      previous <- traverse (doesFileExist . (root </>) . ("phone-assistant-" <>)) names
+      same <- Map.traverseWithKey matches files
+      pure (not (or previous) && and same)
+    matches name expected = do
+      content <- Bytes.readFile (destination </> name)
+      pure (content == Text.encodeUtf8 expected)
 
 readParents :: FilePath -> [FilePath] -> IO (Map FilePath Bytes.ByteString)
 readParents root names = do
@@ -187,6 +213,7 @@ installFiles :: FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -
 installFiles root files parents staging = runExceptT $ do
   let target = root </> "phone-assistant"
   ExceptT (saveBytes staging (stagedFiles files parents))
+  ExceptT (ioResult "asterisk_configuration_unavailable" (clearManaged root))
   ExceptT (command "install" ["-d", "-m", "0750", "-g", "asterisk", target])
   ExceptT (fmap sequence_ (traverse (copyManaged target) (Map.keys files)))
   ExceptT (fmap sequence_ (traverse copyParent (Map.keys parents)))
@@ -205,14 +232,14 @@ removeOld root names = ioResult "asterisk_archive_unavailable" (mapM_ retire nam
 restore :: FilePath -> FilePath -> IO (Result ())
 restore root backup = runExceptT $ do
   paths <- ExceptT (ioResult "asterisk_backup_unavailable" (listDirectory backup))
-  ExceptT (ioResult "asterisk_restore_unavailable" clear)
+  ExceptT (ioResult "asterisk_restore_unavailable" (clearManaged root))
   ExceptT (copyPresent backup root paths)
   ExceptT restart
-  where
-    installed = root </> "phone-assistant"
-    clear = do
-      exists <- doesDirectoryExist installed
-      when exists (removeDirectoryRecursive installed)
+clearManaged :: FilePath -> IO ()
+clearManaged root = do
+  let installed = root </> "phone-assistant"
+  exists <- doesDirectoryExist installed
+  when exists (removeDirectoryRecursive installed)
 
 idle :: IO (Result ())
 idle = mapResult check (run "asterisk" ["-rx", "core show channels concise"])

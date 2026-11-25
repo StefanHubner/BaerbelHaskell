@@ -238,13 +238,17 @@ install_pbx_database() {
 }
 
 install_account_routing() {
-  local pid binary release backup
-  require_idle || return
+  local pid binary release backup result
   pid=$(systemctl show "$service" --property=MainPID --value) || return
   binary=$(readlink -e "/proc/$pid/exe") || return
   release=${binary%/bin/phone-assistant-server}
   backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
-  "$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$backup" || return
+  result=$("$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$backup") || return
+  printf '%s\n' "$result"
+  if [[ "$result" == "Asterisk configuration already current." ]]; then
+    rmdir -- "$backup"
+    return
+  fi
   systemctl restart "$service" || return
   verify_service "$binary"
 }
