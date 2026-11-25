@@ -130,7 +130,7 @@ spec = describe "Incoming context retention" $ do
 
 withFixture :: (MessageRules -> Expectation) -> Expectation
 withFixture action = do
-  configured <- loadSettings "config/global.yaml" "config/user.example.json"
+  configured <- loadSettings "config/global.yaml" "test/fixtures/local-user.json"
   case configured >>= \settings -> rule settings "incoming_messages" "service" of
     Left problem -> expectationFailure (show problem)
     Right rules -> action rules {messageContextLimit = 2}

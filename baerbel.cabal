@@ -32,7 +32,6 @@ extra-source-files:
     config/users.sql
     config/phone-numbers.json
     test/live/config.json
-    config/user.example.json
     test/fixtures/calendar-tools.json
     test/fixtures/contacts-candidates.json
     test/fixtures/events.json
@@ -40,6 +39,7 @@ extra-source-files:
     test/fixtures/gmail-summaries.json
     test/fixtures/gmail-tools.json
     test/fixtures/ledger.json
+    test/fixtures/local-user.json
     test/fixtures/live-integrated-session.json
     test/fixtures/live-session.json
     test/fixtures/mail-codecs.json

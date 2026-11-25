@@ -31,7 +31,7 @@ data VADCase = VADCase
 instance FromJSON VADCase where parseJSON = genericParseJSON (jsonOptions 7)
 
 withSettings :: (Settings -> IO ()) -> IO ()
-withSettings action = loadSettings "config/global.yaml" "config/user.example.json" >>= expectResult action
+withSettings action = loadSettings "config/global.yaml" "test/fixtures/local-user.json" >>= expectResult action
 
 expectResult :: (a -> IO ()) -> Result a -> IO ()
 expectResult = either (expectationFailure . show)

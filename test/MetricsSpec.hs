@@ -62,7 +62,7 @@ spec = do
         pure (Right ())
       result `shouldBe` Right ()
     it "suppresses model silence while startup ringback is still active" $ withPair $ \client _ -> do
-      configured <- loadSettings "config/global.yaml" "config/user.example.json"
+      configured <- loadSettings "config/global.yaml" "test/fixtures/local-user.json"
       case configured >>= \settings -> rule settings "startup_ringback" "playback" of
         Left problem -> expectationFailure (show problem)
         Right rules -> do
