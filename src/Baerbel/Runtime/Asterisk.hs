@@ -218,6 +218,23 @@ restart = runExceptT $ do
   ExceptT (command "timeout" ["20", "asterisk", "-rx", "core waitfullybooted"])
   report <- ExceptT (run "asterisk" ["-rx", "dialplan show baerbel-account-entry"])
   except (unless ("127.0.0.1:4573/account" `Text.isInfixOf` Text.pack report) (Left (failure "asterisk_account_route_missing")))
+  mapM_ (ExceptT . endpoint) ["phone-assistant-aa", "phone-assistant-aa-bristol"]
+  identifiers <- ExceptT (run "asterisk" ["-rx", "pjsip show identifiers"])
+  except (identifierOrder identifiers)
+
+endpoint :: String -> IO (Result ())
+endpoint name = mapResult validate (run "asterisk" ["-rx", "pjsip show endpoint " <> name])
+  where
+    validate output = unless (any matches (lines output)) (Left (failure "asterisk_sip_endpoint_missing"))
+    matches line = case words line of
+      "Endpoint:" : ident : _ -> takeWhile (/= '/') ident == name
+      _ -> False
+
+identifierOrder :: String -> Result ()
+identifierOrder output = case dropWhile (not . starts "header") (lines output) of
+  _ : remaining | any (starts "ip") remaining -> Right ()
+  _ -> Left (failure "asterisk_sip_identifier_order")
+  where starts name line = take 1 (words line) == [name]
 
 command :: FilePath -> [String] -> IO (Result ())
 command file args = fmap void (run file args)
