@@ -275,17 +275,14 @@ spec = do
         _ -> expectationFailure "Could not load integrated session fixture or global configuration"
 
 integratedSession :: Config.Global -> Either Failure Value
-integratedSession global = do
-  forecast <- Config.rule settings "windguru" "WINDGURU_SET_TOOL"
-  let first = concatMap (Config.toolDefinitions settings) ["WEB_SEARCH_TOOLS", "PROFILE_TOOLS", "WINDGURU_TOOLS"]
-      rest = concatMap (Config.toolDefinitions settings) ["GMAIL_TOOLS", "OWNER_NOTE_TOOLS", "CALENDAR_TOOLS",
-        "MAPS_TOOLS", "CONTACTS_TOOLS", "DIRECT_CALL_TOOLS", "END_CALL_TOOLS", "HELP_TOOLS"]
-      tools = first ++ [forecast] ++ rest
-      day = fromGregorian 2026 3 29
-      time = secondsToDiffTime 43200
-      now = UTCTime day time
-  sessionConfig <$> buildSessionWithProfile settings now "PROFILE CONTEXT" tools
+integratedSession global = sessionConfig <$> buildSessionWithProfile settings now "PROFILE CONTEXT" tools
   where
+    tools = concatMap (Config.toolDefinitions settings) ["WEB_SEARCH_TOOLS", "PROFILE_TOOLS", "WINDGURU_TOOLS",
+      "WINDGURU_SET_TOOL", "GMAIL_TOOLS", "OWNER_NOTE_TOOLS", "CALENDAR_TOOLS", "MAPS_TOOLS", "CONTACTS_TOOLS",
+      "DIRECT_CALL_TOOLS", "END_CALL_TOOLS", "HELP_TOOLS"]
+    day = fromGregorian 2026 3 29
+    time = secondsToDiffTime 43200
+    now = UTCTime day time
     pin = "pbkdf2_sha256:600000:" <> T.replicate 32 "0" <> ":" <> T.replicate 64 "0"
     user = Config.User (Map.fromList [("PHONE_ASSISTANT_PRIVATE_PIN_HASH", pin), ("INCOMING_OWNER_NAME", "Stefan")])
     settings = Config.resolveSettings global user
