@@ -22,19 +22,18 @@ import Baerbel.Services (Service(..), Services, withCallServices, deliverOwnerNo
 import qualified Baerbel.Tools as Tools
 import Baerbel.Server (socketMedia)
 import Control.Exception (finally)
-import Control.Monad (when, void)
+import Control.Monad (foldM, when, void)
 import Data.Time (UTCTime, getCurrentTime)
 import System.Timeout (timeout)
 import Network.Socket (Socket)
 import Baerbel.Error (Result, failure)
-import Baerbel.Live (LiveConfig(..), Media(..), LiveControls(..), ToolLimits(..), runLiveSession)
+import Baerbel.Live (LiveConfig(..), Media(..), LiveControls(..), ToolLimits(..), runLiveSession, appendTranscript)
 import Baerbel.Protocol (SessionRole(..), SessionSettings(..), sessionConfig, voiceIdentity, greetingCommand, buildSessionWithProfile, announcementComplete)
 import Baerbel.Speech (audiblePCM)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
 import Control.Concurrent.STM
-import qualified Data.Aeson.KeyMap as KM
-import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=))
+import Data.Aeson (Value, FromJSON(..), genericParseJSON, object, (.=))
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import Data.Map.Strict (Map)
@@ -89,7 +88,7 @@ runAnnouncement cfg transport completion quietMicros = do
   transcript <- newTVarIO ""
   lastAudio <- newTVarIO Nothing
   let observed = transport
-        { observeEvent = observeTranscript transcript
+        { observeEvent = mapM_ (atomically . modifyTVar' transcript) . appendTranscript
         , sendAudio = observeAudio (liveFrameMicros cfg) transport lastAudio
         , muteInput = pure True
         }
@@ -101,14 +100,6 @@ runAnnouncement cfg transport completion quietMicros = do
     Left (Right ()) -> Left (failure "announcement_incomplete")
     Left (Left err) -> Left err
     Right completionResult -> completionResult
-
-observeTranscript :: TVar Text -> Value -> IO ()
-observeTranscript transcript (Object fields)
-  | KM.lookup "type" fields == Just (String "session.output_transcript.delta") =
-      case KM.lookup "delta" fields of
-        Just (String delta) -> atomically (modifyTVar' transcript (T.takeEnd 2000 . (<> delta)))
-        _ -> pure ()
-observeTranscript _ _ = pure ()
 
 observeAudio :: Int -> Media -> TVar (Maybe Word64) -> BS.ByteString -> IO (Result AudioDelivery)
 observeAudio frameMicros transport lastAudio bytes = do
@@ -149,16 +140,17 @@ playHandoff settings connection line = either (pure . Left) play (rule settings 
   where
     play rules = do
       let transport = socketMedia rules connection (const (pure ())) (const (pure ()))
-      finally (handoffAnnouncement settings transport line) (void (finishCall transport))
+          configured = handoffAnnouncement settings line
+          run (cfg, completion, quiet, duration) = boundedAnnouncement duration cfg transport completion quiet
+      finally (either (pure . Left) run configured) (void (finishCall transport))
 
-handoffAnnouncement :: Settings -> Media -> Text -> IO (Result ())
-handoffAnnouncement settings transport line = case announcementConfig settings line of
-  Left err -> pure (Left err)
-  Right cfg -> do
-    let completion = T.unwords (takeLast 5 (T.words line))
-    case (rule settings "protocol" "announcementQuietMicros", rule settings "protocol" "announcementMicros") of
-      (Right quiet, Right duration) -> boundedAnnouncement duration cfg transport completion quiet
-      _ -> pure (Left (failure "announcement_configuration_invalid"))
+handoffAnnouncement :: Settings -> Text -> Result (LiveConfig, Text, Int, Int)
+handoffAnnouncement settings line = do
+  cfg <- announcementConfig settings line
+  let completion = T.unwords (takeLast 5 (T.words line))
+  case (rule settings "protocol" "announcementQuietMicros", rule settings "protocol" "announcementMicros") of
+    (Right quiet, Right duration) -> Right (cfg, completion, quiet, duration)
+    _ -> Left (failure "announcement_configuration_invalid")
 
 boundedAnnouncement :: Int -> LiveConfig -> Media -> Text -> Int -> IO (Result ())
 boundedAnnouncement duration cfg transport completion quiet = do
@@ -378,7 +370,11 @@ voiceTest settings managed notesRuntime = do
     (True, _, _) -> pure (Left (failure "voice_test_unavailable"))
     (_, True, _) -> pure (Left (failure "finish_or_cancel_note_before_voice_test"))
     (_, _, Left err) -> pure (Left err)
-    (_, _, Right samples) -> playSamples settings managed samples
+    (_, _, Right samples) -> do
+      played <- foldM play (Right ()) samples
+      pure (sampleResult settings samples played)
+  where
+    play result sample = either (pure . Left) (const (playSample settings managed sample)) result
 
 voiceSamples :: Settings -> Result [VoiceSample]
 voiceSamples settings = do
@@ -389,16 +385,11 @@ voiceSamples settings = do
       | setting settings "OPENAI_LIVE_MODEL" == model = rule settings "voice_audition" "samples"
       | otherwise = Left (failure "voice_test_requires_current_live_model")
 
-playSamples :: Settings -> ManagedCall -> [VoiceSample] -> IO (Result Value)
-playSamples settings managed samples = do
-  result <- playAll samples
-  pure (result >> Right (object ["status" .= ("ok" :: Text), "played" .= map sampleLabel samples,
-    "model" .= setting settings "OPENAI_LIVE_MODEL", "mode" .= ("live" :: Text), "preference_saved" .= False]))
+sampleResult :: Settings -> [VoiceSample] -> Result () -> Result Value
+sampleResult settings samples result = result >> Right output
   where
-    playAll [] = pure (Right ())
-    playAll (sample : rest) = do
-      played <- playSample settings managed sample
-      either (pure . Left) (const (playAll rest)) played
+    output = object ["status" .= ("ok" :: Text), "played" .= map sampleLabel samples,
+      "model" .= setting settings "OPENAI_LIVE_MODEL", "mode" .= ("live" :: Text), "preference_saved" .= False]
 
 playSample :: Settings -> ManagedCall -> VoiceSample -> IO (Result ())
 playSample settings managed sample = case sampleConfiguration settings sample of

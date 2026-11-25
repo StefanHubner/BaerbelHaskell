@@ -2,7 +2,7 @@ module MapsSpec (spec) where
 
 import Baerbel.Error (Failure(..), Result, failure)
 import Baerbel.HTTP (Request(..))
-import Baerbel.JSON (decodeBytes, jsonOptions)
+import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
 import Baerbel.MapTypes (Place(..), Point(..))
 import Baerbel.Maps (maps, placeDetails)
 import Baerbel.MapsRoute (route)
@@ -79,11 +79,10 @@ loadDetails = fmap (decodeBytes "maps_details_fixtures") (Bytes.readFile "test/f
 
 runDetails :: MapsRules -> DetailsCase -> Expectation
 runDetails rules fixture = do
-  let send _ = pure (Right (detailBody fixture))
-      now = pure (UTCTime (fromGregorian 2026 10 15) 28800)
+  let now = UTCTime (fromGregorian 2026 10 15) 28800
       selected = Place "fixture-place" "Saved label" "Saved address" (Point 51 0)
       redact = Text.replace "fixture-key" "[redacted]"
-  result <- placeDetails rules redact send now "place_fixture" selected
+      result = decodeValue "maps_invalid_place_response" (detailBody fixture) >>= placeDetails rules redact now "place_fixture" selected
   either rejected id result `shouldBe` detailExpected fixture
   where rejected issue = toJSON (Rejected "error" (failureCode issue))
 

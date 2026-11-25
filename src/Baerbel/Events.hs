@@ -152,23 +152,23 @@ readRows rules key handle remaining rows = do
   let maximumRead = eventMaximumLine rules + 1
   bytes <- Bytes.hGet handle maximumRead
   case Bytes.elemIndex 10 bytes of
-    Just offset ->
+    Just offset -> do
       let width = offset + 1
           raw = Bytes.take width bytes
-      in recordRow rules key handle remaining rows start raw
+          next = start + fromIntegral width
+          count = fromIntegral (min next (fromIntegral (eventAnchorBytes rules)))
+      hSeek handle AbsoluteSeek 0
+      anchor <- Bytes.hGet handle count
+      hSeek handle AbsoluteSeek next
+      let row = recordRow rules key next count raw anchor
+          rest = remaining - 1
+      readRows rules key handle rest (row : rows)
     Nothing | Bytes.length bytes <= eventMaximumLine rules -> pure (Right (reverse rows))
     _ -> pure (Left (failure "incoming_event_record_too_large"))
 
-recordRow :: EventRules -> Text -> Handle -> Int -> [Row] -> Integer -> ByteString -> IO (Result [Row])
-recordRow rules key handle remaining rows start raw = do
-  let next = start + fromIntegral (Bytes.length raw)
-      count = fromIntegral (min next (fromIntegral (eventAnchorBytes rules)))
-  hSeek handle AbsoluteSeek 0
-  anchor <- digest <$> Bytes.hGet handle count
-  hSeek handle AbsoluteSeek next
-  let row = Row (parseEvent rules raw) (Cursor key next count anchor)
-      rest = remaining - 1
-  readRows rules key handle rest (row : rows)
+recordRow :: EventRules -> Text -> Integer -> Int -> ByteString -> ByteString -> Row
+recordRow rules key position count raw anchor = Row (parseEvent rules raw) cursor
+  where cursor = Cursor key position count (digest anchor)
 
 consumeRows :: Report -> Messages -> Connection -> Int -> [Row] -> IO (Result (Int, Bool))
 consumeRows _ _ _ count [] = pure (Right (count, True))

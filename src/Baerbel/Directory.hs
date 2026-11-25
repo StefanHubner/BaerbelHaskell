@@ -100,7 +100,7 @@ loadPage rules sender number token seen index
   | number >= directoryPages rules = pure (Left (failure "incoming_contacts_directory_limit"))
   | otherwise = do
     let request = directoryRequest rules token
-    response <- fetch "incoming_contacts_invalid_response" (sender request)
+    response <- fmap (fetch "incoming_contacts_invalid_response") (sender request)
     case response >>= advanceDirectory rules number seen index of
       Left issue -> pure (Left issue)
       Right (updated, Nothing) -> pure (Right updated)

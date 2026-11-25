@@ -7,7 +7,7 @@ import Baerbel.TimeFormat (isoZoned)
 import Data.Char (isDigit)
 import qualified Data.Bifunctor as Bifunctor
 import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Send)
+import Baerbel.HTTP (Request, Send)
 import Baerbel.GoogleValidation (address, textValue)
 import Baerbel.JSON (decodeValue, argumentOptions, camelOptions, jsonOptions)
 import Baerbel.Provider
@@ -18,7 +18,7 @@ import Data.Aeson.Types (Parser)
 import Data.List (nub, sortOn, mapAccumL)
 import qualified Data.Set as Set
 import Text.Read (readMaybe)
-import Data.Maybe (isNothing, isJust, fromMaybe)
+import Data.Maybe (isNothing, isJust, fromMaybe, listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -219,29 +219,52 @@ entryName rules entry = Text.take (calendarTitleChars rules) chosen
 
 data Discovery = Discovery {discoveredEntries :: [CalendarEntry], discoveredComplete :: Bool, discoveredError :: Maybe Text}
 
+data PageState a = PageState
+  { pageNumber :: Int, pageScanned :: Int, pageItems :: [a]
+  , pageIds :: Set.Set Text, pageTokens :: [Text] }
+
+initialPage :: PageState a
+initialPage = PageState 0 0 [] Set.empty []
+
+nextPage :: CalendarRules -> Maybe Text -> PageState a -> Result (Maybe (PageState a))
+nextPage _ Nothing _ = Right Nothing
+nextPage _ (Just "") _ = Right Nothing
+nextPage rules (Just token) state
+  | Text.length token > calendarTokenChars rules || token `elem` pageTokens state = Left (failure "calendar_invalid_pagination")
+  | otherwise = Right (Just state {pageNumber = pageNumber state + 1, pageTokens = token : pageTokens state})
+
 listCalendars :: CalendarRules -> Send -> IO Discovery
-listCalendars rules send = loop 0 0 [] Set.empty [] Nothing
+listCalendars rules send = loop initialPage
   where
-    loop :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Maybe Text -> IO Discovery
-    loop pages scanned found ids seen token
-      | pages >= calendarListPages rules || scanned >= calendarCalendarLimit rules = pure (Discovery found False Nothing)
-      | otherwise = requestPage pages scanned found ids seen token
-    requestPage :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Maybe Text -> IO Discovery
-    requestPage pages scanned found ids seen token = do
-      response <- fetch "calendar_invalid_calendar_list" (get (calendarHttp rules) send (calendarCalendarUrl rules) (params token))
-      either (pure . Discovery found False . Just . failureCode) (next pages scanned found ids seen) response
-    params token = [textParam "showDeleted" "false", textParam "showHidden" "true", textParam "maxResults" (Text.pack (show (calendarListPageSize rules))), textParam "fields" (calendarListFields rules)]
+  loop :: PageState CalendarEntry -> IO Discovery
+  loop state
+    | pageNumber state >= calendarListPages rules || pageScanned state >= calendarCalendarLimit rules = pure (Discovery (pageItems state) False Nothing)
+    | otherwise = do
+      let request = calendarPageRequest rules state
+      response <- send request
+      either pure loop (calendarPage rules state (fetch "calendar_invalid_calendar_list" response))
+
+calendarPageRequest :: CalendarRules -> PageState CalendarEntry -> Request
+calendarPageRequest rules state = get (calendarHttp rules) (calendarCalendarUrl rules) params
+  where
+    token = listToMaybe (pageTokens state)
+    params = [textParam "showDeleted" "false", textParam "showHidden" "true", textParam "maxResults" (Text.pack (show (calendarListPageSize rules))), textParam "fields" (calendarListFields rules)]
       <> maybe [] (pure . textParam "pageToken") token
-    next pages scanned found ids seen response = case collectCalendars rules scanned found ids (fromMaybe [] (listItems response)) of
-      Left (issue, entries) -> pure (Discovery entries False (Just (failureCode issue)))
-      Right (count, entries, known, cut) -> advance pages count entries known seen cut (listNextPageToken response)
-    advance :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Bool -> Maybe Text -> IO Discovery
-    advance _ _ entries _ _ True _ = pure (Discovery entries False Nothing)
-    advance pages count entries known seen False token = case token of
-      Nothing -> pure (Discovery entries True Nothing)
-      Just "" -> pure (Discovery entries True Nothing)
-      Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Discovery entries False (Just "calendar_invalid_pagination"))
-      Just page -> loop (pages + 1) count entries known (page : seen) (Just page)
+
+calendarPage :: CalendarRules -> PageState CalendarEntry -> Result CalendarPage -> Either Discovery (PageState CalendarEntry)
+calendarPage _ state (Left issue) = Left (Discovery (pageItems state) False (Just (failureCode issue)))
+calendarPage rules state (Right response) = case collected of
+  Left (issue, entries) -> Left (Discovery entries False (Just (failureCode issue)))
+  Right (count, entries, known, cut) -> advanceCalendars rules updated cut (listNextPageToken response)
+    where updated = state {pageScanned = count, pageItems = entries, pageIds = known}
+  where collected = collectCalendars rules (pageScanned state) (pageItems state) (pageIds state) (fromMaybe [] (listItems response))
+
+advanceCalendars :: CalendarRules -> PageState CalendarEntry -> Bool -> Maybe Text -> Either Discovery (PageState CalendarEntry)
+advanceCalendars _ state True _ = Left (Discovery (pageItems state) False Nothing)
+advanceCalendars rules state False token = case nextPage rules token state of
+  Left issue -> Left (Discovery (pageItems state) False (Just (failureCode issue)))
+  Right Nothing -> Left (Discovery (pageItems state) True Nothing)
+  Right (Just next) -> Right next
 
 data CalendarIdentity = CalendarIdentity
   { identityCalendarId :: Text, identityCalendarName :: Text, identityAccessRole :: Text
@@ -284,35 +307,43 @@ collectCalendar rules scanned found ids rest entry
     next entries known = collectCalendars rules (scanned + 1) entries known rest
 
 listEvents :: CalendarRules -> Send -> TimeZones -> UTCTime -> UTCTime -> Text -> CalendarEntry -> IO (Result ([CalendarEvent], Bool))
-listEvents rules send zones first lastTime query entry = loop 0 0 [] Set.empty [] Nothing
+listEvents rules send zones first lastTime query entry = loop initialPage
+  where
+  loop :: PageState CalendarEvent -> IO (Result ([CalendarEvent], Bool))
+  loop state
+    | pageNumber state >= calendarEventPages rules || pageScanned state >= calendarEventScanLimit rules = pure (Right (pageItems state, True))
+    | otherwise = do
+      let request = eventPageRequest rules first lastTime query entry state
+      response <- send request
+      either pure loop (eventPage rules zones first lastTime entry state (fetch "calendar_invalid_response" response))
+
+eventPageRequest :: CalendarRules -> UTCTime -> UTCTime -> Text -> CalendarEntry -> PageState CalendarEvent -> Request
+eventPageRequest rules first lastTime query entry state = get (calendarHttp rules) url params
   where
     url = eventUrl rules (entryId entry)
+    token = listToMaybe (pageTokens state)
     stamp = Text.pack . formatTime defaultTimeLocale "%FT%TZ"
     wireStart = UTCTime (utctDay first) (fromInteger (floor (utctDayTime first)))
     wireEnd = UTCTime (utctDay lastTime) (fromInteger (ceiling (utctDayTime lastTime)))
-    params token = [textParam "timeMin" (stamp wireStart), textParam "timeMax" (stamp wireEnd), textParam "fields" (calendarEventFields rules),
+    params = [textParam "timeMin" (stamp wireStart), textParam "timeMax" (stamp wireEnd), textParam "fields" (calendarEventFields rules),
       textParam "timeZone" (calendarZone rules), textParam "singleEvents" "true", textParam "orderBy" "startTime", textParam "showDeleted" "false", textParam "showHiddenInvitations" "true",
       textParam "maxResults" (Text.pack (show (calendarEventPageSize rules))), textParam "maxAttendees" (Text.pack (show (calendarMaxAttendees rules)))] <> optionalQuery <> maybe [] (pure . textParam "pageToken") token
     optionalQuery = [textParam "q" query | not (Text.null query)]
-    loop :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
-    loop pages scanned events ids seen token
-      | pages >= calendarEventPages rules || scanned >= calendarEventScanLimit rules = pure (Right (events, True))
-      | otherwise = requestPage pages scanned events ids seen token
-    requestPage :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
-    requestPage pages scanned events ids seen token = do
-      response <- fetch "calendar_invalid_response" (get (calendarHttp rules) send url (params token))
-      either (pure . Left) (next pages scanned events ids seen) response
-    next :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> EventPage -> IO (Result ([CalendarEvent], Bool))
-    next pages scanned events ids seen response = case collectEvents rules zones first lastTime entry scanned events ids (fromMaybe [] (eventsItems response)) of
-      Left issue -> pure (Left issue)
-      Right (count, values, known, cut) -> advanceEvents pages count values known seen cut (eventsNextPageToken response)
-    advanceEvents :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Bool -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
-    advanceEvents _ _ values _ _ True _ = pure (Right (values, True))
-    advanceEvents pages count values known seen False token = case token of
-      Nothing -> pure (Right (values, False))
-      Just "" -> pure (Right (values, False))
-      Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Left (failure "calendar_invalid_pagination"))
-      Just page -> loop (pages + 1) count values known (page : seen) (Just page)
+
+eventPage :: CalendarRules -> TimeZones -> UTCTime -> UTCTime -> CalendarEntry -> PageState CalendarEvent -> Result EventPage -> Either (Result ([CalendarEvent], Bool)) (PageState CalendarEvent)
+eventPage _ _ _ _ _ _ (Left issue) = Left (Left issue)
+eventPage rules zones first lastTime entry state (Right response) = case collected of
+  Left issue -> Left (Left issue)
+  Right (count, values, known, cut) -> advanceEvents rules updated cut (eventsNextPageToken response)
+    where updated = state {pageScanned = count, pageItems = values, pageIds = known}
+  where collected = collectEvents rules zones first lastTime entry (pageScanned state) (pageItems state) (pageIds state) (fromMaybe [] (eventsItems response))
+
+advanceEvents :: CalendarRules -> PageState CalendarEvent -> Bool -> Maybe Text -> Either (Result ([CalendarEvent], Bool)) (PageState CalendarEvent)
+advanceEvents _ state True _ = Left (Right (pageItems state, True))
+advanceEvents rules state False token = case nextPage rules token state of
+  Left issue -> Left (Left issue)
+  Right Nothing -> Left (Right (pageItems state, False))
+  Right (Just next) -> Right next
 
 collectEvents :: CalendarRules -> TimeZones -> UTCTime -> UTCTime -> CalendarEntry -> Int -> [CalendarEvent] -> Set.Set Text -> [Value] -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
 collectEvents _ _ _ _ _ scanned found ids [] = Right (scanned, found, ids, False)
@@ -413,14 +444,8 @@ scanResults discovery selectionError results = (events, coverage)
     truncated = not (discoveredComplete discovery) && isNothing (discoveredError discovery)
     coverage = Coverage complete (discoveredComplete discovery) (Nullable (discoveredError discovery)) truncated (length rows) checkedCount rows selectionError
 
-agenda :: CalendarRules -> Send -> TimeZones -> AgendaRequest -> IO Value
-agenda rules send zones request = do
-  result <- scan rules send zones (agendaPeriod request) (searchQuery args) (searchCalendar args)
-  pure (agendaResult rules request result)
-  where args = agendaArguments request
-
-agendaResult :: CalendarRules -> AgendaRequest -> ([CalendarEvent], Coverage) -> Value
-agendaResult rules request (events, coverage) = combine [toJSON output, toJSON changed]
+agenda :: CalendarRules -> AgendaRequest -> ([CalendarEvent], Coverage) -> Value
+agenda rules request (events, coverage) = combine [toJSON output, toJSON changed]
   where
     args = agendaArguments request
     ordered = map snd (sortOn fst events)
@@ -463,7 +488,8 @@ createEvent rules send durable existing zones requestId request = do
       result <- scan rules send zones (createPeriod request) "" ""
       maybe commit (pure . Right) (conflictResult rules result)
     operation = do
-      response <- post (calendarHttp rules) send (eventUrl rules "primary") params resource
+      let wire = post (calendarHttp rules) (eventUrl rules "primary") params resource
+      response <- send wire
       pure (response >>= creationReceipt rules zones (createPeriod request) resource)
     updates = case resourceAttendees resource of
       [] -> "none"
@@ -587,7 +613,10 @@ calendar rules send durable existing zones name arguments requestId = either (pu
   where
     prepared = prepareCommand rules zones name arguments
     execute :: CalendarCommand -> IO (Result Value)
-    execute (ReadAgenda request) = Right <$> agenda rules send zones request
+    execute (ReadAgenda request) = do
+      let args = agendaArguments request
+      result <- scan rules send zones (agendaPeriod request) (searchQuery args) (searchCalendar args)
+      pure (Right (agenda rules request result))
     execute (CreateEvent request) = createEvent rules send durable existing zones requestId request
 
 data Incomplete = Incomplete

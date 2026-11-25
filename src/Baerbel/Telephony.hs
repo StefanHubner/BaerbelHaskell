@@ -178,17 +178,18 @@ createOwner cfg validate media identifier pending events ami channel = do
 observeOwner :: MVar (Maybe CallState) -> TChan () -> TelephonyMedia -> Message -> IO ()
 observeOwner state events media message = do
   snapshot <- modifyMVar state (pure . update)
-  maybe (pure ()) (sendDigit media message) snapshot
+  let digit = snapshot >>= sendDigit message
+  maybe (pure ()) (keypadDigit media) digit
   atomically (writeTChan events ())
   where
     update :: Maybe CallState -> (Maybe CallState, Maybe CallState)
     update Nothing = (Nothing, Nothing)
     update (Just previous) = let (next, _) = nativeEvent message previous in (Just next, Just next)
 
-sendDigit :: TelephonyMedia -> Message -> CallState -> IO ()
-sendDigit media message state
-  | field "Event" message == "DTMFEnd" && matches && permitted = keypadDigit media (encodeUtf8 digit)
-  | otherwise = pure ()
+sendDigit :: Message -> CallState -> Maybe ByteString
+sendDigit message state
+  | field "Event" message == "DTMFEnd" && matches && permitted = Just (encodeUtf8 digit)
+  | otherwise = Nothing
   where
     matches :: Bool
     matches = field "Channel" message == channelName (callChannel state)
@@ -247,14 +248,11 @@ runDirect runtime pending mode requestId args route = do
   state <- currentState runtime pending
   let request = DialRequest requestId attempt (argumentToken args) route (argumentLabel args) (argumentConfirmed args) token now
   case mode of
-    InspectRoute -> proposal runtime pending request state
+    InspectRoute -> do
+      let (updated, result) = proposeRoute now token route (argumentLabel args) state
+      saveState runtime pending updated
+      pure (Right result)
     DialNumber -> executeDial runtime pending request state
-
-proposal :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> CallState -> IO (Result Value)
-proposal runtime pending request state = do
-  let (updated, result) = proposeRoute (dialTime request) (dialFreshToken request) (dialRoute request) (dialLabel request) state
-  saveState runtime pending updated
-  pure (Right result)
 
 executeDial :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> CallState -> IO (Result Value)
 executeDial runtime pending request state = case requestDial (directEnabled (ownerConfig runtime)) request state of
@@ -738,17 +736,18 @@ dialOrRecover runtime pending request = do
   result <- runExceptT (nativeDial runtime pending request)
   case result of
     Right value -> storeFinal runtime pending request (addDestination request value)
-    Left _ -> recoverOwner runtime pending >> failedDial runtime pending request
+    Left _ -> do
+      recoverOwner runtime pending
+      state <- currentState runtime pending
+      let output = failedDial request state
+      storeOutcome runtime pending request output
 
-failedDial :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> IO (Result Value)
-failedDial runtime pending request = do
-  state <- currentState runtime pending
-  let result
-        | callPhase state == Connected = "connected"
-        | callPhase state == Ended = "cancelled"
-        | otherwise = "failed"
-  let output = addDestination request (resultValue result)
-  storeOutcome runtime pending request output
+failedDial :: DialRequest -> CallState -> Value
+failedDial request state = addDestination request (resultValue result)
+  where
+    result | callPhase state == Connected = "connected"
+           | callPhase state == Ended = "cancelled"
+           | otherwise = "failed"
 
 addDestination :: DialRequest -> Value -> Value
 addDestination request (Object fields) = Object (KM.union fields additions)

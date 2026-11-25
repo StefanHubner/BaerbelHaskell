@@ -21,6 +21,7 @@ import Network.Socket (Socket)
 import System.Timeout (timeout)
 
 data Attachment = Attachment { attachmentSocket :: Socket, attachmentSerial :: Int }
+data PacketAction = ReceiveNext | AwaitResume Int | DeliverAudio (Maybe ByteString) | DeliverDigit ByteString
 data MediaState = MediaState
   { activeAttachment :: Attachment, statePaused :: Bool, mediaEnded :: Bool, stateEpoch :: Int
   , stateDeadline :: Maybe Word64, stateFailure :: Maybe Failure }
@@ -171,7 +172,8 @@ watchDeadline entry state = do
       micros | deadline <= now = 0
              | otherwise = fromIntegral ((deadline - now + 999) `div` 1000)
   changed <- timeout micros (atomically (awaitEpoch entry (stateEpoch state)))
-  maybe (expirePause entry state) (const (pure ())) changed
+  let expire = atomically (modifyTVar' (entryState entry) (expirePause state))
+  maybe expire (const (pure ())) changed
   watchPause entry
 
 awaitEpoch :: Entry -> Int -> STM ()
@@ -179,13 +181,10 @@ awaitEpoch entry epoch = do
   state <- readTVar (entryState entry)
   check (mediaEnded state || stateEpoch state /= epoch)
 
-expirePause :: Entry -> MediaState -> IO ()
-expirePause entry previous = atomically (modifyTVar' (entryState entry) expire)
-  where
-    expire :: MediaState -> MediaState
-    expire state
-      | stateEpoch state == stateEpoch previous && statePaused state = state {mediaEnded = True, stateFailure = Just (failure "call_resume_timeout")}
-      | otherwise = state
+expirePause :: MediaState -> MediaState -> MediaState
+expirePause previous state
+  | stateEpoch state == stateEpoch previous && statePaused state = state {mediaEnded = True, stateFailure = Just (failure "call_resume_timeout")}
+  | otherwise = state
 
 waitResume :: Entry -> Int -> IO (Result ())
 waitResume entry seconds = do
@@ -220,30 +219,38 @@ receiveFrom entry attachment = do
   state <- readTVarIO (entryState entry)
   packet <- race (readPacket (attachmentSocket attachment)) (atomically (waitDetached entry (attachmentSerial attachment)))
   latest <- readTVarIO (entryState entry)
-  let proceed
-        | mediaEnded latest || attachmentSerial (activeAttachment latest) /= attachmentSerial attachment = receive entry
-        | otherwise = either (readPaused entry state latest) (const (receive entry)) packet
-  proceed
+  let action
+        | mediaEnded latest || attachmentSerial (activeAttachment latest) /= attachmentSerial attachment = Right ReceiveNext
+        | otherwise = either (readPaused state latest) (const (Right ReceiveNext)) packet
+  either (pure . Left) perform action
+  where
+    perform ReceiveNext = receive entry
+    perform (AwaitResume epoch) = atomically (awaitEpoch entry epoch) >> receive entry
+    perform (DeliverAudio audio) = pure (Right audio)
+    perform (DeliverDigit digit) = do
+      callback <- readTVarIO (entryKeypad entry)
+      callback digit
+      receive entry
 
-readPaused :: Entry -> MediaState -> MediaState -> Result Packet -> IO (Result (Maybe ByteString))
-readPaused entry previous latest packet
-  | statePaused latest && disconnected packet = atomically (awaitEpoch entry (stateEpoch latest)) >> receive entry
-  | statePaused latest || stateEpoch previous /= stateEpoch latest = receive entry
-  | otherwise = handlePacket entry packet
+readPaused :: MediaState -> MediaState -> Result Packet -> Result PacketAction
+readPaused previous latest packet
+  | statePaused latest && disconnected packet = Right (AwaitResume (stateEpoch latest))
+  | statePaused latest || stateEpoch previous /= stateEpoch latest = Right ReceiveNext
+  | otherwise = handlePacket packet
 
 disconnected :: Result Packet -> Bool
 disconnected (Left _) = True
 disconnected (Right (Packet Hangup _)) = True
 disconnected _ = False
 
-handlePacket :: Entry -> Result Packet -> IO (Result (Maybe ByteString))
-handlePacket _ (Left problem)
-  | problem == failure "audiosocket_incomplete_read" = pure (Right Nothing)
-  | otherwise = pure (Left problem)
-handlePacket _ (Right (Packet Hangup _)) = pure (Right Nothing)
-handlePacket _ (Right (Packet Audio pcm)) = pure (Right (Just pcm))
-handlePacket entry (Right (Packet Dtmf digit)) = readTVarIO (entryKeypad entry) >>= (\callback -> callback digit >> receive entry)
-handlePacket _ (Right _) = pure (Left (failure "audiosocket_unexpected_packet"))
+handlePacket :: Result Packet -> Result PacketAction
+handlePacket (Left problem)
+  | problem == failure "audiosocket_incomplete_read" = Right (DeliverAudio Nothing)
+  | otherwise = Left problem
+handlePacket (Right (Packet Hangup _)) = Right (DeliverAudio Nothing)
+handlePacket (Right (Packet Audio pcm)) = Right (DeliverAudio (Just pcm))
+handlePacket (Right (Packet Dtmf digit)) = Right (DeliverDigit digit)
+handlePacket (Right _) = Left (failure "audiosocket_unexpected_packet")
 
 send :: Entry -> ByteString -> IO (Result AudioDelivery)
 send entry pcm = do

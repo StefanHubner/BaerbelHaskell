@@ -160,17 +160,13 @@ appendEvent message pending
 finish :: Pending -> Result [Message] -> IO ()
 finish pending result = void (tryPutMVar (pendingResult pending) result)
 
-notify :: AMIRules -> Requests -> Message -> IO ()
-notify rules requests message = modifyMVar_ requests update
-  where
-    identifier :: Text
-    identifier = field "ActionID" message
-    update :: Map Text Pending -> IO (Map Text Pending)
-    update pending = maybe (pure pending) (advancePending pending) (M.lookup identifier pending)
-    advancePending :: Map Text Pending -> Pending -> IO (Map Text Pending)
-    advancePending pending pendingRequest = case advance rules message pendingRequest of
-      ActionPending value -> pure (M.insert identifier value pending)
-      ActionFinished result -> finish pendingRequest result >> pure (M.delete identifier pending)
+notify :: AMIRules -> Message -> Map Text Pending -> (Map Text Pending, Maybe (Pending, Result [Message]))
+notify rules message pending = case M.lookup identifier pending of
+  Nothing -> (pending, Nothing)
+  Just requestValue -> case advance rules message requestValue of
+    ActionPending value -> (M.insert identifier value pending, Nothing)
+    ActionFinished result -> (M.delete identifier pending, Just (requestValue, result))
+  where identifier = field "ActionID" message
 
 disconnect :: Requests -> IO ()
 disconnect requests = modifyMVar_ requests clear
@@ -188,9 +184,14 @@ readEvents rules connection requests observe = loop `finally` closed
     receive :: Result Message -> IO ()
     receive (Left _) = pure ()
     receive (Right message) = do
-      notify rules requests message
+      modifyMVar_ requests (update message)
       unless (T.null (field "Event" message)) (observe message)
       loop
+    update :: Message -> Map Text Pending -> IO (Map Text Pending)
+    update message pending = do
+      let (updated, completed) = notify rules message pending
+      maybe (pure ()) (uncurry finish) completed
+      pure updated
     closed :: IO ()
     closed = disconnect requests >> observe (Message (M.singleton "Event" "AMIConnectionClosed") M.empty)
 

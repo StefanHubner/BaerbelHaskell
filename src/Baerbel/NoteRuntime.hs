@@ -60,8 +60,9 @@ createObserver cfg rules archive deliver report converter vad action = do
         "action" .= actionName, "state" .= phase, "error" .= code])
       effects = NoteEffects (snapshot state) (archiveRead archive) deliver reset freshIdentifier rejected
   (execute, pending, close) <- notes rules effects
-  let runtime = NoteRuntime execute pending (observeAudio cfg converter vad state) (observeEvent cfg state)
-  finally (action runtime) (closeObserver state >> close)
+  let event value = maybe (pure ()) (uncurry (addTranscript cfg state)) (observeEvent value)
+      runtime = NoteRuntime execute pending (observeAudio cfg converter vad state) event
+  finally (action runtime) (atomically (modifyTVar' state closeObserver) >> close)
 
 archiveRead :: Maybe Archive -> Double -> Double -> IO (Result BS.ByteString)
 archiveRead Nothing _ _ = pure (Left (failure "call_recording_unavailable"))
@@ -114,13 +115,13 @@ speechTransition gap now (Right True) current = current { observedQuiet = 0, obs
     started | observedQuiet current >= gap = now
             | otherwise = observedVoiceStart current
 
-observeEvent :: NoteObserverConfig -> TVar Observation -> Value -> IO ()
-observeEvent cfg state (Object fields)
+observeEvent :: Value -> Maybe (KM.KeyMap Value, Text)
+observeEvent (Object fields)
   | KM.lookup "type" fields == Just (String "session.input_transcript.delta") =
       case KM.lookup "delta" fields of
-        Just (String text) | not (T.null text) -> addTranscript cfg state fields text
-        _ -> pure ()
-observeEvent _ _ _ = pure ()
+        Just (String text) | not (T.null text) -> Just (fields, text)
+        _ -> Nothing
+observeEvent _ = Nothing
 
 addTranscript :: NoteObserverConfig -> TVar Observation -> KM.KeyMap Value -> Text -> IO ()
 addTranscript cfg state fields text = do
@@ -153,7 +154,6 @@ freshIdentifier :: IO Text
 freshIdentifier = textHex <$> UUID.nextRandom
   where textHex = T.filter (/= '-') . UUID.toText
 
-closeObserver :: TVar Observation -> IO ()
-closeObserver state = atomically (modifyTVar' state clear)
-  where clear current = current {observedClosed = True, observedPending = BS.empty,
-          observedFragments = Seq.empty, observedChars = 0}
+closeObserver :: Observation -> Observation
+closeObserver current = current {observedClosed = True, observedPending = BS.empty,
+  observedFragments = Seq.empty, observedChars = 0}

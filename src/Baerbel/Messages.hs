@@ -107,7 +107,10 @@ describeOutcome rules reason context fallback
 withMessages :: MessageRules -> Report -> SMS -> (Messages -> IO (Result a)) -> IO (Result a)
 withMessages rules report sender action = do
   state <- newTVarIO (State Map.empty Map.empty 0 False 0)
-  let service = Messages (begin rules state) finish (observe rules) (decide rules) known
+  let observe context delta = updateContext context (appendExcerpt rules delta)
+      decide context decision = updateContext context (decided rules decision)
+      name context value = updateContext context (known value)
+      service = Messages (begin rules state) (`updateContext` finish) observe decide name
         (submitMessage rules report sender state) (submitOutcome rules report sender state)
   finally (action service) (drain state)
 
@@ -145,12 +148,11 @@ chooseContexts limit contexts available
       key : _ -> Just (Map.delete key contexts)
       [] -> Nothing
 
-finish :: Context -> IO ()
-finish (Context _ value) = atomically (modifyTVar' value decrement)
-  where decrement current = current {contextActive = max 0 (contextActive current - 1)}
+updateContext :: Context -> (ScreeningContext -> ScreeningContext) -> IO ()
+updateContext (Context _ value) change = atomically (modifyTVar' value change)
 
-observe :: MessageRules -> Context -> Text -> IO ()
-observe rules (Context _ value) delta = atomically (modifyTVar' value (appendExcerpt rules delta))
+finish :: ScreeningContext -> ScreeningContext
+finish current = current {contextActive = max 0 (contextActive current - 1)}
 
 appendExcerpt :: MessageRules -> Text -> ScreeningContext -> ScreeningContext
 appendExcerpt rules delta current = current
@@ -160,9 +162,6 @@ appendExcerpt rules delta current = current
     allowed char = (ord char >= 32 || char == '\n' || char == '\t') && not (ord char >= 127 && ord char <= 159) && not (ord char >= 0xd800 && ord char <= 0xdfff)
     text = contextExcerpt current <> clean
     bound = messageExcerptChars rules
-
-decide :: MessageRules -> Context -> Decision -> IO ()
-decide rules (Context _ value) decision = atomically (modifyTVar' value (decided rules decision))
 
 decided :: MessageRules -> Decision -> ScreeningContext -> ScreeningContext
 decided _ (Forward reason name summary) = screenFacts "forward" reason name summary
@@ -183,9 +182,8 @@ screenFacts decision reason name summary current = current
       | Text.null provided = previous
       | otherwise = provided
 
-known :: Context -> Text -> IO ()
-known (Context _ value) name = atomically (modifyTVar' value update)
-  where update current = current {contextKnown = True, contextName = name, contextDecision = "forward"}
+known :: Text -> ScreeningContext -> ScreeningContext
+known name current = current {contextKnown = True, contextName = name, contextDecision = "forward"}
 
 submitMessage :: MessageRules -> Report -> SMS -> TVar State -> Text -> Text -> Text -> Text -> Maybe Text -> IO Receipt
 submitMessage rules report sender state ident call name body callback = submit rules (reported rules report ident (Just call) sender) state ident Message (ConstantText text)

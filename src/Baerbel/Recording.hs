@@ -309,12 +309,10 @@ readClip archive start end = either (pure . Left) readInterval (clipInterval sta
       now <- getMonotonicTimeNSec
       ready <- waitSamples archive (end + 0.2) (now + 5000000000)
       let bounds = ready >>= (`intervalBounds` interval)
-      either (pure . Left) (uncurry (readExcerpt (archiveFd archive))) bounds
+      either (pure . Left) (\(offset, size) -> readExcerpt size <$> pread (archiveFd archive) offset size) bounds
 
-readExcerpt :: Fd -> Int -> Int -> IO (Result ByteString)
-readExcerpt descriptor offset size = do
-  result <- pread descriptor offset size
-  pure (result >>= complete)
+readExcerpt :: Int -> Result ByteString -> Result ByteString
+readExcerpt size result = result >>= complete
   where
     complete :: ByteString -> Result ByteString
     complete bytes

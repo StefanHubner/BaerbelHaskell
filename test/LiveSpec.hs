@@ -54,6 +54,16 @@ advance = foldl step (Right (emptyToolState, []))
 
 spec :: Spec
 spec = do
+  describe "Announcement transcript updates" $ do
+    it "does not request a state write for unrelated or malformed events" $ do
+      let unrelated = object ["type" .= ("session.started" :: Text), "delta" .= ("ignored" :: Text)]
+          malformed = object ["type" .= ("session.output_transcript.delta" :: Text), "delta" .= (1 :: Int)]
+      map (fmap ($ "existing") . appendTranscript) [unrelated, malformed] `shouldBe` [Nothing, Nothing]
+    it "appends valid output while retaining the existing transcript bound" $ do
+      let eventValue = object ["type" .= ("session.output_transcript.delta" :: Text), "delta" .= ("new" :: Text)]
+          previous = T.replicate 2000 "x"
+          expected = T.replicate 1997 "x" <> "new"
+      fmap ($ previous) (appendTranscript eventValue) `shouldBe` Just expected
   describe "Live tool transactions" $ do
     it "does not execute a tool until its response completes" $ do
       let result = advance [created, callEvent "gmail_send" "{}"]

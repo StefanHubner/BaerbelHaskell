@@ -133,20 +133,19 @@ authorizationSpec = do
     withClient rules (checkLoopback rules groups False)
   it "retains existing credentials after declined loopback consent" $ withAuthRules $ \_ rules groups ->
     withClient rules (checkLoopback rules groups True)
-  it "exchanges exactly selected scopes with no implicit token retry" $ withAuthRules $ \_ rules groups -> do
+  it "builds an exchange request and validates selected scopes from the response" $ withAuthRules $ \_ rules groups -> do
     let scopes = Map.findWithDefault [] "gmail" groups
     withClient rules $ \client -> do
-      calls <- newMVar []
       let response = object ["scope" .= T.unwords scopes, "token_type" .= ("Bearer" :: Text),
             "access_token" .= ("access" :: Text), "refresh_token" .= ("refresh" :: Text), "expires_in" .= (3600 :: Int)]
-          send request = modifyMVar calls (\previous -> pure (request:previous, Right (Response 200 [] (BL.toStrict (encode response)))))
-          effects = AuthorizationEffects send (const (pure ())) (const (pure ())) (pure (UTCTime (fromGregorian 2026 1 1) 0))
-      result <- exchangeCode rules groups client scopes "code" "verifier" "http://127.0.0.1:8765/" effects
+          now = UTCTime (fromGregorian 2026 1 1) 0
+          wire value = Right (Response 200 [] (BL.toStrict (encode value)))
+          result = exchangeCode rules client scopes now (wire response)
+          request = codeRequest rules groups client scopes "code" "verifier" "http://127.0.0.1:8765/"
+          mismatched = field "scope" (String (T.unwords scopes <> " extra")) response
+      fmap requestMethod request `shouldBe` Right "POST"
       fmap (objectField "type") result `shouldBe` Right (String "authorized_user")
-      length <$> readMVar calls `shouldReturn` 1
-      let mismatched = field "scope" (String (T.unwords scopes <> " extra")) response
-          wrong = effects {authorizationSend = const (pure (Right (Response 200 [] (BL.toStrict (encode mismatched)))))}
-      exchangeCode rules groups client scopes "code" "verifier" "http://127.0.0.1:8765/" wrong `shouldReturn` Left (failure "authorization_scopes_mismatch")
+      exchangeCode rules client scopes now (wire mismatched) `shouldBe` Left (failure "authorization_scopes_mismatch")
 
 withClient :: AuthorizationRules -> (DesktopClient -> Expectation) -> Expectation
 withClient rules check = case clientDocument rules document of

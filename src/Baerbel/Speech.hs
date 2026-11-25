@@ -12,6 +12,7 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Bits ((.|.), shiftL, shiftR)
 import qualified Data.ByteString as BS
 import Data.Int (Int16)
+import Data.Word (Word8)
 import Data.Text (Text)
 import Foreign (FunPtr, Ptr, alloca, allocaArray, nullPtr, peek, peekArray, withArray)
 import Foreign.C.Types (CDouble(..), CFloat(..), CSize(..), CUInt(..))
@@ -78,31 +79,27 @@ resample converter bytes final = do
     Left err -> pure (Left err)
     Right (complete, rest) -> processChunk converter final complete rest
 
-preparePCM :: Bool -> Bool -> BS.ByteString -> BS.ByteString -> Result (BS.ByteString, BS.ByteString)
+preparePCM :: Bool -> Bool -> BS.ByteString -> BS.ByteString -> Result ([Int16], BS.ByteString)
 preparePCM done final pending bytes
   | done || (final && not (BS.null rest)) = Left (failure "invalid_pcm_stream")
-  | otherwise = Right (complete, rest)
+  | otherwise = Right (decodeSamples complete, rest)
   where
     combined = pending <> bytes
     size = BS.length combined - BS.length combined `mod` 2
     (complete, rest) = BS.splitAt size combined
 
-processChunk :: Resampler -> Bool -> BS.ByteString -> BS.ByteString -> IO (Result BS.ByteString)
-processChunk converter final complete rest = do
+processChunk :: Resampler -> Bool -> [Int16] -> BS.ByteString -> IO (Result BS.ByteString)
+processChunk converter final samples rest = do
   writeIORef (remainder converter) rest
-  first <- processPCM converter complete False
+  first <- case samples of
+    [] -> pure (Right BS.empty)
+    _ -> processBuffer converter samples False
   lastPCM <- flush
   writeIORef (finished converter) final
   pure ((<>) <$> first <*> lastPCM)
   where
-    flush | final = processPCM converter BS.empty True
+    flush | final = processBuffer converter [] True
           | otherwise = pure (Right BS.empty)
-
-processPCM :: Resampler -> BS.ByteString -> Bool -> IO (Result BS.ByteString)
-processPCM _ bytes False | BS.null bytes = pure (Right BS.empty)
-processPCM converter bytes final = case decodePCM bytes of
-  Left err -> pure (Left err)
-  Right samples -> processBuffer converter samples final
 
 processBuffer :: Resampler -> [Int16] -> Bool -> IO (Result BS.ByteString)
 processBuffer converter samples final = withArray floats processInput
@@ -113,24 +110,24 @@ processBuffer converter samples final = withArray floats processInput
     processInput input = allocaArray capacity (\output -> processSamples converter input output count capacity final)
 
 processSamples :: Resampler -> Ptr CFloat -> Ptr CFloat -> Int -> Int -> Bool -> IO (Result BS.ByteString)
-processSamples converter input output count capacity final = alloca $ \used ->
-  alloca (processAllocated converter input output count capacity final used)
-
-processAllocated :: Resampler -> Ptr CFloat -> Ptr CFloat -> Int -> Int -> Bool -> Ptr CSize -> Ptr CSize -> IO (Result BS.ByteString)
-processAllocated converter input output count capacity final used written = do
-  let source | final && count == 0 = nullPtr
-             | otherwise = input
-      inputCount = fromIntegral count
-      outputCount = fromIntegral capacity
+processSamples converter input output count capacity final = alloca $ \used -> alloca $ \written -> do
   err <- process converter (handle converter) source inputCount used output outputCount written
   consumed <- peek used
   produced <- peek written
   let producedCount = fromIntegral produced
   samples <- peekArray producedCount output
-  let pcm = encodePCM (map clipSample samples)
-      result | err /= nullPtr || consumed /= inputCount = Left (failure "audio_resampler_failed")
-             | otherwise = Right pcm
-  pure result
+  pure (processAllocated inputCount err consumed samples)
+  where
+    source | final && count == 0 = nullPtr
+           | otherwise = input
+    inputCount = fromIntegral count
+    outputCount = fromIntegral capacity
+
+processAllocated :: CSize -> CString -> CSize -> [CFloat] -> Result BS.ByteString
+processAllocated inputCount err consumed samples
+  | err /= nullPtr || consumed /= inputCount = Left (failure "audio_resampler_failed")
+  | otherwise = Right pcm
+  where pcm = encodePCM (map clipSample samples)
 
 clipSample :: CFloat -> Int16
 clipSample value = fromIntegral bounded
@@ -141,10 +138,14 @@ clipSample value = fromIntegral bounded
 decodePCM :: BS.ByteString -> Result [Int16]
 decodePCM bytes
   | odd (BS.length bytes) = Left (failure "incomplete_pcm_sample")
-  | otherwise = Right (pairs (BS.unpack bytes))
+  | otherwise = Right (decodeSamples bytes)
+
+decodeSamples :: BS.ByteString -> [Int16]
+decodeSamples = pairs . BS.unpack
   where
-    pairs (lo : hi : rest) = let sample = fromIntegral lo .|. shiftL (fromIntegral hi) 8
-                            in sample : pairs rest
+    pairs :: [Word8] -> [Int16]
+    pairs (lo : hi : rest) = sample : pairs rest
+      where sample = fromIntegral lo .|. shiftL (fromIntegral hi) 8
     pairs _ = []
 
 encodePCM :: [Int16] -> BS.ByteString

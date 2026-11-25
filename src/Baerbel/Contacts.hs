@@ -3,7 +3,7 @@
 module Baerbel.Contacts (contacts, candidate, Candidate(..), Phone(..), Person(..), Name(..), Number(..)) where
 
 import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Send)
+import Baerbel.HTTP (Request, Send)
 import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions, decodeValue)
 import Baerbel.ProviderConfig (ContactsRules(..))
 import Baerbel.Provider (Execute, clean, fetch, firstOr, get, textParam)
@@ -82,20 +82,21 @@ validNumber value = case Text.uncons value of
   Just ('+', digits) -> Text.length digits <= 15 && Text.length digits >= 2 && Text.all isDigit digits && not ("0" `Text.isPrefixOf` digits)
   _ -> False
 
-lookupContacts :: ContactsRules -> Send -> Text -> Int -> IO (Result Matches)
-lookupContacts rules send query limit = fetch "contacts_invalid_response" operation
+lookupContacts :: ContactsRules -> Text -> Int -> Request
+lookupContacts rules query limit = get (contactsHttp rules) (contactsEndpoint rules) params
   where
     pageSize = Text.pack (show limit)
     params = [textParam "query" query, textParam "pageSize" pageSize,
       textParam "readMask" "names,phoneNumbers", textParam "sources" "READ_SOURCE_TYPE_CONTACT"]
-    operation = get (contactsHttp rules) send (contactsEndpoint rules) params
 
 warm :: ContactsRules -> Send -> MVar Bool -> IO (Result ())
 warm rules send ready = modifyMVar ready operation
   where
     operation True = pure (True, Right ())
     operation False = do
-      result <- lookupContacts rules send "" 1
+      let request = lookupContacts rules "" 1
+      response <- send request
+      let result = fetch "contacts_invalid_response" response :: Result Matches
       case result of
         Left issue -> pure (False, Left issue)
         Right _ -> threadDelay delay >> pure (True, Right ())
@@ -109,8 +110,17 @@ contacts rules send = do
 execute :: ContactsRules -> Send -> MVar Bool -> Execute
 execute rules send ready name arguments _
   | name /= "contacts_search" = pure (Left (failure "contacts_unknown_tool"))
-  | otherwise = either (pure . Left) (search rules send ready) prepared
-  where prepared = decodeValue "contacts_invalid_arguments" arguments >>= prepareSearch rules
+  | otherwise = either (pure . Left) perform prepared
+  where
+    prepared = decodeValue "contacts_invalid_arguments" arguments >>= prepareSearch rules
+    perform query = do
+      warmed <- warm rules send ready
+      either (pure . Left) (const (retrieve query)) warmed
+    retrieve query = do
+      let requested = searchLimit query + 1
+          request = lookupContacts rules (searchText query) requested
+      response <- send request
+      pure (fmap (search rules query) (fetch "contacts_invalid_response" response))
 
 prepareSearch :: ContactsRules -> Query -> Result Search
 prepareSearch rules query
@@ -120,14 +130,8 @@ prepareSearch rules query
     text = Text.strip (queryQuery query)
     count = queryLimit query
 
-search :: ContactsRules -> Send -> MVar Bool -> Search -> IO (Result Value)
-search rules send ready query = do
-  warmed <- warm rules send ready
-  either (pure . Left) (const perform) warmed
-  where
-    count = searchLimit query
-    requested = count + 1
-    perform = fmap (fmap (toJSON . summarize rules count)) (lookupContacts rules send (searchText query) requested)
+search :: ContactsRules -> Search -> Matches -> Value
+search rules query = toJSON . summarize rules (searchLimit query)
 
 summarize :: ContactsRules -> Int -> Matches -> SearchResult
 summarize rules count response = SearchResult "ok" "google_contacts" found size more multiple scope True

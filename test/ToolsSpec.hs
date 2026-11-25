@@ -3,7 +3,7 @@ module ToolsSpec (spec) where
 import Baerbel.Cache (memoize)
 import Baerbel.Contacts (candidate)
 import Baerbel.Error (Result, failure)
-import Baerbel.Gmail (bodyText, gmail, summary)
+import Baerbel.Gmail (bodyText, gmail, summary, decodeSummaryHeaders)
 import Baerbel.HTTP (Request(..))
 import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
 import Baerbel.MapTypes (Point(..))
@@ -64,7 +64,9 @@ bodyGolden rules = goldenIO "gmail-bodies" operation
 
 summaryGolden :: GmailRules -> Expectation
 summaryGolden rules = goldenIO "gmail-summaries" operation
-  where operation value = either (pure . Left) (fmap (fmap toJSON) . summary rules) (decodeValue "message" value)
+  where
+    operation value = either (pure . Left) decodeSummary (decodeValue "message" value)
+    decodeSummary message = fmap (fmap toJSON . summary rules message) (decodeSummaryHeaders rules message)
 
 headingGolden :: RouteRules -> Expectation
 headingGolden rules = golden "route-headings" operation

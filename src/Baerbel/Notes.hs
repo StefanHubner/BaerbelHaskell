@@ -277,7 +277,7 @@ acceptDraft rules effects draft transcript current = case confirmDraft rules dra
 
 waitDelivery :: MVar Cell -> Async Value -> IO Reply
 waitDelivery cell worker = do
-  receipt <- wait worker `onException` cacheUnknown cell
+  receipt <- wait worker `onException` modifyMVar_ cell (pure . cacheUnknown)
   modifyMVar_ cell (pure . remember receipt)
   pure (Completed receipt)
 
@@ -292,9 +292,8 @@ sentReceipt :: Value -> Bool
 sentReceipt (Object fields) = KeyMap.lookup "result" fields == Just (String "sent")
 sentReceipt _ = False
 
-cacheUnknown :: MVar Cell -> IO ()
-cacheUnknown cell = modifyMVar_ cell update
-  where update current = pure current {cellState = (cellState current) {noteReceipt = Just unknownOutcome}}
+cacheUnknown :: Cell -> Cell
+cacheUnknown current = current {cellState = (cellState current) {noteReceipt = Just unknownOutcome}}
 
 deliver :: NoteRules -> NoteEffects -> Prepared -> IO Value
 deliver rules effects prepared = do
@@ -336,22 +335,25 @@ executeNote :: NoteRules -> NoteEffects -> MVar Cell -> Text -> Value -> IO (Res
 executeNote rules effects cell name arguments = do
   state <- cellState <$> readMVar cell
   reply <- either (pure . Rejected) run (validateRequest rules state name arguments)
-  finishReply rules effects cell name reply
+  case reply of
+    Completed value -> pure (Right value)
+    Rejected code -> do
+      transcript <- noteSnapshot effects
+      current <- readState cell transcript
+      let (action, phase, value) = finishReply rules name code transcript current
+      noteReport effects action phase code
+      pure (Right value)
   where
     run (Start phrase) = start rules effects cell phrase
     run (Send phrase) = send rules effects cell phrase
     run Cancel = cancel effects cell
 
-finishReply :: NoteRules -> NoteEffects -> MVar Cell -> Text -> Reply -> IO (Result Value)
-finishReply _ _ _ _ (Completed value) = pure (Right value)
-finishReply rules effects cell name (Rejected code) = do
-  transcript <- noteSnapshot effects
-  state <- readState cell transcript
-  let action | name `elem` ["owner_note_start", "owner_note_send", "owner_note_cancel"] = Text.drop 11 name
-             | otherwise = "unknown"
-      phase = Text.toLower (Text.pack (show (notePhase state)))
-  noteReport effects action phase code
-  pure (Right (rejection rules code transcript state))
+finishReply :: NoteRules -> Text -> Text -> Transcript -> NoteState -> (Text, Text, Value)
+finishReply rules name code transcript state = (action, phase, rejection rules code transcript state)
+  where
+    action | name `elem` ["owner_note_start", "owner_note_send", "owner_note_cancel"] = Text.drop 11 name
+           | otherwise = "unknown"
+    phase = Text.toLower (Text.pack (show (notePhase state)))
 
 rejection :: NoteRules -> Text -> Transcript -> NoteState -> Value
 rejection rules code transcript state = object (base <> instruction <> observed)

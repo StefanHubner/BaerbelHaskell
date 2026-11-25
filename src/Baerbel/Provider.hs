@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Provider
-  ( Execute, Durable, Existing, Nullable(..), renamedOptions, referenceSize, referenceByteSize, truthy, optionalField, checked, get, post, fetch, boundedMap, textParam
+  ( Execute, Durable, Existing, Nullable(..), renamedOptions, referenceSize, referenceByteSize, truthy, optionalField, get, post, fetch, boundedMap, textParam
   , clean, firstOr, limitJson, combine ) where
 
 import Baerbel.ProviderConfig (HttpPolicy(..))
 import Baerbel.Error (Result)
-import Baerbel.HTTP (Body(..), Request(..), Send)
+import Baerbel.HTTP (Body(..), Request(..))
 import Baerbel.JSON (decodeValue, jsonOptions)
 import Control.Concurrent (newQSem, signalQSem, waitQSem)
 import Control.Concurrent.Async (mapConcurrently)
@@ -70,22 +70,15 @@ escapedLength char
   | ord char < 32 = 6
   | otherwise = 1
 
-checked :: FromJSON a => Text -> (a -> IO (Result Value)) -> Value -> IO (Result Value)
-checked code operation value = either (pure . Left) operation parsed
-  where parsed = decodeValue code value
+get :: HttpPolicy -> Text -> [(ByteString, Maybe ByteString)] -> Request
+get policy url query = Request "GET" url [] query EmptyBody (httpResponseBytes policy) (httpTimeoutSeconds policy)
 
-get :: HttpPolicy -> Send -> Text -> [(ByteString, Maybe ByteString)] -> IO (Result Value)
-get policy send url query = send request
-  where request = Request "GET" url [] query EmptyBody (httpResponseBytes policy) (httpTimeoutSeconds policy)
+post :: ToJSON a => HttpPolicy -> Text -> [(ByteString, Maybe ByteString)] -> a -> Request
+post policy url query body = Request "POST" url [] query (JsonBody resource) (httpResponseBytes policy) (httpTimeoutSeconds policy)
+  where resource = toJSON body
 
-post :: ToJSON a => HttpPolicy -> Send -> Text -> [(ByteString, Maybe ByteString)] -> a -> IO (Result Value)
-post policy send url query body = send request
-  where
-    resource = toJSON body
-    request = Request "POST" url [] query (JsonBody resource) (httpResponseBytes policy) (httpTimeoutSeconds policy)
-
-fetch :: FromJSON a => Text -> IO (Result Value) -> IO (Result a)
-fetch code = fmap (>>= decodeValue code)
+fetch :: FromJSON a => Text -> Result Value -> Result a
+fetch code result = result >>= decodeValue code
 
 boundedMap :: Int -> (a -> IO b) -> [a] -> IO [b]
 boundedMap concurrency operation items = do

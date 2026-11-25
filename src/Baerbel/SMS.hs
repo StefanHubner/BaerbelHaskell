@@ -121,14 +121,16 @@ reserveSMS connection ident body kind = withTransaction connection reserve
     | otherwise = previous
   previous = do
     rows <- query connection "SELECT status, kind, fallback FROM sms_sends WHERE request_id=?" (Only ident)
-    resumeReservation connection ident digest kind rows
+    let delivery = resumeReservation kind rows
+    case delivery of
+      Nothing -> execute connection "UPDATE sms_sends SET status='uncertain', kind='outcome', fallback=1, fingerprint=? WHERE request_id=?" (digest, ident)
+      Just _ -> pure ()
+    pure delivery
 
-resumeReservation :: Connection -> Text -> Text -> Kind -> [(Text, Text, Int)] -> IO (Maybe Delivery)
-resumeReservation connection ident digest Outcome [("failed", "message", 0)] = do
-  execute connection "UPDATE sms_sends SET status='uncertain', kind='outcome', fallback=1, fingerprint=? WHERE request_id=?" (digest, ident)
-  pure Nothing
-resumeReservation _ _ _ _ ((status, _, _) : _) = pure (Just (parseDelivery status))
-resumeReservation _ _ _ _ [] = pure (Just Uncertain)
+resumeReservation :: Kind -> [(Text, Text, Int)] -> Maybe Delivery
+resumeReservation Outcome [("failed", "message", 0)] = Nothing
+resumeReservation _ ((status, _, _) : _) = Just (parseDelivery status)
+resumeReservation _ [] = Just Uncertain
 
 rememberSMS :: Connection -> Text -> Delivery -> IO ()
 rememberSMS connection ident status = execute connection "UPDATE sms_sends SET status=? WHERE request_id=?" (deliveryText status, ident)

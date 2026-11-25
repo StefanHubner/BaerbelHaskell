@@ -164,9 +164,9 @@
 <title>pure</title>
 <path fill="#ffffff" stroke="#527fa5" stroke-width="2" d="M969.5,-638.5C969.5,-638.5 604.5,-638.5 604.5,-638.5 598.5,-638.5 592.5,-632.5 592.5,-626.5 592.5,-626.5 592.5,-553.5 592.5,-553.5 592.5,-547.5 598.5,-541.5 604.5,-541.5 604.5,-541.5 969.5,-541.5 969.5,-541.5 975.5,-541.5 981.5,-547.5 981.5,-553.5 981.5,-553.5 981.5,-626.5 981.5,-626.5 981.5,-632.5 975.5,-638.5 969.5,-638.5"/>
 <text text-anchor="middle" x="787" y="-612" font-family="DejaVu Sans" font-size="15.00">Pure decisions and typed data</text>
-<text text-anchor="middle" x="787" y="-595" font-family="DejaVu Sans" font-size="15.00">Typed commands · call transitions · routing</text>
-<text text-anchor="middle" x="787" y="-578" font-family="DejaVu Sans" font-size="15.00">Transcript selection · protocol reduction</text>
-<text text-anchor="middle" x="787" y="-561" font-family="DejaVu Sans" font-size="15.00">JSON codecs · provider normalization</text>
+<text text-anchor="middle" x="787" y="-595" font-family="DejaVu Sans" font-size="15.00">Requests · decoding · pagination · routing</text>
+<text text-anchor="middle" x="787" y="-578" font-family="DejaVu Sans" font-size="15.00">Transcripts · histories · call transitions</text>
+<text text-anchor="middle" x="787" y="-561" font-family="DejaVu Sans" font-size="15.00">Token results · receipts · profile values</text>
 </g>
 <!-- live -->
 <g id="node9" class="node">
@@ -196,8 +196,8 @@
 <g id="node12" class="node">
 <title>effects</title>
 <path fill="#eaf2ed" stroke="#728397" stroke-width="1.4" d="M1016,-291.5C1016,-291.5 558,-291.5 558,-291.5 552,-291.5 546,-285.5 546,-279.5 546,-279.5 546,-230.5 546,-230.5 546,-224.5 552,-218.5 558,-218.5 558,-218.5 1016,-218.5 1016,-218.5 1022,-218.5 1028,-224.5 1028,-230.5 1028,-230.5 1028,-279.5 1028,-279.5 1028,-285.5 1022,-291.5 1016,-291.5"/>
-<text text-anchor="middle" x="787" y="-268.5" font-family="DejaVu Sans" font-size="15.00">Small effect interpreters</text>
-<text text-anchor="middle" x="787" y="-251.5" font-family="DejaVu Sans" font-size="15.00">Bounded HTTP / WebSocket · OAuth refresh</text>
+<text text-anchor="middle" x="787" y="-268.5" font-family="DejaVu Sans" font-size="15.00">Effect coordinators</text>
+<text text-anchor="middle" x="787" y="-251.5" font-family="DejaVu Sans" font-size="15.00">HTTP / WebSocket / AMI · clocks / state</text>
 <text text-anchor="middle" x="787" y="-234.5" font-family="DejaVu Sans" font-size="15.00">Audio / VAD / resampling · files / SQLite / logs</text>
 </g>
 <!-- state -->

@@ -2,7 +2,7 @@
 module Baerbel.Authorize
   ( AuthorizationRules(..), AuthorizationOptions(..), AuthorizationEffects(..), DesktopClient
   , ScopeGroups, Callback(..), selectedScopes, readClient, clientDocument, callbackResult, pkceChallenge
-  , authorizationURL, exchangeCode, prepareTokenPath, authorize, parseOptions
+  , authorizationURL, codeRequest, exchangeCode, prepareTokenPath, authorize, parseOptions
   ) where
 
 import Baerbel.Error (Result, failure, ioResult)
@@ -175,13 +175,8 @@ codeRequest rules groups client scopes code verifier redirect
       [("client_id", desktopId client), ("client_secret", desktopSecret client), ("code", code),
        ("code_verifier", verifier), ("redirect_uri", redirect), ("grant_type", "authorization_code")])
 
-exchangeCode :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> Text -> AuthorizationEffects -> IO (Result Value)
-exchangeCode rules groups client scopes code verifier redirect effects = case codeRequest rules groups client scopes code verifier redirect of
-  Left issue -> pure (Left issue)
-  Right request -> do
-    response <- authorizationSend effects request
-    now <- authorizationClock effects
-    pure (response >>= checkedResponse >>= tokenDocument rules client scopes now)
+exchangeCode :: AuthorizationRules -> DesktopClient -> [Text] -> UTCTime -> Result Response -> Result Value
+exchangeCode rules client scopes now response = response >>= checkedResponse >>= tokenDocument rules client scopes now
 
 checkedResponse :: Response -> Result Value
 checkedResponse response
@@ -348,10 +343,14 @@ consentResult (Just (Left ())) = Left (failure "authorization_callback_stopped")
 consentResult (Just (Right received)) = received
 
 exchangeAndSave :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> AuthorizationEffects -> FilePath -> Text -> IO (Result ())
-exchangeAndSave rules groups client scopes verifier redirect effects path code = do
-  token <- exchangeCode rules groups client scopes code verifier redirect effects
-  either (pure . Left) save token
+exchangeAndSave rules groups client scopes verifier redirect effects path code = case prepared of
+  Left issue -> pure (Left issue)
+  Right request -> do
+    response <- authorizationSend effects request
+    now <- authorizationClock effects
+    either (pure . Left) save (exchangeCode rules client scopes now response)
   where
+    prepared = codeRequest rules groups client scopes code verifier redirect
     save :: Value -> IO (Result ())
     save token = do
       checked <- prepareTokenPath path

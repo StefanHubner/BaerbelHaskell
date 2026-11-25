@@ -111,11 +111,8 @@ geocodeRequest rules query = Request "GET" (mapsGeocodeUrl rules) [] params Empt
   where
     params = [textParam "address" query, textParam "language" (mapsLanguage rules), textParam "region" (mapsGeocodeRegion rules)]
 
-geocode :: MapsRules -> Send -> Text -> IO (Result [Geocode])
-geocode rules send query = fmap (fmap (fromMaybe [] . geoResults)) response
-  where
-    request = geocodeRequest rules query
-    response = fetch "maps_invalid_place_response" (send request)
+geocode :: Result Value -> Result [Geocode]
+geocode response = fmap (fromMaybe [] . geoResults) (fetch "maps_invalid_place_response" response)
 
 areaBias :: MapsRules -> Geocode -> Bias
 areaBias rules geo = case geometryViewport geometry of
@@ -208,7 +205,8 @@ lookupArea rules redact send state text = do
   case Map.lookup key (fst (storedAreas current)) of
     Just value -> pure (Right (ResolvedArea value))
     Nothing -> do
-      response <- geocode rules send text
+      let request = geocodeRequest rules text
+      response <- fmap geocode (send request)
       either (pure . Left) remember (response >>= resolveArea rules redact)
   where
     key = Text.toCaseFold text
@@ -247,11 +245,12 @@ searchArea rules _ _ _ _ (AreaChoices candidates) = pure (Right (toJSON result))
   where result = NeedsContext "error" "needs_context" (mapsAreaPrompt rules) (Just candidates)
 searchArea rules redact send places query (ResolvedArea area) = do
   let request = searchRequest rules query area
-  response <- fetch "maps_invalid_place_response" (send request)
+  response <- fmap (fetch "maps_invalid_place_response") (send request)
   either (pure . Left) resolve (response >>= placeCandidates rules redact)
   where
     resolve Nothing = do
-      fallback <- geocode rules send query
+      let request = geocodeRequest rules query
+      fallback <- fmap geocode (send request)
       either (pure . Left) save (fallback >>= geocodeCandidates rules redact)
     resolve (Just candidates) = save candidates
     save = savePlaces rules redact places area
@@ -281,12 +280,6 @@ findResult rules redact area more candidates = FindResult "ok" candidates count 
     count = length candidates
     address = Text.take (mapsAddressChars rules) (redact (geoFormattedAddress area))
 
-placeDetails :: MapsRules -> (Text -> Text) -> Send -> IO UTCTime -> Text -> Place -> IO (Result Value)
-placeDetails rules redact send clock reference place = do
-  let request = detailsRequest rules place
-  response <- fetch "maps_invalid_place_response" (send request)
-  now <- clock
-  pure (response >>= normalizeDetails rules redact now reference place)
 
 detailsRequest :: MapsRules -> Place -> Request
 detailsRequest rules place = Request "GET" url [("X-Goog-FieldMask", fields)] params EmptyBody (mapsHttpBytes rules) (mapsHttpTimeout rules)
@@ -296,8 +289,8 @@ detailsRequest rules place = Request "GET" url [("X-Goog-FieldMask", fields)] pa
     fields = Text.encodeUtf8 (mapsDetailsFields rules)
     params = [textParam "languageCode" (mapsLanguage rules), textParam "regionCode" (mapsPlacesRegion rules)]
 
-normalizeDetails :: MapsRules -> (Text -> Text) -> UTCTime -> Text -> Place -> DetailResponse -> Result Value
-normalizeDetails rules redact now reference place value
+placeDetails :: MapsRules -> (Text -> Text) -> UTCTime -> Text -> Place -> DetailResponse -> Result Value
+placeDetails rules redact now reference place value
   | detailId value /= placeId place = Left (failure "maps_place_details_mismatch")
   | otherwise = do
     offset <- traverse (decodeOffset rules) (detailUtcOffsetMinutes value)
@@ -347,14 +340,19 @@ maps rules routeRules redact send elevation clock = do
 
 execute :: MapsRules -> RouteRules -> (Text -> Text) -> Send -> Bool -> IO UTCTime -> Places -> Execute
 execute rules routeRules redact send elevation clock places name arguments _ = case name of
-  "maps_find_place" -> checked "maps_invalid_arguments" (findPlace rules redact send places) arguments
-  "maps_place_details" -> checked "maps_invalid_arguments" details arguments
-  "maps_route" -> checked "maps_invalid_arguments" directions arguments
+  "maps_find_place" -> either (pure . Left) (findPlace rules redact send places) (decodeValue "maps_invalid_arguments" arguments)
+  "maps_place_details" -> either (pure . Left) details (decodeValue "maps_invalid_arguments" arguments)
+  "maps_route" -> either (pure . Left) directions (decodeValue "maps_invalid_arguments" arguments)
   _ -> pure (Left (failure "maps_unsupported_tool"))
   where
     details args = do
       known <- fmap (fst . storedPlaces) (readMVar places)
-      maybe (pure (Left (failure "maps_unknown_place_reference"))) (placeDetails rules redact send clock (detailsPlaceRef args)) (Map.lookup (detailsPlaceRef args) known)
+      maybe (pure (Left (failure "maps_unknown_place_reference"))) (retrieve (detailsPlaceRef args)) (Map.lookup (detailsPlaceRef args) known)
+    retrieve reference place = do
+      let request = detailsRequest rules place
+      response <- send request
+      now <- clock
+      pure (fetch "maps_invalid_place_response" response >>= placeDetails rules redact now reference place)
     directions args = do
       known <- fmap (fst . storedPlaces) (readMVar places)
       let origin = Map.lookup (routeOriginRef args) known

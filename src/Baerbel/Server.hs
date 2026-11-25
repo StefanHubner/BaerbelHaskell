@@ -39,11 +39,9 @@ serve cfg = withSocketsDo (raceWorkers listeners)
 
 identified :: SocketRules -> CallHandler -> Socket -> IO (Result ())
 identified rules handler client = do
-  result <- timeout (socketIdentityMicros rules) (readCallId client)
-  case result of
-    Nothing -> pure (Left (failure "audiosocket_identity_timeout"))
-    Just (Left err) -> pure (Left err)
-    Just (Right ident) -> handler ident client
+  result <- timeout (socketIdentityMicros rules) (readPacket client)
+  let identity = maybe (Left (failure "audiosocket_identity_timeout")) (>>= readCallId) result
+  either (pure . Left) (`handler` client) identity
 
 runListener :: ServerConfig -> ServiceName -> (Socket -> IO (Result ())) -> IO (Result ())
 runListener cfg port handler = do

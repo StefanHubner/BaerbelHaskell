@@ -39,7 +39,7 @@ The shared HTTP manager disables automatic request replay and environment proxie
 
 ## Shared functionality
 
-- `HTTP` owns TLS managers, authentication headers, JSON/form bodies, response bounds and mutation uncertainty; `Provider` supplies common request and bounded-concurrency functions.
+- `HTTP` owns TLS managers, authentication headers, JSON/form bodies, response bounds and mutation uncertainty; `Provider.get` and `Provider.post` construct requests purely, `Provider.fetch` decodes an already fetched result, and `boundedMap` runs bounded concurrent effects.
 - `JSON` derives typed record codecs and centralizes strict argument parsing. Protocol envelopes remain in the protocol/runtime boundary; provider modules describe typed data.
 - `Cache` supplies successful-once and bounded memoization functions. Credentials are cached at account scope; provider references and owner addresses are cached at call scope.
 - `Storage` owns private-file and atomic-write mechanics. `Ledger` is reused by Gmail, Calendar and owner notes; `SMS` retains its distinct existing receipt schema.
@@ -47,7 +47,9 @@ The shared HTTP manager disables automatic request replay and environment proxie
 
 Tool payloads are decoded at their input boundary into typed commands and prepared requests. Calendar dates, Maps requests, Windguru windows and recording intervals are prepared once and reused by the effectful steps. Help is a pure value computed when the call's available tools are assembled; it has no internal tool-name or unused-argument checks. Internal direct-call modes, hangup reasons and end-call reasons are algebraic data types.
 
-Pure functions now handle audio framing, stream preparation, transcript reduction, PIN state transitions, message admission, cursor positions and reconnect outcomes. The surrounding I/O functions read the required state, execute the selected operation and commit the result. Generic codecs and shared result constructors handle routine JSON envelopes.
+Pure functions handle audio framing, stream preparation, transcript reduction, PIN state transitions, message admission, cursor positions and reconnect outcomes. HTTP URL preparation and response projection are pure too. OAuth refresh and consent responses are validated and projected using explicitly supplied timestamps; their coordinators retain the original request/clock order. Provider results, Calendar pagination cursors, conversation history and note rejection replies are computed from explicit values. AudioSocket identity extraction and managed-media packet decisions consume already read packets. SMS retry decisions consume database rows inside the existing transaction; profile projections consume typed snapshots.
+
+The surrounding I/O coordinators fetch data, read clocks/state and commit the selected changes. Transcript transformations indicate when no update is needed, so unrelated events do not write shared state or wake waiters. Generic codecs and shared result constructors handle routine JSON envelopes.
 
 Functional state transitions return new values and decisions. Their small I/O callers commit the state or execute the selected operation. Library exceptions are converted to typed failures at operational boundaries; asynchronous cancellation retains its resource-cleanup meaning.
 

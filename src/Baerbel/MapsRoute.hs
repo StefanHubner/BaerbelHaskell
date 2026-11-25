@@ -347,17 +347,8 @@ elevationRequest rules samples = Request "GET" (routeElevationUrl rules) [] para
     locations = Text.intercalate "|" (map coordinate samples)
     params = [textParam "locations" locations]
 
-terrain :: RouteRules -> Send -> Path -> IO (Terrain, [DetailedStep])
-terrain rules send path = case planTerrain rules path of
-  TerrainUnavailable reason -> pure (unavailable reason, pathSteps path)
-  TerrainSamples samples positions spacing -> do
-    let request = elevationRequest rules samples
-        durationMicros = routeElevationTimeout rules * 1000000
-    response <- timeout durationMicros (fetch "invalid_elevation_response" (send request))
-    pure (terrainResult rules path samples positions spacing response)
-
-terrainResult :: RouteRules -> Path -> [Point] -> [Double] -> Double -> Maybe (Result Elevations) -> (Terrain, [DetailedStep])
-terrainResult rules path samples positions spacing response = case response of
+terrain :: RouteRules -> Path -> [Point] -> [Double] -> Double -> Maybe (Result Elevations) -> (Terrain, [DetailedStep])
+terrain rules path samples positions spacing response = case response of
   Nothing -> missing "elevation_timeout"
   Just (Left issue) -> missing (failureCode issue)
   Just (Right value) -> either missing finish (elevationValues rules samples spacing value)
@@ -420,12 +411,21 @@ route :: RouteRules -> Send -> Bool -> Place -> Place -> IO (Result Value)
 route rules send elevation origin destination = case routeRequest rules origin destination of
   Left issue -> pure (Left issue)
   Right request -> do
-    response <- fetch "maps_invalid_route_response" (send request)
-    either (pure . Left) (completeRoute rules send elevation) (response >>= normalize rules origin destination)
-
-completeRoute :: RouteRules -> Send -> Bool -> (RouteResult, Path) -> IO (Result Value)
-completeRoute rules _ False (value, _) = pure (finishRoute rules value (unavailable "not_enabled", resultSteps value))
-completeRoute rules send True (value, path) = fmap (finishRoute rules value) (terrain rules send path)
+    response <- send request
+    let normalized = fetch "maps_invalid_route_response" response >>= normalize rules origin destination
+    either (pure . Left) complete normalized
+  where
+    complete (value, path)
+      | not elevation = pure (finishRoute rules value (unavailable "not_enabled", resultSteps value))
+      | otherwise = case planTerrain rules path of
+        TerrainUnavailable reason -> pure (finishRoute rules value (unavailable reason, pathSteps path))
+        TerrainSamples samples positions spacing -> survey value path samples positions spacing
+    survey value path samples positions spacing = do
+      let request = elevationRequest rules samples
+          durationMicros = routeElevationTimeout rules * 1000000
+      response <- timeout durationMicros (fmap (fetch "invalid_elevation_response") (send request))
+      let ground = terrain rules path samples positions spacing response
+      pure (finishRoute rules value ground)
 
 finishRoute :: RouteRules -> RouteResult -> (Terrain, [DetailedStep]) -> Result Value
 finishRoute rules value (ground, steps) = toJSON <$> routeBudget rules result

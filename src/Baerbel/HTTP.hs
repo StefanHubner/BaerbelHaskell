@@ -72,7 +72,9 @@ sendWith mutation manager spec = withResponse uncertain manager spec consumeJSON
   mark err = err {failureUncertain = uncertain}
 
 rawSend :: HTTP.Manager -> RawSend
-rawSend manager spec = withResponse True manager spec (readResponse spec)
+rawSend manager spec = withResponse True manager spec readRaw
+  where
+  readRaw response = readResponse response <$> readBounded (requestLimit spec) (HTTP.responseBody response)
 
 streamSend :: HTTP.Manager -> StreamSend
 streamSend manager spec sink = withResponse False manager spec consumeResponse
@@ -82,21 +84,23 @@ streamSend manager spec sink = withResponse False manager spec consumeResponse
     Right () -> consume (\() chunk -> sink chunk) () (requestLimit spec) (HTTP.responseBody response)
 
 withResponse :: Bool -> HTTP.Manager -> Request -> (HTTP.Response HTTP.BodyReader -> IO (Result a)) -> IO (Result a)
-withResponse uncertain manager spec consumeResponse = do
-  outcome <- try exchange
-  pure (either (transport uncertain) id outcome)
+withResponse uncertain manager spec consumeResponse = either (pure . Left) exchange (prepare spec)
   where
-  exchange = do
-    parsed <- HTTP.parseRequest (Text.unpack (requestUrl spec))
-    let request = prepare spec parsed
-    HTTP.withResponse request manager consumeResponse
+  exchange request = do
+    outcome <- try (HTTP.withResponse request manager consumeResponse)
+    pure (either (transport uncertain) id outcome)
 
 transport :: Bool -> HTTP.HttpException -> Result a
 transport _ (HTTP.InvalidUrlException _ _) = Left (failure "connection_failed")
 transport uncertain _ = Left (Failure "connection_failed" uncertain)
 
-prepare :: Request -> HTTP.Request -> HTTP.Request
-prepare spec parsed = withBody (requestBody spec) configured
+prepare :: Request -> Result HTTP.Request
+prepare spec = maybe (Left (failure "connection_failed")) (Right . configure spec) parsed
+  where
+  parsed = HTTP.parseRequest (Text.unpack (requestUrl spec)) :: Maybe HTTP.Request
+
+configure :: Request -> HTTP.Request -> HTTP.Request
+configure spec parsed = withBody (requestBody spec) configured
   where
   micros = requestTimeout spec * 1000000
   configured = HTTP.setQueryString (requestQuery spec) parsed
@@ -116,12 +120,11 @@ withBody (JsonBody value) request = request
   , HTTP.requestHeaders = ("Content-Type", "application/json") : HTTP.requestHeaders request
   }
 
-readResponse :: Request -> HTTP.Response HTTP.BodyReader -> IO (Result Response)
-readResponse spec response = fmap (Response status headers <$>) body
+readResponse :: HTTP.Response a -> Result ByteString -> Result Response
+readResponse response body = Response status headers <$> body
   where
   status = statusCode (HTTP.responseStatus response)
   headers = map (first CI.original) (HTTP.responseHeaders response)
-  body = readBounded (requestLimit spec) (HTTP.responseBody response)
 
 responseStatusResult :: (Int -> Bool) -> Int -> Result ()
 responseStatusResult mutation status

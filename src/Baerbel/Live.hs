@@ -2,7 +2,7 @@
 module Baerbel.Live
   ( LiveConfig(..), Media(..), AudioDelivery(..), LiveControls(..), ToolLimits(..), ToolCall(..), ToolBatch(..)
   , ToolState, emptyToolState, stepTools, rememberOutput, cachedOutput
-  , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable
+  , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript
   ) where
 
 import Baerbel.AudioMetrics (AudioDelivery(..), AudioMetrics, AudioNotice, emptyMetrics, recordInputFrame, recordQueueDepth, recordDelivery, noticeValue, summaryValue)
@@ -238,7 +238,9 @@ startSession :: LiveConfig -> Execute -> Media -> Word64 -> TBQueue InputFrame -
 startSession cfg execute transport startedAt input started conn = do
   runtime <- newRuntime cfg transport startedAt input started conn
   installControls transport (controls runtime)
-  finally (beginSession runtime execute) (reportClosed runtime)
+  let closed = closedEvent startedAt <$> getMonotonicTimeNSec <*> readTVarIO (finalStatus runtime)
+      closing = closed >>= observeEvent transport
+  finally (beginSession runtime execute) closing
 
 newRuntime :: LiveConfig -> Media -> Word64 -> TBQueue InputFrame -> TVar Bool -> WS.Connection -> IO Runtime
 newRuntime cfg transport startedAt input started conn = do
@@ -280,7 +282,10 @@ observeStarted :: Runtime -> Value -> IO (Result ())
 observeStarted runtime event = case textField "type" event of
   Just "session.started" -> do
     atomically (writeTVar (ready runtime) True)
-    reportStarted runtime
+    now <- getMonotonicTimeNSec
+    let session = liveSession (config runtime)
+        started = startedEvent session (runtimeStart runtime) now
+    observeEvent (media runtime) started
     pure (Right ())
   Just "error" -> pure (Left (failure "live_setup_rejected"))
   Just "session.closed" -> pure (Left (failure "live_closed_before_start"))
@@ -420,7 +425,8 @@ receiveOutput runtime converter pending epoch = do
           rest | current /= epoch = BS.empty
                | otherwise = pending
       reset <- resetOutput
-      trackInterruption runtime event
+      atomically (readTVar (preview runtime) >>= \active ->
+        when (trackInterruption active event) (writeTVar (interrupted runtime) True))
       trackBackground runtime event
       either (pure . Left) (const (dispatchEvent runtime converter rest current event)) reset
 
@@ -622,17 +628,13 @@ sendEvent runtime event = withMVar (writeLock runtime) $ \() -> do
   pure $ maybe (Left (failure "live_write_timeout")) Right result
 
 controls :: Runtime -> LiveControls
-controls runtime = LiveControls (runPreview runtime) (pendingTools runtime) stop
+controls runtime = LiveControls (runPreview runtime) pending stop
   where
+    pending ownId = pendingTools ownId <$> readTVarIO (toolState runtime)
     stop = atomically (writeTVar (stopping runtime) True)
 
-pendingTools :: Runtime -> Text -> IO Bool
-pendingTools runtime ownId = do
-  state <- readTVarIO (toolState runtime)
-  pure (toolsPending ownId state)
-
-toolsPending :: Text -> ToolState -> Bool
-toolsPending ownId state = not (Map.null (batches state)) || any pending (Map.keys (knownCalls state))
+pendingTools :: Text -> ToolState -> Bool
+pendingTools ownId state = not (Map.null (batches state)) || any pending (Map.keys (knownCalls state))
   where pending ident = ident /= ownId && Map.notMember ident (outputs state)
 
 waitStopped :: Runtime -> IO (Result ())
@@ -641,12 +643,11 @@ waitStopped runtime = atomically $ do
   check stopped
   pure (Right ())
 
-trackInterruption :: Runtime -> Value -> IO ()
-trackInterruption runtime event = atomically $ do
-  active <- readTVar (preview runtime)
-  let input = textField "type" event == Just "session.input_transcript.delta"
-      spoken = maybe False (not . T.null . T.strip) (textField "delta" event)
-  unless (not active || not input || not spoken) (writeTVar (interrupted runtime) True)
+trackInterruption :: Bool -> Value -> Bool
+trackInterruption active event = active && input && spoken
+  where
+    input = textField "type" event == Just "session.input_transcript.delta"
+    spoken = maybe False (not . T.null . T.strip) (textField "delta" event)
 
 runPreview :: Runtime -> LiveConfig -> Text -> Int -> Bool -> IO (Result Bool)
 runPreview runtime cfg completion quietMicros interruptible = do
@@ -686,7 +687,7 @@ previewMedia runtime transcript = Media
   { receiveAudio = atomically retry
   , sendAudio = previewAudio runtime
   , finishCall = pure (Right ())
-  , observeEvent = previewTranscript transcript
+  , observeEvent = mapM_ (atomically . modifyTVar' transcript) . appendTranscript
   , muteInput = pure True
   , beforeTool = \_ _ -> pure (Left (failure "announcement_has_no_tools"))
   , installControls = const (pure ())
@@ -705,10 +706,10 @@ previewAudio runtime bytes = do
              | otherwise = Left (failure "live_output_overflow")
   pure result
 
-previewTranscript :: TVar Text -> Value -> IO ()
-previewTranscript transcript event = case (textField "type" event, textField "delta" event) of
-  (Just "session.output_transcript.delta", Just delta) -> atomically (modifyTVar' transcript (T.takeEnd 2000 . (<> delta)))
-  _ -> pure ()
+appendTranscript :: Value -> Maybe (Text -> Text)
+appendTranscript event = case (textField "type" event, textField "delta" event) of
+  (Just "session.output_transcript.delta", Just delta) -> Just (T.takeEnd 2000 . (<> delta))
+  _ -> Nothing
 
 previewComplete :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int -> Bool -> IO (Result Bool)
 previewComplete runtime transcript lastAudio ending quietMicros interruptible = do
@@ -881,20 +882,17 @@ notifyRecovery runtime = do
   either (pure . Left) (const (sendEvent runtime commentary)) first
 
 
-reportStarted :: Runtime -> IO ()
-reportStarted runtime = do
-  now <- getMonotonicTimeNSec
-  let session = liveSession (config runtime)
-      voice = field "audio" session >>= field "output" >>= textField "voice"
-      backend = field "delegation" session >>= field "responses" >>= textField "model"
-      elapsed = fromIntegral (now - runtimeStart runtime) / (1000000 :: Double)
-  observeEvent (media runtime) (object ["type" .= ("phone.session_started" :: Text), "model" .= textField "model" session,
-    "voice" .= voice, "backend_model" .= backend, "setup_ms" .= elapsed])
+startedEvent :: Value -> Word64 -> Word64 -> Value
+startedEvent session started now = object
+  ["type" .= ("phone.session_started" :: Text), "model" .= textField "model" session,
+   "voice" .= voice, "backend_model" .= backend, "setup_ms" .= elapsed]
+  where
+    voice = field "audio" session >>= field "output" >>= textField "voice"
+    backend = field "delegation" session >>= field "responses" >>= textField "model"
+    elapsed = fromIntegral (now - started) / (1000000 :: Double)
 
-reportClosed :: Runtime -> IO ()
-reportClosed runtime = do
-  now <- getMonotonicTimeNSec
-  (closed, usage) <- readTVarIO (finalStatus runtime)
-  let elapsed = fromIntegral (now - runtimeStart runtime) / (1000000 :: Double)
-  observeEvent (media runtime) (object ["type" .= ("phone.session_closed" :: Text), "finalized" .= closed,
-    "final_usage" .= usage, "duration_ms" .= elapsed])
+closedEvent :: Word64 -> Word64 -> (Bool, Maybe Value) -> Value
+closedEvent started now (closed, usage) = object
+  ["type" .= ("phone.session_closed" :: Text), "finalized" .= closed,
+   "final_usage" .= usage, "duration_ms" .= elapsed]
+  where elapsed = fromIntegral (now - started) / (1000000 :: Double)

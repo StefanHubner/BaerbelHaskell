@@ -98,21 +98,15 @@ readExact socket size = go size []
         Nothing -> pure (Left (failure "audiosocket_incomplete_read"))
         Just _ -> go next (chunk : chunks)
 
-readBody :: Socket -> Result ByteString -> IO (Result Packet)
-readBody _ (Left problem) = pure (Left problem)
-readBody socket (Right header) = case parseHeader header of
-  Left problem -> pure (Left problem)
-  Right (kind, size) -> do
-    payload <- readExact socket size
-    pure (Packet kind <$> payload)
-
 readPacket :: Socket -> IO (Result Packet)
 readPacket socket = do
   result <- ioResult "audiosocket_connection_failed" operation
   pure (join result)
   where
     operation :: IO (Result Packet)
-    operation = readExact socket 3 >>= readBody socket
+    operation = do
+      header <- readExact socket 3
+      either (pure . Left) (\(kind, size) -> fmap (Packet kind) <$> readExact socket size) (header >>= parseHeader)
 
 writePacket :: Socket -> Packet -> IO (Result ())
 writePacket socket packet = case encodePacket packet of
@@ -140,11 +134,6 @@ renderUuid bytes = T.intercalate "-" groups
     groups = map (\(offset, size) -> T.take size (T.drop offset raw))
       [(0, 8), (8, 4), (12, 4), (16, 4), (20, 12)]
 
-readCallId :: Socket -> IO (Result Text)
-readCallId socket = do
-  packet <- readPacket socket
-  pure (packet >>= extract)
-  where
-    extract :: Packet -> Result Text
-    extract (Packet CallId bytes) = Right (renderUuid bytes)
-    extract _ = Left (failure "audiosocket_uuid_required")
+readCallId :: Packet -> Result Text
+readCallId (Packet CallId bytes) = Right (renderUuid bytes)
+readCallId _ = Left (failure "audiosocket_uuid_required")

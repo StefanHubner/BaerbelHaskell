@@ -111,19 +111,17 @@ tokenSourceWithClock sender rules required allowed credentials clock = do
     refreshCached :: Cached -> IO (Cached, Result Text)
     refreshCached cached = do
       now <- clock
-      maybe (refresh sender rules required allowed credentials clock cached) (\value -> pure (cached, Right value)) (cachedToken now cached)
+      let refreshed = refresh rules required allowed cached <$> sender request <*> clock
+      maybe refreshed (\value -> pure (cached, Right value)) (cachedToken now cached)
+    request = refreshRequest rules credentials
 
 cachedToken :: Double -> Cached -> Maybe Text
 cachedToken now (Just (value, expiry)) | now < expiry = Just value
 cachedToken _ _ = Nothing
 
-refresh :: Send -> OAuthRules -> Set Text -> Set Text -> Credentials -> IO Double -> Cached -> IO (Cached, Result Text)
-refresh sender rules required allowed credentials clock cached = do
-  let request = refreshRequest rules credentials
-  response <- sender request
-  now <- clock
-  let result = response >>= validateTokenValue rules required allowed
-  pure (storeToken now cached result)
+refresh :: OAuthRules -> Set Text -> Set Text -> Cached -> Result Value -> Double -> (Cached, Result Text)
+refresh rules required allowed cached response now = storeToken now cached result
+  where result = response >>= validateTokenValue rules required allowed
 
 storeToken :: Double -> Cached -> Result (Text, Int) -> (Cached, Result Text)
 storeToken _ previous (Left problem) = (previous, Left problem {failureUncertain = False})

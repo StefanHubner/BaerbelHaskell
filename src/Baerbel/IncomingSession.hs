@@ -200,14 +200,17 @@ observeDecision :: IncomingScope -> Decision -> IO ()
 observeDecision scope decision = withContext scope (\service context -> decideContext service context decision)
 
 observeIncoming :: IncomingScope -> Value -> IO ()
-observeIncoming scope event = reportIncomingEvent (scopeReport scope) (scopeIdentifier scope) event >> observeTranscript scope event
+observeIncoming scope event = do
+  reportIncomingEvent (scopeReport scope) (scopeIdentifier scope) event
+  let append delta = withContext scope (\service context -> observeContext service context delta)
+  maybe (pure ()) append (observeTranscript event)
 
-observeTranscript :: IncomingScope -> Value -> IO ()
-observeTranscript scope (Object fields)
+observeTranscript :: Value -> Maybe Text
+observeTranscript (Object fields)
   | KM.lookup "type" fields == Just (String "session.input_transcript.delta") = case KM.lookup "delta" fields of
-      Just (String delta) -> withContext scope (\service context -> observeContext service context delta)
-      _ -> pure ()
-observeTranscript _ _ = pure ()
+      Just (String delta) -> Just delta
+      _ -> Nothing
+observeTranscript _ = Nothing
 
 withContext :: IncomingScope -> (Messages -> Context -> IO ()) -> IO ()
 withContext scope action = case (incomingMessages (scopeServices scope), scopeContext scope) of

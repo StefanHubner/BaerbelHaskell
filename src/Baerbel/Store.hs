@@ -53,14 +53,14 @@ readCurrentProfile profileRules rules path = do
   either (pure . Left) (readProfile profileRules rules path) owner
 
 validateProfileFile :: ProfileRules -> StoreRules -> FilePath -> IO (Result ())
-validateProfileFile profileRules rules path = do
-  owner <- validatePath path
-  either (pure . Left) (fmap (const () <$>) . readProfile profileRules rules path) owner
+validateProfileFile profileRules rules path = either (pure . Left) inspect (validatePath path)
+  where
+  inspect () = fmap (const () <$>) (readCurrentProfile profileRules rules path)
 
-validatePath :: FilePath -> IO (Result UserID)
+validatePath :: FilePath -> Result ()
 validatePath path
-  | not (isAbsolute path) || ".." `elem` splitDirectories path || not (all isPrint path) = pure (Left (failure "profile_invalid_path"))
-  | otherwise = inspectOwner path
+  | not (isAbsolute path) || ".." `elem` splitDirectories path || not (all isPrint path) = Left (failure "profile_invalid_path")
+  | otherwise = Right ()
 
 inspectOwner :: FilePath -> IO (Result UserID)
 inspectOwner path = fmap join (ioResult "profile_storage_unavailable" inspect)
@@ -131,10 +131,8 @@ readProfile profileRules rules path owner = fmap join (ioResult "profile_storage
   where
   openedFile = do
     opened <- try (openFd path ReadOnly flags)
-    either missing (\descriptor -> bracket (pure descriptor) closeFd readOwned) opened
+    either (pure . missingProfile) (\descriptor -> bracket (pure descriptor) closeFd readOwned) opened
   flags = defaultFileFlags {nofollow = True, nonBlock = True, cloexec = True}
-  missing :: IOException -> IO (Result ProfileState)
-  missing issue = pure (missingProfile issue)
   readOwned descriptor = withPrivateDescriptor owner True descriptor (readBytes descriptor)
   readBytes descriptor = do
     copy <- dup descriptor

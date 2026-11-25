@@ -338,16 +338,13 @@ streamReply pipeline transport history text speakText = do
       result <- pipelineSend pipeline request (consumeChat pipeline parsed speakText)
       (_, complete) <- readIORef parsed
       observeEvent transport (object ["type" .= ("session.output_transcript.delta" :: Text), "delta" .= chatText complete])
-      finishChat pipeline history (previous ++ [user]) complete result
+      let limit = pipelineHistoryMessages (pipelineRules pipeline)
+          updated = finishChat limit (previous ++ [user]) complete result
+      either (pure . Left) (\next -> writeIORef history next >> pure (Right ())) updated
 
-finishChat :: Pipeline -> IORef [Value] -> [Value] -> ChatState -> Result () -> IO (Result ())
-finishChat pipeline history previous state result = case result >> completedHistory limit previous state of
-  Left err -> pure (Left err)
-  Right next -> writeIORef history next >> pure (Right ())
-  where limit = pipelineHistoryMessages (pipelineRules pipeline)
-
-completedHistory :: Int -> [Value] -> ChatState -> Result [Value]
-completedHistory limit previous state
+finishChat :: Int -> [Value] -> ChatState -> Result () -> Result [Value]
+finishChat _ _ _ (Left err) = Left err
+finishChat limit previous state (Right ())
   | not (chatCompleted state) = Left (failure "chat_response_incomplete")
   | otherwise = Right (keepLast limit (previous ++ [assistant]))
   where assistant = object ["role" .= ("assistant" :: Text), "content" .= chatText state]

@@ -100,14 +100,13 @@ prepareAccount settings sender (AccountSpec name key scopes) =
     either (pure . Left) (bind endpoint required allowed) loaded
   bind endpoint required allowed credentials = do
     source <- tokenSource sender endpoint (Set.fromList required) (Set.fromList allowed) credentials
-    let authorized = authenticated source sender
-    pure (Right (name, prefixErrors name authorized))
+    let authorized request = prefixErrors name <$> authenticated source sender request
+    pure (Right (name, authorized))
   path = Text.unpack (setting settings key)
 
-prefixErrors :: Text -> Send -> Send
-prefixErrors prefix sender request = fmap rename (sender request)
+prefixErrors :: Text -> Result a -> Result a
+prefixErrors prefix = either (Left . addPrefix) Right
   where
-  rename = either (Left . addPrefix) Right
   addPrefix err = err {failureCode = prefix <> "_" <> failureCode err}
 
 bindGoogle :: Settings -> Send -> (Services -> IO (Result a)) -> Accounts -> IO (Result a)
@@ -238,16 +237,16 @@ windServices settings sender store
   | not enabled = Right []
   | otherwise = do
       rules <- rule settings "providers" "windguru"
-      let prepare = windguru rules sender getCurrentTime (zonedInstant timeZones) (readForecastSet store)
+      let forecast = readForecastSet . sequence <$> traverse profileRead store
+          prepare = windguru rules sender getCurrentTime (zonedInstant timeZones) forecast
       Right [scopedService "windguru" schemas prepare]
   where
     enabled = booleanSetting settings "PHONE_ASSISTANT_WINDGURU" == Right True
     schemas = toolDefinitions settings "WINDGURU_TOOLS" ++ setSchemas
     setSchemas = maybe [] (const (toolDefinitions settings "WINDGURU_SET_TOOL")) store
 
-readForecastSet :: Maybe ProfileStore -> IO (Result Text)
-readForecastSet Nothing = pure (Left (failure "windguru_forecast_set_not_configured"))
-readForecastSet (Just store) = fmap (>>= select) (profileRead store)
+readForecastSet :: Result (Maybe ProfileState) -> Result Text
+readForecastSet result = result >>= maybe missing select
   where
     select state = maybe missing Right (Map.lookup "windguru_forecast_set" (profileValues state))
     missing = Left (failure "windguru_forecast_set_not_configured")
