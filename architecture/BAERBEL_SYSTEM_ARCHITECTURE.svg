@@ -12,9 +12,9 @@
 <!-- phones&#45;&gt;pbx -->
 <g id="edge1" class="edge">
 <title>phones&#45;&gt;pbx</title>
-<path fill="none" stroke="#586f86" d="M851.5,-1139.37C851.5,-1125.33 851.5,-1108.01 851.5,-1092.2"/>
-<polygon fill="#586f86" stroke="#586f86" points="854.3,-1092.1 851.5,-1084.1 848.7,-1092.1 854.3,-1092.1"/>
-<text text-anchor="middle" x="838" y="-1119.18" font-family="DejaVu Sans" font-size="12.00">calls</text>
+<path fill="none" stroke="#586f86" d="M851.5,-1130.84C851.5,-1118.74 851.5,-1105.14 851.5,-1092.49"/>
+<polygon fill="#586f86" stroke="#586f86" points="854.3,-1092.34 851.5,-1084.35 848.7,-1092.35 854.3,-1092.34"/>
+<text text-anchor="middle" x="838" y="-1115.07" font-family="DejaVu Sans" font-size="12.00">calls</text>
 </g>
 <!-- pbx&#45;&gt;owner -->
 <g id="edge2" class="edge">
@@ -35,8 +35,8 @@
 <title>pbx&#45;&gt;shell</title>
 <path fill="none" stroke="#586f86" d="M851.5,-1010.75C851.5,-938.97 851.5,-779.68 851.5,-694.24"/>
 <polygon fill="#586f86" stroke="#586f86" points="854.3,-694.21 851.5,-686.21 848.7,-694.21 854.3,-694.21"/>
-<text text-anchor="middle" x="782.5" y="-868.9" font-family="DejaVu Sans" font-size="12.00">home FastAGI :4573</text>
-<text text-anchor="middle" x="782.5" y="-855.9" font-family="DejaVu Sans" font-size="12.00">fixed destination policy</text>
+<text text-anchor="middle" x="762.5" y="-868.9" font-family="DejaVu Sans" font-size="12.00">FastAGI :4573</text>
+<text text-anchor="middle" x="762.5" y="-855.9" font-family="DejaVu Sans" font-size="12.00">account PIN / handset routing</text>
 </g>
 <!-- owner&#45;&gt;shell -->
 <g id="edge5" class="edge">
@@ -104,15 +104,16 @@
 <g id="node2" class="node">
 <title>status</title>
 <text text-anchor="middle" x="851.5" y="-1276" font-family="DejaVu Sans" font-size="15.00">Haskell active · live&#45;only speech · gpt&#45;6.2&#45;sol / low / priority</text>
-<text text-anchor="middle" x="851.5" y="-1259" font-family="DejaVu Sans" font-size="15.00">Current release: provider tool round trip verified · real Asterisk call not yet tested</text>
+<text text-anchor="middle" x="851.5" y="-1259" font-family="DejaVu Sans" font-size="15.00">Current release: provider tool round trip verified · account routing prepared</text>
 <text text-anchor="middle" x="851.5" y="-1242" font-family="DejaVu Sans" font-size="15.00">Earlier owner Gmail + known&#45;caller ringing verified · forwarded caller ended before answer</text>
 </g>
 <!-- phones -->
 <g id="node3" class="node">
 <title>phones</title>
-<path fill="#eef4fa" stroke="#728397" stroke-width="1.4" d="M1008.5,-1195.5C1008.5,-1195.5 694.5,-1195.5 694.5,-1195.5 688.5,-1195.5 682.5,-1189.5 682.5,-1183.5 682.5,-1183.5 682.5,-1151.5 682.5,-1151.5 682.5,-1145.5 688.5,-1139.5 694.5,-1139.5 694.5,-1139.5 1008.5,-1139.5 1008.5,-1139.5 1014.5,-1139.5 1020.5,-1145.5 1020.5,-1151.5 1020.5,-1151.5 1020.5,-1183.5 1020.5,-1183.5 1020.5,-1189.5 1014.5,-1195.5 1008.5,-1195.5"/>
-<text text-anchor="middle" x="851.5" y="-1172.5" font-family="DejaVu Sans" font-size="15.00">Owner / public callers</text>
-<text text-anchor="middle" x="851.5" y="-1155.5" font-family="DejaVu Sans" font-size="15.00">SIP providers and home phone</text>
+<path fill="#eef4fa" stroke="#728397" stroke-width="1.4" d="M1037.5,-1204C1037.5,-1204 665.5,-1204 665.5,-1204 659.5,-1204 653.5,-1198 653.5,-1192 653.5,-1192 653.5,-1143 653.5,-1143 653.5,-1137 659.5,-1131 665.5,-1131 665.5,-1131 1037.5,-1131 1037.5,-1131 1043.5,-1131 1049.5,-1137 1049.5,-1143 1049.5,-1143 1049.5,-1192 1049.5,-1192 1049.5,-1198 1043.5,-1204 1037.5,-1204"/>
+<text text-anchor="middle" x="851.5" y="-1181" font-family="DejaVu Sans" font-size="15.00">Owner / public callers</text>
+<text text-anchor="middle" x="851.5" y="-1164" font-family="DejaVu Sans" font-size="15.00">Shared Standard number · dedicated Pro number</text>
+<text text-anchor="middle" x="851.5" y="-1147" font-family="DejaVu Sans" font-size="15.00">SIP providers and optional home handset</text>
 </g>
 <!-- pbx -->
 <g id="node4" class="node">
@@ -127,15 +128,15 @@
 <title>owner</title>
 <path fill="#f1eaf8" stroke="#9674b2" stroke-width="1.4" d="M546.5,-904C546.5,-904 196.5,-904 196.5,-904 190.5,-904 184.5,-898 184.5,-892 184.5,-892 184.5,-843 184.5,-843 184.5,-837 190.5,-831 196.5,-831 196.5,-831 546.5,-831 546.5,-831 552.5,-831 558.5,-837 558.5,-843 558.5,-843 558.5,-892 558.5,-892 558.5,-898 552.5,-904 546.5,-904"/>
 <text text-anchor="middle" x="371.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Owner ingress :9092</text>
-<text text-anchor="middle" x="371.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Separate managed&#45;media registry</text>
-<text text-anchor="middle" x="371.5" y="-847" font-family="DejaVu Sans" font-size="15.00">PIN gate for private email tools</text>
+<text text-anchor="middle" x="371.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Account selected from Asterisk channel</text>
+<text text-anchor="middle" x="371.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Account mode: phone and keypad PIN</text>
 </g>
 <!-- public -->
 <g id="node6" class="node">
 <title>public</title>
 <path fill="#fff1e5" stroke="#b98b65" stroke-width="1.4" d="M1506.5,-904C1506.5,-904 1156.5,-904 1156.5,-904 1150.5,-904 1144.5,-898 1144.5,-892 1144.5,-892 1144.5,-843 1144.5,-843 1144.5,-837 1150.5,-831 1156.5,-831 1156.5,-831 1506.5,-831 1506.5,-831 1512.5,-831 1518.5,-837 1518.5,-843 1518.5,-843 1518.5,-892 1518.5,-892 1518.5,-898 1512.5,-904 1506.5,-904"/>
 <text text-anchor="middle" x="1331.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Public ingress :9093</text>
-<text text-anchor="middle" x="1331.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Separate registry and restricted session</text>
+<text text-anchor="middle" x="1331.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Dedicated Pro route in account mode</text>
 <text text-anchor="middle" x="1331.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Screen / decline / take message only</text>
 </g>
 <!-- shell -->
@@ -170,7 +171,7 @@
 <path fill="#eef4fa" stroke="#728397" stroke-width="1.4" d="M546.5,-434C546.5,-434 196.5,-434 196.5,-434 190.5,-434 184.5,-428 184.5,-422 184.5,-422 184.5,-373 184.5,-373 184.5,-367 190.5,-361 196.5,-361 196.5,-361 546.5,-361 546.5,-361 552.5,-361 558.5,-367 558.5,-373 558.5,-373 558.5,-422 558.5,-422 558.5,-428 552.5,-434 546.5,-434"/>
 <text text-anchor="middle" x="371.5" y="-411" font-family="DejaVu Sans" font-size="15.00">Owner tools and caller lookup</text>
 <text text-anchor="middle" x="371.5" y="-394" font-family="DejaVu Sans" font-size="15.00">Gmail · Calendar · Contacts</text>
-<text text-anchor="middle" x="371.5" y="-377" font-family="DejaVu Sans" font-size="15.00">Maps · Windguru · shared profile store</text>
+<text text-anchor="middle" x="371.5" y="-377" font-family="DejaVu Sans" font-size="15.00">Maps · Windguru · per&#45;account profile</text>
 </g>
 <!-- notifications -->
 <g id="node11" class="node">
@@ -195,7 +196,7 @@
 <text text-anchor="middle" x="1781.5" y="-889.5" font-family="DejaVu Sans" font-size="15.00">Configuration files</text>
 <text text-anchor="middle" x="1781.5" y="-872.5" font-family="DejaVu Sans" font-size="15.00">Shared: global.json</text>
 <text text-anchor="middle" x="1781.5" y="-855.5" font-family="DejaVu Sans" font-size="15.00">Reference: phone&#45;numbers.json</text>
-<text text-anchor="middle" x="1781.5" y="-838.5" font-family="DejaVu Sans" font-size="15.00">Private: user.json</text>
+<text text-anchor="middle" x="1781.5" y="-838.5" font-family="DejaVu Sans" font-size="15.00">Private: user.json / accounts</text>
 </g>
 <!-- permissions -->
 <g id="node14" class="node">

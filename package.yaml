@@ -17,6 +17,7 @@ extra-source-files:
 - scripts/*.sh
 - scripts/*.py
 - deploy/*
+- deploy/asterisk/*
 - architecture/*.dot
 - architecture/core-imports.txt
 - architecture/render.sh

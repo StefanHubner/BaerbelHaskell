@@ -48,9 +48,12 @@ extra-source-files:
     scripts/prepare-build.sh
     scripts/remote-deploy.sh
     scripts/prepare-user-config.py
+    scripts/render-asterisk-accounts.py
     scripts/update-phone-metadata.py
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service
+    deploy/asterisk/account-entry.conf.in
+    deploy/asterisk/README.md
     architecture/BAERBEL_SYSTEM_ARCHITECTURE.dot
     architecture/core-imports.txt
     architecture/render.sh
@@ -64,6 +67,7 @@ custom-setup
 
 library
   exposed-modules:
+      Baerbel.Core.Accounts
       Baerbel.Core.AMI
       Baerbel.Core.AudioMetrics
       Baerbel.Core.AudioSocket
@@ -122,6 +126,7 @@ library
       Baerbel.Core.Tools
       Baerbel.Core.Validation
       Baerbel.Core.Windguru
+      Baerbel.Runtime.Accounts
       Baerbel.Runtime.AMI
       Baerbel.Runtime.Application
       Baerbel.Runtime.AudioSocket

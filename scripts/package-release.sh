@@ -16,6 +16,8 @@ strip "$stage/baerbel/bin/phone-assistant-server" "$stage/baerbel/bin/phone-assi
 install -m 0644 config/global.json config/phone-numbers.json config/user.example.json "$stage/baerbel/config/"
 cp -r native/licenses "$stage/baerbel/native/"
 install -m 0644 deploy/phone-assistant.service deploy/phone-assistant.logrotate "$stage/baerbel/deploy/"
+install -D -m 0644 deploy/asterisk/account-entry.conf.in "$stage/baerbel/deploy/asterisk/account-entry.conf.in"
+install -m 0644 scripts/render-asterisk-accounts.py "$stage/baerbel/deploy/asterisk/"
 {
   git rev-parse HEAD
   ghc --numeric-version

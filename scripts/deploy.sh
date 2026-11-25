@@ -11,5 +11,5 @@ case "$action" in
     scp -- "$root/release/baerbel-linux-x86_64.tar.gz" "$target:$work/release.tar.gz"
     ssh -- "$target" "bash '$work/remote-deploy.sh' prepare"
     ;;
-  activate|rollback) ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' '$action'" ;;
+  activate|activate-accounts|rollback) ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' '$action'" ;;
 esac

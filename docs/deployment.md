@@ -42,12 +42,23 @@ Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-hask
 
 The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. On an earlier Haskell release, a real owner Gmail call was verified against its executable: both Gmail searches succeeded and provider closure was acknowledged. A known external caller also exercised forwarding/ringing as expected, then hung up before answer; its outcome SMS was accepted. Answered bridging, unknown-caller screening, home-phone behavior and in-call voice notes remain unverified in real calls. Independent inspection of the loaded Asterisk dialplan was unavailable: the current SSH session lacks noninteractive sudo and the AMI account rejects the scoped dialplan query.
 
+## Activate the two account routes
+
+After staging the account release, run `make activate-accounts` from the
+workstation. This command uses sudo on the miniserver. It checks the staged
+private account file and confirms Asterisk is idle before replacing the managed
+entry dialplan. It backs up the existing dialplan, private settings and service
+override. The command reloads the dialplan and starts the same Haskell service
+with the account file. Confirm separate carrier delivery to the two numbers
+and check a Standard PIN login and a Pro incoming call after cutover.
+See [the routing template notes](../deploy/asterisk/README.md).
+
 ## Restore Python
 
 ```sh
 make rollback
 ```
 
-Rollback uses sudo, checks that Asterisk has no active calls, removes only the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. Releases and the private JSON remain available; shared state is not rewound, so accepted actions are not replayed.
+For an account routing cutover, restore the backed-up managed dialplan and private configuration before returning to Python. Rollback uses sudo, checks that Asterisk has no active calls, removes only the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. Releases and the private JSON remain available; shared state is not rewound, so accepted actions are not replayed.
 
 Only activation and rollback require privileged access. No configuration conversion, upload or target binary check needs to be performed manually. See [migration.md](migration.md) for actual deployment status and [live-checks.md](live-checks.md) for provider, synthetic-session and verified real-call evidence.

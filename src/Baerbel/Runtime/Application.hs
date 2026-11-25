@@ -1,7 +1,10 @@
-module Baerbel.Runtime.Application (checkConfiguration, runApplication) where
+module Baerbel.Runtime.Application (checkConfiguration, runApplication, checkAccounts, runAccounts) where
 
+import Baerbel.Core.Accounts (Subscriber(..))
+import Baerbel.Core.Config (Settings(..))
+import Baerbel.Runtime.Accounts (AccountIngress(..), accountIngress)
 import Baerbel.Runtime.Config
-    ( Settings, setting, rule, booleanSetting )
+    ( setting, rule, booleanSetting )
 import Baerbel.Runtime.Error ( Failure(..), Result, failure )
 import Baerbel.Runtime.Events ( withEvents )
 import Baerbel.Runtime.HTTP ( newRawSender )
@@ -33,11 +36,15 @@ import Control.Concurrent.STM
 import Control.Exception ( bracket, finally )
 import Control.Monad ( void )
 import Data.Aeson ( (.=) )
+import Data.Map.Strict (Map)
+import Data.Maybe (isJust)
+import qualified Data.Map.Strict as Map
+import Data.Text (Text)
 import System.Directory ( findExecutable )
 import System.Posix.Signals
     ( Handler(..), installHandler, sigINT, sigTERM )
 import qualified Data.ByteString as Bytes ( replicate )
-import qualified Baerbel.Runtime.Effects as Effects ( continue )
+import qualified Baerbel.Runtime.Effects as Effects ( continue, runAll )
 import qualified Data.Text as Text ( null, unpack )
 
 checkConfiguration :: Settings -> IO (Result ())
@@ -97,7 +104,11 @@ withNotifications settings output action
     withSMS smsRules credentials sender (path "PHONE_ASSISTANT_SMS_STATE_FILE") messageService
 
 runConfigured :: Settings -> NumberValidator -> Services -> Report -> Maybe Messages -> IO (Result ())
-runConfigured settings validate services output messages = Effects.continue start configured
+runConfigured settings validate services output messages =
+  withHandlers settings validate services output messages (startServer settings validate output)
+
+withHandlers :: Settings -> NumberValidator -> Services -> Report -> Maybe Messages -> (CallHandler -> CallHandler -> IO (Result ())) -> IO (Result ())
+withHandlers settings validate services output messages action = Effects.continue start configured
   where
   configured = (,,) <$> telephonyConfiguration settings <*> rule settings "runtime" "native_pause_extra_seconds" <*> rule settings "runtime" "socket"
   start (native, extra, sockets) = do
@@ -110,14 +121,76 @@ runConfigured settings validate services output messages = Effects.continue star
     let public = IncomingServices (lookupPublicCaller services) messages
         incoming = incomingSession settings public output publicRegistry handoffs
         owner = ownerSession settings validate services output ownerRegistry handoffs
-    startServer settings validate output incoming owner
+    action incoming owner
+
+checkAccounts :: Map Text Subscriber -> IO (Result ())
+checkAccounts = Effects.runAll (checkConfiguration . subscriberSettings) . Map.elems
+
+data AccountCalls = AccountCalls {ownerCall :: CallHandler, publicCall :: Maybe CallHandler}
+
+runAccounts :: Settings -> Map Text Subscriber -> IO (Result ())
+runAccounts shared accounts = withLogging logPath (withShutdown . start)
+  where
+    path = setting shared "PHONE_ASSISTANT_LOG_FILE"
+    logPath | Text.null path = Nothing
+            | otherwise = Just (Text.unpack path)
+    start output = Effects.continue (open output) (numberValidator shared)
+    open output validate = do
+      ingress <- accountIngress shared accounts validate
+      let run entry = withAccounts validate output (Map.toList accounts) Map.empty (startAccounts shared validate output entry)
+      Effects.continue run ingress
+
+withAccounts :: NumberValidator -> Report -> [(Text, Subscriber)] -> Map Text AccountCalls -> (Map Text AccountCalls -> IO (Result ())) -> IO (Result ())
+withAccounts _ _ [] prepared action = action prepared
+withAccounts validate output ((ident, sub) : rest) prepared action =
+  withServices settings withNotificationsFor
+  where
+    source = subscriberSettings sub
+    values = Map.delete "PHONE_ASSISTANT_PRIVATE_PIN_HASH" (settingsValues source)
+    settings = source {settingsValues = values}
+    withNotificationsFor services = withNotifications settings output (handlers services)
+    handlers services messages = withHandlers settings validate services output messages register
+    register incoming owner = withAccounts validate output rest updated action
+      where
+        screening = booleanSetting settings "INCOMING_SCREENING_ENABLED" == Right True
+        public | screening = Just incoming
+               | otherwise = Nothing
+        calls = AccountCalls owner public
+        updated = Map.insert ident calls prepared
+
+startAccounts :: Settings -> NumberValidator -> Report -> AccountIngress -> Map Text AccountCalls -> IO (Result ())
+startAccounts shared validate output ingress accounts = Effects.continue (serveReported output) configured
+  where
+    owner = dispatchAccount ingress True (Just . ownerCall) accounts
+    incoming = dispatchAccount ingress False publicCall accounts
+    configured = do
+      cfg <- serverConfiguration shared validate output incoming owner
+      screening <- rule shared "runtime" "incoming_port"
+      agi <- rule shared "runtime" "home_port"
+      let public = any hasPublic (Map.elems accounts)
+          port | public = Just screening
+               | otherwise = Nothing
+      pure cfg {incomingPort = port, homePort = Just agi, homeHandler = accountAGI ingress}
+    hasPublic = isJust . publicCall
+
+dispatchAccount :: AccountIngress -> Bool -> (AccountCalls -> Maybe CallHandler) -> Map Text AccountCalls -> CallHandler
+dispatchAccount ingress owner select accounts ident socket = do
+  account <- identifyAccount ingress owner ident
+  Effects.continue run (account >>= handler)
+  where
+    handler key = maybe rejected Right (Map.lookup key accounts >>= select)
+    rejected = Left (failure "account_call_not_permitted")
+    run call = call ident socket
 
 startServer :: Settings -> NumberValidator -> Report -> CallHandler -> CallHandler -> IO (Result ())
 startServer settings validate output incoming owner = case serverConfiguration settings validate output incoming owner of
   Left err -> pure (Left err)
-  Right config -> do
-    output "server_started" []
-    serve config `finally` output "server_stopped" []
+  Right config -> serveReported output config
+
+serveReported :: Report -> ServerConfig -> IO (Result ())
+serveReported output config = do
+  output "server_started" []
+  serve config `finally` output "server_stopped" []
 
 serverConfiguration :: Settings -> NumberValidator -> Report -> CallHandler -> CallHandler -> Result ServerConfig
 serverConfiguration settings validate output incoming owner = do

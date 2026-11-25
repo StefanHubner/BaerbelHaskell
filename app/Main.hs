@@ -1,13 +1,14 @@
 module Main (main) where
 
-import qualified Baerbel.Runtime.Effects as Effects
-import Baerbel.Runtime.CLI (runProgram, rejected)
-import Control.Monad ((>=>))
-import Baerbel.Runtime.ConfigPaths (validatePaths)
-import Baerbel.Core.Validation (validateSettings)
-import Baerbel.Runtime.Application (checkConfiguration, runApplication)
-import Baerbel.Runtime.Config (Settings, loadSettings)
+import Baerbel.Core.Accounts (Subscriber)
+import Baerbel.Core.Config (Settings)
 import Baerbel.Core.Error (Result)
+import Baerbel.Runtime.Accounts (issuePin, loadInstallation)
+import Baerbel.Runtime.Application (checkAccounts, checkConfiguration, runAccounts, runApplication)
+import Baerbel.Runtime.CLI (runProgram, rejected)
+import Baerbel.Runtime.Effects (continue)
+import Data.Map.Strict (Map)
+import Data.Text (Text, pack)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 
@@ -15,16 +16,15 @@ main :: IO ()
 main = runProgram (getArgs >>= run)
 
 run :: [String] -> IO ()
-run ["--check", globalPath, userPath] = configure globalPath userPath check
-  where check settings = checkConfiguration settings >>= report "Configuration and native audio checks passed; API access was not tested."
-run [globalPath, userPath] = configure globalPath userPath (runApplication >=> report "")
-run _ = putStrLn "Usage: phone-assistant-server [--check] GLOBAL_CONFIG USER_CONFIG" >> exitFailure
+run ["--check", globalPath, userPath] = configure globalPath userPath check >>= report "Configuration and native audio checks passed; API access was not tested."
+  where check = either checkConfiguration (checkAccounts . snd)
+run ["--issue-pin", globalPath, userPath, ident] = issuePin globalPath userPath (pack ident) >>= report "PIN saved and SMS accepted."
+run [globalPath, userPath] = configure globalPath userPath start >>= report ""
+  where start = either runApplication (uncurry runAccounts)
+run _ = putStrLn "Usage: phone-assistant-server [--check] GLOBAL_CONFIG USER_CONFIG | --issue-pin GLOBAL_CONFIG USER_CONFIG ACCOUNT" >> exitFailure
 
-configure :: FilePath -> FilePath -> (Settings -> IO ()) -> IO ()
-configure globalPath userPath action = do
-  loaded <- loadSettings globalPath userPath
-  checked <- Effects.continue (validatePaths globalPath userPath) (loaded >>= validateSettings)
-  either rejected action checked
+configure :: FilePath -> FilePath -> (Either Settings (Settings, Map Text Subscriber) -> IO (Result ())) -> IO (Result ())
+configure globalPath userPath action = loadInstallation globalPath userPath >>= continue action
 
 report :: String -> Result () -> IO ()
 report "" = either rejected pure

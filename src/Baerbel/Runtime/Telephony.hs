@@ -2,7 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 module Baerbel.Runtime.Telephony
   ( TelephonyConfig(..), TelephonyRules(..), TelephonyMedia(..), OwnerControl(..), IncomingControl(..), IncomingEnd(..)
-  , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler
+  , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler, agiSession, routeHome, agiCommand, readAgiLine
   ) where
 
 import Baerbel.Core.CallState
@@ -480,14 +480,19 @@ terminateNative ami identifier channel state reason = modifyMVar state proceed
     terminate = runExceptT (ExceptT (setVariables ami channel [("TF_RESULT", incomingReason reason)]) >> ExceptT (hangup ami channel "21"))
 
 homeRouteHandler :: TelephonyConfig -> NumberValidator -> Socket -> IO (Result ())
-homeRouteHandler cfg validate connection = Effects.within (failure "agi_timeout") duration operation
+homeRouteHandler cfg validate connection = agiSession rules (nativeAGIMicros rules) connection route
   where
-    duration = nativeAGIMicros (telephonyRules cfg)
-    operation = Effects.attempt "agi_connection_failed" (runExceptT (homeRoute cfg validate connection))
+    rules = telephonyRules cfg
+    route = routeHome cfg validate connection
 
-homeRoute :: TelephonyConfig -> NumberValidator -> Socket -> ExceptT Failure IO ()
-homeRoute cfg validate connection = do
-  headers <- ExceptT (readAgiHeaders (telephonyRules cfg) connection 0 0 M.empty)
+agiSession :: TelephonyRules -> Int -> Socket -> (M.Map Text Text -> ExceptT Failure IO ()) -> IO (Result ())
+agiSession rules duration connection action = Effects.within (failure "agi_timeout") duration guarded
+  where
+    guarded = Effects.attempt "agi_connection_failed" (runExceptT receive)
+    receive = ExceptT (readAgiHeaders rules connection 0 0 M.empty) >>= action
+
+routeHome :: TelephonyConfig -> NumberValidator -> Socket -> M.Map Text Text -> ExceptT Failure IO ()
+routeHome cfg validate connection headers = do
   number <- except (homeIdentity cfg headers)
   mapM_ (ExceptT . uncurry (agiCommand (telephonyRules cfg) connection)) homeChecks
   canonical <- except (validate number)

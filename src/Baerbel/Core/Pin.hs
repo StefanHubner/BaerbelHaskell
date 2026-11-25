@@ -6,7 +6,7 @@ import Crypto.Hash (SHA256(..))
 import Crypto.KDF.PBKDF2 (Parameters(..), generate, prfHMAC)
 import Data.Aeson (Value)
 import Data.ByteArray (constEq)
-import Data.ByteArray.Encoding (Base(Base16), convertFromBase)
+import Data.ByteArray.Encoding (Base(Base16), convertFromBase, convertToBase)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -40,6 +40,12 @@ decodeHex :: Text -> Result BS.ByteString
 decodeHex text = either (const (Left (failure "invalid_private_pin_hash"))) Right decoded
   where
     decoded = convertFromBase Base16 (TE.encodeUtf8 text)
+
+encodePinHash :: BS.ByteString -> BS.ByteString -> Text
+encodePinHash salt digits = T.intercalate ":" ["pbkdf2_sha256", "600000", hex salt, hex digest]
+  where
+    hex = TE.decodeUtf8 . convertToBase Base16
+    digest = generate (prfHMAC SHA256) (Parameters 600000 32) digits salt :: BS.ByteString
 
 verifyPin :: PinHash -> BS.ByteString -> Bool
 verifyPin (PinHash rounds salt expected) digits = constEq actual expected

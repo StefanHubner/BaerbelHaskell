@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 user_config := $(HOME)/.config/baerbel/user.json
 
-.PHONY: prepare native build test check live-check live-delivery-check package install activate rollback
+.PHONY: prepare native build test check live-check live-delivery-check package install activate activate-accounts rollback
 
 prepare:
 	./scripts/prepare-build.sh
@@ -38,6 +38,9 @@ install:
 
 activate:
 	./scripts/deploy.sh activate
+
+activate-accounts:
+	./scripts/deploy.sh activate-accounts
 
 rollback:
 	./scripts/deploy.sh rollback

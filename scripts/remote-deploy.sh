@@ -43,12 +43,13 @@ require_idle() {
 
 activate_release() {
   local release service_user unit
-  release=$(readlink -e "$prefix/staged")
-  service_user=$(systemctl show "$service" --property=User --value)
-  install -m 0600 -o "$service_user" -g "$service_user" "$work/user.json" "$user_config"
-  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$user_config"
-  require_idle
-  unit=$(mktemp)
+  local prepared_user=${1:-"$work/user.json"}
+  require_idle || return
+  release=$(readlink -e "$prefix/staged") || return
+  service_user=$(systemctl show "$service" --property=User --value) || return
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$prepared_user" || return
+  install -m 0600 -o "$service_user" -g "$service_user" "$prepared_user" "$user_config" || return
+  unit=$(mktemp) || return
   cat > "$unit" <<UNIT
 # Managed by Bärbel Haskell deployment; remove this file to restore Python.
 [Service]
@@ -56,11 +57,44 @@ WorkingDirectory=$release
 ExecStart=
 ExecStart=$release/bin/phone-assistant-server $release/config/global.json $user_config
 UNIT
-  install -D -m 0644 "$unit" "$override"
+  install -D -m 0644 "$unit" "$override" || return
   rm "$unit"
+  systemctl daemon-reload || return
+  systemctl restart "$service" || return
+  verify_service "$release/bin/phone-assistant-server"
+}
+
+activate_accounts() {
+  local release route candidate backup service_user shared dedicated account
+  require_idle || return
+  release=$(readlink -e "$prefix/staged")
+  route=/etc/asterisk/phone-assistant-extensions.conf
+  service_user=$(systemctl show "$service" --property=User --value)
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/accounts.json"
+  read -r shared dedicated account < "$work/account-routes"
+  candidate=$(mktemp)
+  python3 "$release/deploy/asterisk/render-asterisk-accounts.py" "$route" \
+    "$release/deploy/asterisk/account-entry.conf.in" "$shared" "$dedicated" "$account" "$candidate"
+  backup=$(mktemp -d /var/backups/phone-assistant-accounts.XXXXXXXX)
+  cp -a "$route" "$user_config" "$override" "$backup/"
+  if install -o root -g asterisk -m 0640 "$candidate" "$route" &&
+    asterisk -rx 'dialplan reload' &&
+    asterisk -rx 'dialplan show baerbel-account-entry' | grep -F '[ Context' >/dev/null &&
+    activate_release "$work/accounts.json"; then
+    install -m 0600 "$work/account-routes" /etc/phone-assistant/account-routes
+    rm "$candidate"
+    printf 'Account routes installed. Backup: %s\n' "$backup"
+    return
+  fi
+  cp -a "$backup/phone-assistant-extensions.conf" "$route"
+  cp -a "$backup/user.json" "$user_config"
+  cp -a "$backup/zz-baerbel-haskell.conf" "$override"
+  asterisk -rx 'dialplan reload'
   systemctl daemon-reload
   systemctl restart "$service"
-  verify_service "$release/bin/phone-assistant-server"
+  rm "$candidate"
+  printf 'Account activation failed; restored previous configuration.\n' >&2
+  return 1
 }
 
 rollback_release() {
@@ -76,19 +110,19 @@ rollback_release() {
 verify_service() {
   local expected=${1:-} first_pid current_pid
   first_pid=$(systemctl show "$service" --property=MainPID --value)
-  verify_running "$expected" "$first_pid"
+  verify_running "$expected" "$first_pid" || return
   sleep 3
   current_pid=$(systemctl show "$service" --property=MainPID --value)
   [[ "$current_pid" == "$first_pid" ]] || { printf 'Assistant restarted during startup verification.\n' >&2; return 1; }
-  verify_running "$expected" "$current_pid"
+  verify_running "$expected" "$current_pid" || return
   systemctl show "$service" --property=ExecStart --property=MainPID
   printf 'Process checks passed; real call behavior has not been exercised.\n'
 }
 
 verify_running() {
   local expected=$1 pid=$2 executable
-  systemctl is-active "$service"
-  systemctl is-active asterisk.service
+  systemctl is-active "$service" || return
+  systemctl is-active asterisk.service || return
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || { printf 'Assistant has no running main process.\n' >&2; return 1; }
   executable=$(readlink -e "/proc/$pid/exe")
   [[ -z "$expected" || "$executable" == "$expected" ]] || { printf 'Assistant is not running the staged executable.\n' >&2; return 1; }
@@ -98,5 +132,6 @@ verify_running() {
 case "$action" in
   prepare) prepare_release ;;
   activate) activate_release ;;
+  activate-accounts) activate_accounts ;;
   rollback) rollback_release ;;
 esac
