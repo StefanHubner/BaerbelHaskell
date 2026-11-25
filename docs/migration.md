@@ -1,6 +1,15 @@
 # Migration evidence
 
-The current release is `559d2cdf…` from source `95bae182…`, activated at 2026-11-25T19:48:47Z; its verification is recorded in [the latest release section](#live-only-release-activated). Earlier evidence below retains its original release scope.
+The current release is `0dd48e38…` from source `06d2f54`, activated
+at 2026-11-25T22:01:36Z. The running Haskell service loaded one private
+`global.json` and `users.sqlite3`, both mode `0600`. The former account JSON
+was archived. Local checks passed 409 examples, HLint and 160 HLS file
+checks. Migration rehearsals preserved memory, link scopes, receipts and
+the event cursor. Existing Google grants accepted live refresh requests.
+Production FastAGI selected both accounts correctly. PID 229128 owned
+all three Bärbel listeners with zero restarts. Asterisk continued on
+PID 226605. Real carrier call evidence below retains its original release
+scope.
 
 Haskell is active in the existing production service as of 2026-11-25T15:31:08Z. Post-activation process, listener and startup-log checks passed. Later approximately 149-second calls exposed an input-overflow failure; corrections passed local and focused target-provider checks and were activated at 17:18:47Z. Python is preserved for rollback. Real tests verified the owner Gmail path and known-caller forwarding/ringing on Haskell. The forwarded caller ended before answer and its outcome SMS was accepted; answered bridging and other call paths remain unverified.
 

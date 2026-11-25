@@ -2,7 +2,15 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-Release `559d2cdf…` from source `95bae182…` is active as of 2026-11-25T19:48:47Z. It includes the audio/Windguru corrections, live-only runtime, separate phone metadata and `gpt-6.2-sol`/`low`/`priority` backend settings. Verification confirmed the exact staged executable at PID 221942, zero restarts, ownership of all three loopback listeners and active Asterisk. The focused target-provider tool check passed; no real Asterisk call or latency benchmark has been performed for this release. See [the activated release record](migration.md#live-only-release-activated).
+Release `0dd48e38…` from source `06d2f54` is active as of
+2026-11-25T22:01:36Z. The service loaded the combined private
+`global.json` and normalized SQLite user database. Production FastAGI
+selected the Standard and Pro accounts on their respective routes.
+Verified PID 229128 with zero restarts and listeners on loopback ports
+9092, 9093 and 4573. Asterisk kept PID 226605. The migrated Google grants
+refreshed successfully on the miniserver. The current verification used
+the FastAGI socket; carrier-call evidence for Bristol comes from the
+previous release.
 
 ## Check and package
 
