@@ -138,11 +138,14 @@ incomingMatch identifier message = field "Event" message == "Status"
   && (field "Context" message, variable "PA_INCOMING_MODE" message)
      `elem` [("phone-assistant-screening", "screening"), ("phone-assistant-message", "message")]
 
+incomingEndpoints :: [Text]
+incomingEndpoints = ["phone-assistant-aa", "phone-assistant-aa-bristol", "phone-assistant-telematica"]
+
 incomingName :: Text -> Bool
-incomingName name = any matches ["PJSIP/phone-assistant-aa-", "PJSIP/phone-assistant-telematica-"]
+incomingName name = any matches incomingEndpoints
   where
     matches :: Text -> Bool
-    matches prefix = case T.stripPrefix prefix name of
+    matches endpoint = case T.stripPrefix ("PJSIP/" <> endpoint <> "-") name of
       Nothing -> False
       Just suffix -> not (T.null suffix) && T.all isHexDigit suffix
 

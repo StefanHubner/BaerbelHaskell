@@ -11,6 +11,14 @@ case "$action" in
     scp -- "$root/release/baerbel-linux-x86_64.tar.gz" "$target:$work/release.tar.gz"
     ssh -- "$target" "bash '$work/remote-deploy.sh' prepare"
     ;;
+  install-account-routing)
+    scp -- "$root/scripts/remote-deploy.sh" "$root/scripts/render-asterisk-accounts.py" "$root/scripts/render-bristol-sip.py" "$root/deploy/asterisk/account-entry.conf.in" "$target:$work/"
+    ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' install-account-routing"
+    ;;
+  trace-carrier)
+    scp -- "$root/scripts/trace-carrier.py" "$target:$work/baerbel-sip-capture.py"
+    ssh -t -- "$target" "sudo python3 '$work/baerbel-sip-capture.py'"
+    ;;
   rollback-accounts)
     scp -- "$root/scripts/remote-deploy.sh" "$root/scripts/account-incident.py" "$target:$work/"
     ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' rollback-accounts"

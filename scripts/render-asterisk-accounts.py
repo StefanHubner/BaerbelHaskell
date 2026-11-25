@@ -14,6 +14,8 @@ def replace_once(source: str, old: str, new: str) -> str | None:
     match source.count(old):
         case 1:
             return source.replace(old, new, 1)
+        case 0 if source.count(new) == 1:
+            return source
         case _:
             return None
 
@@ -27,8 +29,7 @@ def render(base: str, entry: str, shared: str, dedicated: str, owner: str) -> st
     _, next_context, rest = tail.partition(NEXT)
     if not marker or not next_context:
         return None
-    routes = entry.replace("@@PRO_DIGITS@@", dedicated[1:])
-    routes = routes.replace("@@SHARED_DIGITS@@", shared[1:]).replace("@@PRO_ID@@", owner)
+    routes = entry.replace("@@SHARED_DIGITS@@", shared[1:]).replace("@@PRO_ID@@", owner)
     changes = (
         (' same => n,Set(CDR(tf_did)=${GLOBAL(PA_AA_DID)})', f' same => n,Set(CDR(tf_did)={dedicated})'),
         (' same => n(enabled),GotoIf($["${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1"]?screen:rejected)',
@@ -44,7 +45,9 @@ def render(base: str, entry: str, shared: str, dedicated: str, owner: str) -> st
         if updated is None:
             return None
         result = updated
-    return result
+    result = result.replace('^phone-assistant-aa$" ${CHANNEL(endpoint)})}?enabled:rejected)',
+                            '^phone-assistant-aa(-bristol)?$" ${CHANNEL(endpoint)})}?enabled:rejected)')
+    return result.replace('^phone-assistant-(aa|telematica', '^phone-assistant-(aa|aa-bristol|telematica')
 
 
 def main(args: list[str]) -> int:

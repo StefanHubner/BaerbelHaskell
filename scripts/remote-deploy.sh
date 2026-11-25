@@ -83,6 +83,7 @@ activate_accounts() {
     asterisk -rx 'dialplan show baerbel-account-entry' | grep -F '[ Context' >/dev/null &&
     activate_release "$work/accounts.json"; then
     install -m 0600 "$work/account-routes" /etc/phone-assistant/account-routes
+    enable_routing_trace
     rm "$candidate"
     printf 'Account routes installed. Backup: %s\n' "$backup"
     return
@@ -96,6 +97,67 @@ activate_accounts() {
   rm "$candidate"
   printf 'Account activation failed; restored previous configuration.\n' >&2
   return 1
+}
+
+enable_routing_trace() {
+  local file=/var/lib/phone-assistant-incoming-events/account-routing.log
+  [[ -e "$file" ]] || install -o asterisk -g stefan -m 0640 /dev/null "$file"
+  asterisk -rx 'database put baerbel account-routing-trace 1'
+}
+
+install_account_routing() {
+  local route shared dedicated account candidate backup release sip trunk bristol service_user
+  require_idle
+  release=$(readlink -e "$prefix/staged")
+  service_user=$(systemctl show "$service" --property=User --value)
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/user.json"
+  route=/etc/asterisk/phone-assistant-extensions.conf
+  sip=/etc/asterisk/pjsip.conf
+  trunk=/etc/asterisk/phone-assistant-pjsip.conf
+  bristol=/etc/asterisk/phone-assistant-bristol-pjsip.conf
+  read -r shared dedicated account < /etc/phone-assistant/account-routes
+  candidate=$(mktemp -d)
+  trap 'rm -r "$candidate"' RETURN
+  python3 "$work/render-asterisk-accounts.py" "$route" "$work/account-entry.conf.in" \
+    "$shared" "$dedicated" "$account" "$candidate/extensions.conf"
+  python3 "$work/render-bristol-sip.py" "$sip" "$trunk" "$dedicated" AsterixUser "$work/bristol-sip-password" "$candidate"
+  backup=$(mktemp -d /var/backups/phone-assistant-bristol.XXXXXXXX)
+  cp -a "$route" "$sip" "$user_config" "$override" "$backup/"
+  [[ ! -f "$bristol" ]] || cp -a "$bristol" "$backup/"
+  if install -o root -g asterisk -m 0640 "$candidate/phone-assistant-bristol-pjsip.conf" "$bristol" &&
+    install -o root -g asterisk -m 0640 "$candidate/pjsip.conf" "$sip" &&
+    install -o root -g asterisk -m 0640 "$candidate/extensions.conf" "$route" &&
+    reload_account_routing && activate_release; then
+    enable_routing_trace
+    rm -f "$work/bristol-sip-password"
+    printf 'Bristol SIP authentication and account routing installed. Backup: %s\n' "$backup"
+    return
+  fi
+  cp -a "$backup/pjsip.conf" "$sip"
+  cp -a "$backup/phone-assistant-extensions.conf" "$route"
+  cp -a "$backup/user.json" "$user_config"
+  cp -a "$backup/zz-baerbel-haskell.conf" "$override"
+  if [[ -f "$backup/phone-assistant-bristol-pjsip.conf" ]]; then
+    cp -a "$backup/phone-assistant-bristol-pjsip.conf" "$bristol"
+  else
+    rm -f "$bristol"
+  fi
+  asterisk -rx 'pjsip reload'
+  asterisk -rx 'dialplan reload'
+  systemctl daemon-reload
+  systemctl restart "$service"
+  printf 'Bristol installation failed; restored the previous files.\n' >&2
+  return 1
+}
+
+reload_account_routing() {
+  asterisk -rx 'pjsip reload' || return
+  asterisk -rx 'pjsip show endpoint phone-assistant-aa-bristol' |
+    grep -E 'Endpoint:[[:space:]]+phone-assistant-aa-bristol([ /]|$)' >/dev/null || return
+  asterisk -rx 'pjsip show identifiers' |
+    awk '$1 == "request_uri" {uri=NR} $1 == "ip" {ip=NR} END {exit !(uri && ip && uri < ip)}' || return
+  asterisk -rx 'dialplan reload' || return
+  asterisk -rx 'dialplan show baerbel-routing-trace' | grep -F '[ Context' >/dev/null
 }
 
 rollback_accounts() {
@@ -158,6 +220,7 @@ case "$action" in
   prepare) prepare_release ;;
   activate) activate_release ;;
   activate-accounts) activate_accounts ;;
+  install-account-routing) install_account_routing ;;
   rollback-accounts) rollback_accounts ;;
   rollback) rollback_release ;;
 esac
