@@ -2,12 +2,13 @@
 
 | Location on the miniserver | Contents |
 |---|---|
-| `/etc/phone-assistant/global.json` | Shared rules, prompts and credentials. The live defaults are `gpt-6.2-sol`, low reasoning, priority service tier and Willow voice. The Git template is `config/global.json`. |
-| `/var/lib/phone-assistant/users.sqlite3` | Each user’s type, name, registered phone, PIN hash, preferences, Google connections, memory and delivery history. |
-| `/etc/asterisk/phone-assistant-*.conf` | Phone numbers, SIP credentials, carrier routing and the optional handset. |
+| `/etc/phone-assistant/global.yaml` | Shared rules, prompts and credentials. The live defaults are `gpt-6.2-sol`, low reasoning, priority service tier and Willow voice. The Git template is `config/global.yaml`. |
+| `/var/lib/phone-assistant/users.sqlite3` | Each user’s type, name, registered phone, PIN hash, preferences, SIP accounts, Google connections, memory and delivery history. |
+| `/etc/phone-assistant/asterisk.yaml` | Private PBX setup, including routing, network, AMI, handset and Telematica settings. |
+| `/etc/asterisk/phone-assistant/` | Generated module files installed by `asteriskconfig`. |
 | `/etc/phone-assistant/phone-numbers.json` | Numbering reference data shipped with Bärbel. |
 
-`global.json` and `users.sqlite3` both have mode `0600`. Standard users
+`global.yaml` and `users.sqlite3` both have mode `0600`. Standard users
 call the shared line. Pro users have dedicated numbers and incoming-call
 handling. Bärbel selects a user by their registered caller number.
 
@@ -24,21 +25,21 @@ After the user grants consent, import the token export on the miniserver
 using the installed server binary.
 
 ```sh
-phone-assistant-server --connect-google /etc/phone-assistant/global.json ACCOUNT SERVICE TOKEN_FILE
+phone-assistant-server --connect-google /etc/phone-assistant/global.yaml ACCOUNT SERVICE TOKEN_FILE
 ```
 
 Use `gmail`, `calendar` or `contacts` for `SERVICE`. Restart Bärbel after
 import, then remove the temporary export. Each user gets the Google tools
 they have connected.
 
-## Asterisk installer inputs
+## Asterisk setup
 
-Both files are under `/etc/phone-assistant/`.
-
-- `telematica.env` holds carrier credentials and forwarding settings. The
-  installer renders these into Asterisk’s Telematica SIP and dialplan files.
-- `account-routes` holds one line in the order `SHARED_DID PRO_DID PRO_ACCOUNT_ID`.
-  The routing installer uses it to generate the shared and dedicated routes.
+Standard users share the 033 SIP account in SQLite. Each Pro user has
+their own SIP number, username and password there. A user’s registered
+caller number is stored separately. `make install-account-routing`
+renders the managed files from the private Asterisk YAML and SQLite after
+a SIP account is added. Telematica’s former verification flag was a
+record of call testing.
 
 ## Recovery files
 

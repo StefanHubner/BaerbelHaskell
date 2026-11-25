@@ -104,7 +104,7 @@ readWithoutLock settings directory = either (expectationFailure . show) open con
 
 withStoreConfig :: (Settings -> FilePath -> IO ()) -> IO ()
 withStoreConfig action = do
-  loaded <- loadSettings "config/global.json" "config/user.example.json"
+  loaded <- loadSettings "config/global.yaml" "config/user.example.json"
   case loaded of
     Left issue -> expectationFailure (show issue)
     Right settings -> withSystemTempDirectory "baerbel-profile" $ \directory -> setFileMode directory 0o700 >> action settings directory

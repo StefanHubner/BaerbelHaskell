@@ -14,7 +14,7 @@ previous release.
 
 ## Check and package
 
-Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared application rules remain in `config/global.json`; `config/phone-numbers.json` supplies reference metadata beside it. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
+Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared application rules remain in `config/global.yaml`; `config/phone-numbers.json` supplies reference metadata beside it. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
 
 ```sh
 make check
@@ -49,7 +49,7 @@ make activate
 ```
 
 This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the combined configuration at
-`/etc/phone-assistant/global.json` and repeats the executable's `--check` as
+`/etc/phone-assistant/global.yaml` and repeats the executable's `--check` as
 the service user. The first migration stops the assistant before refreshing
 the imported state so the database captures completed writes. The former account JSON is archived under
 `/var/backups/phone-assistant-users.*`; the source state files are retained
@@ -64,33 +64,25 @@ notification workers use the migrated user database. See
 [migration.md](migration.md) for the record of real calls and production
 checks.
 
-## Activate the two account routes
+## Install Asterisk settings
 
-The original JSON account cutover used `make activate-accounts` from the
-workstation. This command uses sudo on the miniserver. It checks the staged
-private account file and confirms Asterisk is idle before replacing the managed
-entry dialplan. It backs up the existing dialplan, private settings and service
-override. The command reloads the dialplan and starts the same Haskell service
-with the account file. Confirm separate carrier delivery to the two numbers
-and check a Standard assistant call and a Pro incoming call after cutover.
-See [the routing template notes](../deploy/asterisk/README.md).
+```sh
+make install-account-routing
+```
 
-## Repair Bristol SIP authentication
+The release includes the Haskell `asteriskconfig` executable. It uses
+`/etc/phone-assistant/asterisk.yaml` for PBX policy and
+`/var/lib/phone-assistant/users.sqlite3` for SIP accounts. The generated
+files are grouped in `/etc/asterisk/phone-assistant/` and loaded by the
+appropriate Asterisk modules. The installer checks that the PBX is idle
+and preserves the replaced files in a private backup.
 
-The Bristol repair is active as of 2026-11-25 21:08:57 UTC. The first
-Bristol attempt reached Asterisk and received repeated `401` responses
-after A&A supplied a digest. The two SIP accounts use separate passwords.
-The corrected release `75b0c02` loaded both endpoints. The route trace
-recorded selection of Bristol and entry into the owner session on a real
-call, which the owner confirmed worked. Both running services reported
-zero restarts after activation.
-
-If the account split is already active and its SIP routing needs repair,
-stage the release and run `make install-account-routing`. The installer preserves the user account
-file, splits the inbound SIP credentials and restarts Asterisk only after
-checking for active calls. It checks the new endpoint, SIP identifier order,
-dialplan and Haskell service. The trace is available to the service account
-as described in [the configuration reference](configuration.md).
+The initial adoption moves the existing shared and Pro credentials into
+SQLite, changes the old internal Pro ID to `stefan`, and archives the
+former JSON configuration and `account-routes` file. It preserves the
+existing primary Pro routing. Additional Pro SIP accounts generate
+dedicated owner entry routes. Standard users use the shared SIP account
+without requiring a new Asterisk endpoint.
 
 ## Archive legacy files
 

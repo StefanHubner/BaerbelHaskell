@@ -6,7 +6,7 @@ custom-setup:
 license: NONE
 synopsis: Functional telephone assistant
 extra-source-files:
-- config/global.json
+- config/global.yaml
 - config/users.sql
 - config/phone-numbers.json
 - test/live/config.json
@@ -25,6 +25,7 @@ extra-source-files:
 dependencies:
 - base >= 4.20
 - aeson >= 2.2
+- yaml >= 0.11.11
 - async >= 2.2
 - base64-bytestring >= 1.2
 - binary >= 0.8
@@ -79,6 +80,11 @@ library:
   source-dirs: src
   extra-libraries: [baerbel-vad, stdc++, z]
 executables:
+  asteriskconfig:
+    main: AsteriskMain.hs
+    source-dirs: app
+    other-modules: []
+    dependencies: [baerbel]
   phone-assistant-server:
     main: Main.hs
     source-dirs: app

@@ -6,11 +6,12 @@ import Baerbel.Core.Live (LiveConfig(..), closedStatus)
 import Baerbel.Core.Protocol (closeCommand)
 import Baerbel.Core.Session (announcementConfig)
 import Baerbel.Runtime.Live (closeSession)
+import Baerbel.Runtime.Config (readGlobal)
 import Control.Concurrent.Async (AsyncCancelled, cancel, link, waitCatch, withAsync)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (bracket, fromException)
 import Control.Monad (void)
-import Data.Aeson (Value, decodeStrict', eitherDecodeFileStrict', encode, object, (.=))
+import Data.Aeson (Value, decodeStrict', encode, object, (.=))
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Network.Socket (Family(AF_UNIX), SocketType(Stream), close, defaultProtocol, socketPair)
@@ -89,8 +90,8 @@ cancellation cfg = do
 
 withGlobal :: (Global -> Expectation) -> Expectation
 withGlobal action = do
-  loaded <- eitherDecodeFileStrict' "config/global.json"
-  either expectationFailure action loaded
+  loaded <- readGlobal "config/global.yaml"
+  either (expectationFailure . show) action loaded
 
 withConfig :: (LiveConfig -> Expectation) -> Expectation
 withConfig action = withGlobal $ \global -> do

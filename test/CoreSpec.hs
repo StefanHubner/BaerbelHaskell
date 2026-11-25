@@ -39,7 +39,7 @@ spec = do
     it "returns malformed JSON as an error value" $
       (decodeBytes "invalid" "{" :: Either Failure Text) `shouldBe` Left (failure "invalid")
     it "loads the preserved global tool catalogue" $ do
-      result <- loadSettings "config/global.json" "config/user.example.json"
+      result <- loadSettings "config/global.yaml" "config/user.example.json"
       fmap (Map.size . globalTools . settingsGlobal) result `shouldBe` Right 15
   describe "account separation" $ do
     it "selects a phone account with private state and central model policy" $ do

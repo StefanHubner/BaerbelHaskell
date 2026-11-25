@@ -19,13 +19,13 @@ These are feature modules, not one large core module. For example, `Core.Live` o
 
 ## Configuration and scope
 
-`config/global.json` holds application defaults, prompts, tool schemas and policy. `config/phone-numbers.json` holds reference numbering data shared by all calls. One private user file supplies the current user's credentials, integration settings and state paths. Unused imported rule snapshots and voice lists have been removed. Production releases contain the two shared configuration files and exclude development-only assets.
+`config/global.yaml` holds application defaults, prompts, tool schemas and policy. `config/phone-numbers.json` holds reference numbering data shared by all calls. One private user file supplies the current user's credentials, integration settings and state paths. Unused imported rule snapshots and voice lists have been removed. Production releases contain the two shared configuration files and exclude development-only assets.
 
 Production speech uses Live only. The unused STT/chat/TTS pipeline is removed; synthetic TTS belongs to the development checker, whose separate `test/live/config.json` is passed as its `DEVELOPMENT` argument. Native resampling, voice activity detection and note encoding remain runtime capabilities.
 
 The deployed configuration selects backend `gpt-6.2-sol`, reasoning effort `low` and service tier `priority` (Fast) in `session.delegation.responses`; the Live speech model remains unchanged. Restricted sessions use the same backend settings with their existing restricted tools. Announcements retain client delegation. A focused target Live check verified two completed backend responses and an exact synthetic tool round trip; the provider reported `fast` for the requested `priority` tier. This is functionality evidence, not a latency benchmark.
 
-Account routing resolves a registered phone to one user and its Standard or Pro type. The production configuration puts shared policy and credentials in `/etc/phone-assistant/global.json`. One private SQLite database holds users, preferences and PIN hashes, normalized OAuth clients and account grants, individual memory entries, delivery receipts and event cursors. User-scoped keys and foreign keys separate these resources. Google tools are instantiated only for services the selected user has connected; each connection owns its in-memory refresh cache.
+Account routing resolves a registered phone to one user and its Standard or Pro type. The production configuration puts shared policy and credentials in `/etc/phone-assistant/global.yaml`. One private SQLite database holds users, preferences and PIN hashes, normalized OAuth clients and account grants, individual memory entries, delivery receipts and event cursors. User-scoped keys and foreign keys separate these resources. Google tools are instantiated only for services the selected user has connected; each connection owns its in-memory refresh cache.
 
 The shared telephone number serves Standard accounts after matching the registered caller number. Asterisk asks Bärbel to look up the phone through local FastAGI and marks the accepted channel with its account ID. The existing per-call PIN gate still applies to protected Gmail tools. A dedicated number routes its Pro owner through the same check and other calls into restricted screening. Asterisk authenticates the shared number and Bristol on separate SIP endpoints. Bristol is selected by the called To number and restricted to A&A source addresses. Asterisk supplies an account ID for screening, handoff announcements and the optional trusted handset. The runtime verifies the account against the matched AMI channel before picking the account's services, storage or managed audio registry. Telematica remains an Asterisk carrier binding. The running dialplan supports one dedicated number and the existing optional handset. See [configuration reference](configuration.md) for file locations and ownership.
 
@@ -76,6 +76,11 @@ Asterisk mixed-call WAV. Notes select an excerpt from that recording.
 The VAD remainder and bounded transcript history are retained in memory.
 
 Windguru forecast parsing uses timestamps to address readings. A forecast array must cover every timestamp; trailing readings with no timestamp are ignored, while short arrays remain invalid. Saved-set results retain each member's independent provider failure, so one failed member does not hide available forecasts. The target checks and corrective release activation are recorded in [live-checks.md](live-checks.md#production-incidents-under-investigation).
+
+The `asteriskconfig` installer joins SIP accounts in SQLite with the
+private PBX YAML to render the files in `/etc/asterisk/phone-assistant/`.
+It preserves the separate Asterisk module includes and the installed SIP
+authentication and provider rules during initial adoption.
 
 ## Deployment boundary
 

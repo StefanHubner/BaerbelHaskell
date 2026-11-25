@@ -6,6 +6,7 @@ import Baerbel.Core.Config (Global, User(..), resolveSettings, rule)
 import Baerbel.Core.Error (Result, failure)
 import Baerbel.Runtime.HTTP (Request(..), Response(..), Body(..), newRawSender)
 import Baerbel.Runtime.OAuth
+import Baerbel.Runtime.Config (readGlobal)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (mapConcurrently, async, wait)
 import Control.Concurrent.MVar (MVar, newMVar, readMVar, modifyMVar_, modifyMVar)
@@ -38,9 +39,9 @@ spec = do
 
 withAuthRules :: (OAuthRules -> AuthorizationRules -> ScopeGroups -> Expectation) -> Expectation
 withAuthRules check = do
-  bytes <- BS.readFile "config/global.json"
-  case eitherDecodeStrict' bytes of
-    Left problem -> expectationFailure problem
+  loaded <- readGlobal "config/global.yaml"
+  case loaded of
+    Left problem -> expectationFailure (show problem)
     Right global -> configure (global :: Global)
   where
     configure :: Global -> Expectation

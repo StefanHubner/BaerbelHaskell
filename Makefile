@@ -21,13 +21,13 @@ test: native
 check: test
 	.tools/hlint src app test Setup.hs
 	haskell-language-server-wrapper typecheck src app test Setup.hs --cwd "$(CURDIR)"
-	stack exec phone-assistant-server -- --check config/global.json "$(user_config)"
+	stack exec phone-assistant-server -- --check config/global.yaml "$(user_config)"
 
 live-check: build
-	stack exec baerbel-live-check -- config/global.json "$(user_config)" test/live/config.json
+	stack exec baerbel-live-check -- config/global.yaml "$(user_config)" test/live/config.json
 
 live-delivery-check: build
-	stack exec baerbel-live-check -- delivery config/global.json "$(user_config)" test/live/config.json
+	stack exec baerbel-live-check -- delivery config/global.yaml "$(user_config)" test/live/config.json
 
 package: native
 	./scripts/package-release.sh

@@ -6,9 +6,8 @@ import Baerbel.Runtime.Authorize
 import Baerbel.Core.Config (Global, User(..), Settings, resolveSettings, rule)
 import Baerbel.Runtime.Error (Result, ioResult)
 import Baerbel.Runtime.HTTP (newRawSender)
-import Baerbel.Core.JSON (decodeBytes)
+import Baerbel.Runtime.Config (readGlobal)
 import Control.Monad (void)
-import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -24,8 +23,8 @@ main = runProgram (getArgs >>= run)
 
 run :: [String] -> IO ()
 run (globalPath:arguments) = do
-  raw <- ioResult "global_config_unavailable" (BS.readFile globalPath)
-  let prepared = raw >>= decodeBytes "global_config_invalid" >>= authorizationSettings
+  global <- readGlobal globalPath
+  let prepared = global >>= authorizationSettings
   result <- Effects.continue (configure arguments) prepared
   either rejected (const (pure ())) result
 run _ = Text.hPutStrLn stderr "Usage: phone-assistant-gmail-auth GLOBAL_CONFIG --client-secrets FILE [--token-file FILE] [--calendar] [--contacts] [--no-gmail] [--no-browser] [--port PORT] [--timeout SECONDS]" >> exitFailure

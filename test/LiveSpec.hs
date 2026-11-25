@@ -9,6 +9,7 @@ import qualified Baerbel.Runtime.Ringback as Ring
 import qualified Data.Map.Strict as Map
 import qualified Baerbel.Runtime.Pin as Pin
 import qualified Baerbel.Runtime.EndCall as End
+import Baerbel.Runtime.Config (readGlobal)
 import Control.Concurrent.Async (withAsync, wait)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (finally)
@@ -254,7 +255,7 @@ spec = do
 
   describe "configured session payloads" $ do
     it "matches the complete default session at a fixed clock" $ do
-      global <- eitherDecodeFileStrict' "config/global.json" :: IO (Either String Config.Global)
+      global <- readGlobal "config/global.yaml"
       original <- eitherDecodeFileStrict' "test/fixtures/live-session.json" :: IO (Either String Value)
       case (global, original) of
         (Right values, Right expected) -> do
@@ -267,7 +268,7 @@ spec = do
         _ -> expectationFailure "Could not load preserved session fixture or global configuration"
 
     it "matches every enabled owner policy and tool at the UK DST transition" $ do
-      global <- eitherDecodeFileStrict' "config/global.json" :: IO (Either String Config.Global)
+      global <- readGlobal "config/global.yaml"
       original <- eitherDecodeFileStrict' "test/fixtures/live-integrated-session.json" :: IO (Either String Value)
       case (global, original) of
         (Right values, Right expected) -> integratedSession values `shouldBe` Right expected

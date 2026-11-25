@@ -120,7 +120,7 @@
 <title>pbx</title>
 <path fill="#eaf2ed" stroke="#618d73" stroke-width="1.4" d="M1052,-1092.5C1052,-1092.5 651,-1092.5 651,-1092.5 645,-1092.5 639,-1086.5 639,-1080.5 639,-1080.5 639,-1014.5 639,-1014.5 639,-1008.5 645,-1002.5 651,-1002.5 651,-1002.5 1052,-1002.5 1052,-1002.5 1058,-1002.5 1064,-1008.5 1064,-1014.5 1064,-1014.5 1064,-1080.5 1064,-1080.5 1064,-1086.5 1058,-1092.5 1052,-1092.5"/>
 <text text-anchor="middle" x="851.5" y="-1069.5" font-family="DejaVu Sans" font-size="15.00">Existing Asterisk</text>
-<text text-anchor="middle" x="851.5" y="-1052.5" font-family="DejaVu Sans" font-size="15.00">Separate shared and Pro SIP credentials</text>
+<text text-anchor="middle" x="851.5" y="-1052.5" font-family="DejaVu Sans" font-size="15.00">Asterisk YAML + SQLite&#45;backed SIP accounts</text>
 <text text-anchor="middle" x="851.5" y="-1035.5" font-family="DejaVu Sans" font-size="15.00">Native dialplan and media bridge</text>
 <text text-anchor="middle" x="851.5" y="-1018.5" font-family="DejaVu Sans" font-size="15.00">AudioSocket · AMI · FastAGI · full&#45;call WAV</text>
 </g>
@@ -187,14 +187,14 @@
 <title>state</title>
 <path fill="#f3f4f6" stroke="#728397" stroke-width="1.4" d="M1080.5,-214C1080.5,-214 622.5,-214 622.5,-214 616.5,-214 610.5,-208 610.5,-202 610.5,-202 610.5,-153 610.5,-153 610.5,-147 616.5,-141 622.5,-141 622.5,-141 1080.5,-141 1080.5,-141 1086.5,-141 1092.5,-147 1092.5,-153 1092.5,-153 1092.5,-202 1092.5,-202 1092.5,-208 1086.5,-214 1080.5,-214"/>
 <text text-anchor="middle" x="851.5" y="-191" font-family="DejaVu Sans" font-size="15.00">Private SQLite user database</text>
-<text text-anchor="middle" x="851.5" y="-174" font-family="DejaVu Sans" font-size="15.00">Users and types · Google grants and scopes</text>
+<text text-anchor="middle" x="851.5" y="-174" font-family="DejaVu Sans" font-size="15.00">Users and SIP accounts · Google grants</text>
 <text text-anchor="middle" x="851.5" y="-157" font-family="DejaVu Sans" font-size="15.00">Memory · delivery receipts · PBX event cursors</text>
 </g>
 <!-- config -->
 <g id="node13" class="node">
 <title>config</title>
 <path fill="#f3f4f6" stroke="#728397" stroke-width="1.4" d="M1906.5,-904C1906.5,-904 1656.5,-904 1656.5,-904 1650.5,-904 1644.5,-898 1644.5,-892 1644.5,-892 1644.5,-843 1644.5,-843 1644.5,-837 1650.5,-831 1656.5,-831 1656.5,-831 1906.5,-831 1906.5,-831 1912.5,-831 1918.5,-837 1918.5,-843 1918.5,-843 1918.5,-892 1918.5,-892 1918.5,-898 1912.5,-904 1906.5,-904"/>
-<text text-anchor="middle" x="1781.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Private global.json</text>
+<text text-anchor="middle" x="1781.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Private global.yaml</text>
 <text text-anchor="middle" x="1781.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Shared rules and credentials</text>
 <text text-anchor="middle" x="1781.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Reference: phone&#45;numbers.json</text>
 </g>

@@ -6,7 +6,11 @@ prefix=/home/stefan/apps/baerbel
 service=phone-assistant.service
 override=/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf
 user_config=/etc/phone-assistant/user.json
-global_config=/etc/phone-assistant/global.json
+global_config=/etc/phone-assistant/global.yaml
+legacy_global_config=/etc/phone-assistant/global.json
+pbx_config=/etc/phone-assistant/asterisk.yaml
+pbx_directory=/etc/asterisk
+legacy_routes=/etc/phone-assistant/account-routes
 user_database=/var/lib/phone-assistant/users.sqlite3
 legacy_state="$prefix/legacy"
 legacy_env=/etc/phone-assistant/assistant.env
@@ -25,12 +29,12 @@ prepare_release() {
     mv "$stage/baerbel" "$release"
     rmdir "$stage"
   fi
-  prepare_config "$release/config/global.json"
+  prepare_config "$release/config/global.yaml"
   env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server"
-  if [[ -f "$work/global.json" && -f "$release/deploy/migrate-users.py" ]]; then
-    config=("$work/global.json")
+  if [[ -f "$work/global.yaml" && -f "$release/deploy/migrate-users.py" ]]; then
+    config=("$work/global.yaml")
   else
-    config=("$release/config/global.json" "$work/user.json")
+    config=("$release/config/global.yaml" "$work/user.json")
   fi
   "$release/bin/phone-assistant-server" --check "${config[@]}"
   ln -sfn "releases/$digest" "$prefix/staged"
@@ -38,18 +42,21 @@ prepare_release() {
 }
 
 prepare_config() {
-  local global=$1 migration
+  local global=$1 migration installed
   migration=$(dirname "$global")/../deploy/migrate-users.py
-  if [[ -f "$global_config" ]]; then
+  if [[ -f "$global_config" || -f "$legacy_global_config" ]]; then
+    installed=$global_config
+    [[ -f "$installed" ]] || installed=$legacy_global_config
     install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
-    python3 "$migration" merge "$global" "$global_config" "$work/global.json"
+    python3 "$migration" merge "$global" "$installed" "$work/global.yaml"
   elif [[ -f "$user_config" && -f "$migration" ]]; then
     install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
-    python3 "$migration" prepare "$global" "$user_config" "$work/global.json" "$user_database"
+    python3 "$migration" prepare "$global" "$user_config" "$work/global.yaml" "$user_database"
   elif [[ -f "$user_config" ]]; then
     install -m 0600 "$user_config" "$work/user.json"
   else
-    /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" "$legacy_env" "$work/user.json" "$global"
+    python3 -c 'import json, sys, yaml; print(json.dumps(yaml.safe_load(sys.stdin)))' < "$global" |
+      /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" "$legacy_env" "$work/user.json" /dev/stdin
   fi
 }
 
@@ -72,8 +79,8 @@ activate_release() {
     active_config=("$target_config")
     install -m 0644 "$release/config/phone-numbers.json" "$(dirname "$global_config")/phone-numbers.json" || return
   else
-    config=("$release/config/global.json" "$prepared_user")
-    active_config=("$release/config/global.json" "$target_config")
+    config=("$release/config/global.yaml" "$prepared_user")
+    active_config=("$release/config/global.yaml" "$target_config")
   fi
   runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "${config[@]}" || return
   install -m 0600 -o "$service_user" -g "$service_user" "$prepared_user" "$target_config" || return
@@ -95,8 +102,11 @@ UNIT
 activate_prepared() {
   local release
   release=$(readlink -e "$prefix/staged") || return
-  if [[ -f "$global_config" ]]; then
-    activate_release "$work/global.json" "$global_config"
+  if [[ -f "$legacy_global_config" && -f "$legacy_routes" ]]; then
+    activate_pbx_database "$release"
+  elif [[ -f "$global_config" || -f "$legacy_global_config" ]]; then
+    activate_release "$work/global.yaml" "$global_config" || return
+    move_legacy "$legacy_global_config" "${legacy_env_backup%/*}/global.json"
   elif [[ -f "$user_database" && -f "$release/deploy/migrate-users.py" ]]; then
     activate_user_database "$release"
   else
@@ -109,13 +119,13 @@ activate_user_database() {
   require_idle || return
   asterisk -rx 'dialplan show baerbel-account-entry' | grep -F 'agi://127.0.0.1:4573/account' >/dev/null || return
   service_user=$(systemctl show "$service" --property=User --value) || return
-  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.json" || return
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.yaml" || return
   backup=$(mktemp -d /var/backups/phone-assistant-users.XXXXXXXX) || return
   cp -a "$override" "$user_config" "$backup/" || return
   systemctl stop "$service" || return
   if runuser -u "$service_user" -- python3 "$release/deploy/migrate-users.py" refresh \
-    "$release/config/global.json" "$user_config" "$work/global.json" &&
-    activate_release "$work/global.json" "$global_config"; then
+    "$release/config/global.yaml" "$user_config" "$work/global.yaml" &&
+    activate_release "$work/global.yaml" "$global_config"; then
     rm "$user_config" || printf 'The old account JSON is still available beside the global configuration.\n' >&2
     printf 'User database active. Previous private configuration and unit saved at %s.\n' "$backup"
     return
@@ -134,7 +144,7 @@ activate_accounts() {
   release=$(readlink -e "$prefix/staged")
   route=/etc/asterisk/phone-assistant-extensions.conf
   service_user=$(systemctl show "$service" --property=User --value)
-  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/accounts.json"
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.yaml" "$work/accounts.json"
   read -r shared dedicated account < "$work/account-routes"
   candidate=$(mktemp)
   python3 "$release/deploy/asterisk/render-asterisk-accounts.py" "$route" \
@@ -168,58 +178,56 @@ enable_routing_trace() {
   asterisk -rx 'database put baerbel account-routing-trace 1'
 }
 
-install_account_routing() {
-  local route shared dedicated account candidate backup release sip trunk bristol service_user
-  require_idle
-  release=$(readlink -e "$prefix/staged")
-  service_user=$(systemctl show "$service" --property=User --value)
-  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/user.json"
-  route=/etc/asterisk/phone-assistant-extensions.conf
-  sip=/etc/asterisk/pjsip.conf
-  trunk=/etc/asterisk/phone-assistant-pjsip.conf
-  bristol=/etc/asterisk/phone-assistant-bristol-pjsip.conf
-  read -r shared dedicated account < /etc/phone-assistant/account-routes
-  candidate=$(mktemp -d)
-  trap 'rm -r "$candidate"' RETURN
-  python3 "$work/render-asterisk-accounts.py" "$route" "$work/account-entry.conf.in" \
-    "$shared" "$dedicated" "$account" "$candidate/extensions.conf"
-  python3 "$work/render-bristol-sip.py" "$sip" "$trunk" "$dedicated" AsterixUser "$work/bristol-sip-password" "$candidate"
-  backup=$(mktemp -d /var/backups/phone-assistant-bristol.XXXXXXXX)
-  cp -a "$route" "$sip" "$user_config" "$override" "$backup/"
-  [[ ! -f "$bristol" ]] || cp -a "$bristol" "$backup/"
-  if install -o root -g asterisk -m 0640 "$candidate/phone-assistant-bristol-pjsip.conf" "$bristol" &&
-    install -o root -g asterisk -m 0640 "$candidate/pjsip.conf" "$sip" &&
-    install -o root -g asterisk -m 0640 "$candidate/extensions.conf" "$route" &&
-    restart_account_routing && activate_release; then
-    enable_routing_trace
-    rm -f "$work/bristol-sip-password"
-    printf 'Bristol SIP authentication and account routing installed. Backup: %s\n' "$backup"
+activate_pbx_database() {
+  local release=$1 service_user backup
+  local installer="$release/bin/asteriskconfig"
+  require_idle || return
+  service_user=$(systemctl show "$service" --property=User --value) || return
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.yaml" || return
+  backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
+  cp -a "$override" "$legacy_routes" "$legacy_global_config" "$backup/" || return
+  systemctl stop "$service" || return
+  if ! cp -a "$user_database" "$backup/users.sqlite3"; then
+    systemctl start "$service"
+    return 1
+  fi
+  if install_pbx_database "$installer" "$backup" "$release" "$service_user"; then
+    mv -- "$legacy_global_config" "$backup/active-global.json"
+    mv -- "$legacy_routes" "$backup/legacy-account-routes"
+    move_legacy /etc/phone-assistant/telematica.env "$backup/telematica.env"
+    printf 'Asterisk configuration installed from YAML and SQLite. Backup %s\n' "$backup"
     return
   fi
-  cp -a "$backup/pjsip.conf" "$sip"
-  cp -a "$backup/phone-assistant-extensions.conf" "$route"
-  cp -a "$backup/user.json" "$user_config"
+  systemctl stop "$service" || return
+  cp -a "$backup/users.sqlite3" "$user_database"
   cp -a "$backup/zz-baerbel-haskell.conf" "$override"
-  if [[ -f "$backup/phone-assistant-bristol-pjsip.conf" ]]; then
-    cp -a "$backup/phone-assistant-bristol-pjsip.conf" "$bristol"
-  else
-    rm -f "$bristol"
-  fi
-  systemctl restart asterisk.service
+  rm -f "$global_config" "$pbx_config"
   systemctl daemon-reload
-  systemctl restart "$service"
-  printf 'Bristol installation failed; restored the previous files.\n' >&2
+  systemctl start "$service"
   return 1
 }
 
-restart_account_routing() {
-  systemctl restart asterisk.service || return
-  timeout 20 asterisk -rx 'core waitfullybooted' >/dev/null || return
-  asterisk -rx 'pjsip show endpoint phone-assistant-aa-bristol' |
-    grep -E 'Endpoint:[[:space:]]+phone-assistant-aa-bristol([ /]|$)' >/dev/null || return
-  asterisk -rx 'pjsip show identifiers' |
-    awk '$1 == "header" {header=NR} $1 == "ip" {ip=NR} END {exit !(header && ip && header < ip)}' || return
-  asterisk -rx 'dialplan show baerbel-routing-trace' | grep -F '[ Context' >/dev/null
+install_pbx_database() {
+  local installer=$1 backup=$2 release=$3 service_user=$4
+  "$installer" adopt "$pbx_directory" "$legacy_routes" "$backup/asterisk.yaml" "$user_database" || return
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.yaml" || return
+  install -m 0600 "$backup/asterisk.yaml" "$pbx_config" || return
+  "$installer" install "$pbx_config" "$user_database" "$backup/asterisk" || return
+  activate_release "$work/global.yaml" "$global_config" && return
+  "$installer" restore "$pbx_directory" "$backup/asterisk"
+  return 1
+}
+
+install_account_routing() {
+  local pid binary release backup
+  require_idle || return
+  pid=$(systemctl show "$service" --property=MainPID --value) || return
+  binary=$(readlink -e "/proc/$pid/exe") || return
+  release=${binary%/bin/phone-assistant-server}
+  backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
+  "$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$backup" || return
+  systemctl restart "$service" || return
+  verify_service "$binary"
 }
 
 move_legacy() {

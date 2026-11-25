@@ -10,7 +10,7 @@ synopsis:       Functional telephone assistant
 license:        NONE
 build-type:     Custom
 extra-source-files:
-    config/global.json
+    config/global.yaml
     config/users.sql
     config/phone-numbers.json
     test/live/config.json
@@ -74,6 +74,7 @@ library
   exposed-modules:
       Baerbel.Core.Accounts
       Baerbel.Core.AMI
+      Baerbel.Core.Asterisk
       Baerbel.Core.AudioMetrics
       Baerbel.Core.AudioSocket
       Baerbel.Core.Authorize
@@ -134,6 +135,7 @@ library
       Baerbel.Runtime.Accounts
       Baerbel.Runtime.AMI
       Baerbel.Runtime.Application
+      Baerbel.Runtime.Asterisk
       Baerbel.Runtime.AudioSocket
       Baerbel.Runtime.Authorize
       Baerbel.Runtime.Cache
@@ -240,6 +242,62 @@ library
     , warp >=3.3
     , websockets >=0.12
     , wuss >=1.1
+    , yaml >=0.11.11
+  default-language: Haskell2010
+
+executable asteriskconfig
+  main-is: AsteriskMain.hs
+  hs-source-dirs:
+      app
+  default-extensions:
+      OverloadedStrings
+      DeriveGeneric
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates
+  build-depends:
+      aeson >=2.2
+    , async >=2.2
+    , baerbel
+    , base >=4.20
+    , base64-bytestring >=1.2
+    , binary >=0.8
+    , bytestring >=0.11
+    , case-insensitive >=1.2
+    , cassava >=0.5
+    , containers >=0.6
+    , crypton >=1.0
+    , crypton-connection >=0.4
+    , directory >=1.3
+    , filepath >=1.4
+    , http-client >=0.7
+    , http-client-tls >=0.3
+    , http-types >=0.12
+    , memory >=0.16
+    , mime-mail >=0.5
+    , mtl >=2.2
+    , network >=3.1
+    , process >=1.6
+    , regex-tdfa >=1.3
+    , scientific >=0.3
+    , sqlite-simple >=0.4
+    , stm >=2.5
+    , tagsoup >=0.14
+    , temporary >=1.3
+    , text >=1.2
+    , text-icu >=0.8
+    , time >=1.11
+    , tls >=2.0
+    , transformers >=0.5
+    , tz >=0.1
+    , tzdata >=0.2
+    , unicode-transforms >=0.4
+    , unix >=2.8
+    , uuid >=1.3
+    , vector >=0.12
+    , wai >=3.2
+    , warp >=3.3
+    , websockets >=0.12
+    , wuss >=1.1
+    , yaml >=0.11.11
   default-language: Haskell2010
 
 executable baerbel-live-check
@@ -315,6 +373,7 @@ executable baerbel-live-check
     , warp >=3.3
     , websockets >=0.12
     , wuss >=1.1
+    , yaml >=0.11.11
   default-language: Haskell2010
 
 executable phone-assistant-gmail-auth
@@ -369,6 +428,7 @@ executable phone-assistant-gmail-auth
     , warp >=3.3
     , websockets >=0.12
     , wuss >=1.1
+    , yaml >=0.11.11
   default-language: Haskell2010
 
 executable phone-assistant-server
@@ -423,6 +483,7 @@ executable phone-assistant-server
     , warp >=3.3
     , websockets >=0.12
     , wuss >=1.1
+    , yaml >=0.11.11
   default-language: Haskell2010
 
 test-suite baerbel-test
@@ -511,4 +572,5 @@ test-suite baerbel-test
     , warp >=3.3
     , websockets >=0.12
     , wuss >=1.1
+    , yaml >=0.11.11
   default-language: Haskell2010

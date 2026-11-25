@@ -15,6 +15,7 @@ import TestSupport (withRule)
 import Baerbel.Runtime.Recording
 import qualified Baerbel.Runtime.Telephony as Native
 import Baerbel.Core.Routing
+import Baerbel.Runtime.Config (readGlobal)
 import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar_, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (withAsync)
 import Control.Monad (forever, unless, void)
@@ -484,9 +485,9 @@ readFakeMessage connection = collect B.empty
 
 withPublicSettings :: (Settings -> Expectation) -> Expectation
 withPublicSettings check = do
-  bytes <- B.readFile "config/global.json"
-  case eitherDecodeStrict' bytes of
-    Left problem -> expectationFailure problem
+  loaded <- readGlobal "config/global.yaml"
+  case loaded of
+    Left problem -> expectationFailure (show problem)
     Right global -> check (resolveSettings (global :: Global) (User M.empty))
 
 publicSpec :: Spec

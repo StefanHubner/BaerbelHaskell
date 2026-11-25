@@ -12,7 +12,7 @@ case "$action" in
     ssh -- "$target" "bash '$work/remote-deploy.sh' prepare"
     ;;
   install-account-routing)
-    scp -- "$root/scripts/remote-deploy.sh" "$root/scripts/render-asterisk-accounts.py" "$root/scripts/render-bristol-sip.py" "$root/deploy/asterisk/account-entry.conf.in" "$target:$work/"
+    scp -- "$root/scripts/remote-deploy.sh" "$target:$work/"
     ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' install-account-routing"
     ;;
   archive-legacy)

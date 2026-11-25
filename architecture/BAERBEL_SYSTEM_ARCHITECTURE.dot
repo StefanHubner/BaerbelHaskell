@@ -5,7 +5,7 @@ digraph Baerbel {
   title [shape=plain, style="", label="BÄRBEL · HASKELL IMPLEMENTATION", fontsize=26, pos="900,1030!"];
   status [shape=plain, style="", label="Haskell active · live-only speech · gpt-6.2-sol / low / priority\nSeparate SIP accounts active · Bristol owner call verified\nEarlier owner Gmail + known-caller ringing verified · forwarded caller ended before answer", fontsize=15, pos="900,965!"];
   phones [label="Owner / public callers\nShared Standard number · dedicated Pro number\nSIP providers and optional home handset", pos="900,870!", width=4.7];
-  pbx [label="Existing Asterisk\nSeparate shared and Pro SIP credentials\nNative dialplan and media bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="900,750!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
+  pbx [label="Existing Asterisk\nAsterisk YAML + SQLite-backed SIP accounts\nNative dialplan and media bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="900,750!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
   owner [label="Owner ingress :9092\nAccount selected from Asterisk channel\nExisting Gmail keypad PIN gate", pos="420,570!", width=5.2, fillcolor="#f1eaf8", color="#9674b2"];
   public [label="Public ingress :9093\nDedicated Pro route in account mode\nScreen / decline / take message only", pos="1380,570!", width=5.2, fillcolor="#fff1e5", color="#b98b65"];
   shell [label="Imperative Shell · Baerbel.Runtime.*\nEffects, capabilities and resource lifetimes\nHTTP / WebSocket / AMI · audio / files / SQLite\nWorkers stop → Live close/ack → final log", pos="900,340!", width=6.5, height=1.35, fillcolor="#eaf2ed", color="#618d73", penwidth=2.0];
@@ -13,8 +13,8 @@ digraph Baerbel {
   speech [label="Live WebSocket speech\nDelegated backend: gpt-6.2-sol\nlow reasoning · priority", pos="180,340!", width=3.6];
   providers [label="Owner tools and caller lookup\nGmail · Calendar · Contacts\nMaps · Windguru · per-account profile", pos="420,100!", width=5.2];
   notifications [label="Fixed-recipient notifications\nSMS and owner voice notes\nAccepted delivery survives hangup", pos="1380,100!", width=5.2, fillcolor="#fff1e5"];
-  state [label="Private SQLite user database\nUsers and types · Google grants and scopes\nMemory · delivery receipts · PBX event cursors", pos="900,-120!", width=6.7, fillcolor="#f3f4f6"];
-  config [label="Private global.json\nShared rules and credentials\nReference: phone-numbers.json", pos="1830,570!", width=3.8, fillcolor="#f3f4f6"];
+  state [label="Private SQLite user database\nUsers and SIP accounts · Google grants\nMemory · delivery receipts · PBX event cursors", pos="900,-120!", width=6.7, fillcolor="#f3f4f6"];
+  config [label="Private global.yaml\nShared rules and credentials\nReference: phone-numbers.json", pos="1830,570!", width=3.8, fillcolor="#f3f4f6"];
   permissions [shape=plain, style="", label="Owner ingress retains the Asterisk trust boundary; public input never grants owner tools\nReserve before side effects; preserve uncertain outcomes without automatic replay", fontsize=14, pos="900,-235!"];
   legend [shape=plain, style="", label="Solid arrows: call / data flow · dashed arrow: module imports (Runtime → Core only)", fontsize=14, pos="900,-290!"];
   phones -> pbx [label="calls"];

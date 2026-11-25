@@ -11,6 +11,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import TypedDict, cast
 
+import yaml  # type: ignore[import-untyped]
+
 
 class Account(TypedDict):
     plan: str
@@ -120,7 +122,7 @@ def import_connections(binary: Path, config_path: Path, user: str, account: Acco
 
 def migrate(global_path: Path, legacy_path: Path, config_path: Path, database: Path, create: bool) -> int:
     legacy = cast(Legacy, json.loads(legacy_path.read_text()))
-    defaults: dict[str, str] = json.loads(global_path.read_text())["defaults"]
+    defaults: dict[str, str] = yaml.safe_load(global_path.read_text())["defaults"]
     if create and not database.exists():
         fd = os.open(database, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)
@@ -137,12 +139,11 @@ def migrate(global_path: Path, legacy_path: Path, config_path: Path, database: P
 
 
 def write_global_config(template: Path, target: Path, installation: dict[str, object]) -> None:
-    config = json.loads(template.read_text())
-    config["installation"] = installation
+    config = template.read_text().rstrip()
+    block = yaml.safe_dump({"installation": installation}, allow_unicode=True, sort_keys=False)
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w") as stream:
-        json.dump(config, stream)
-        stream.write("\n")
+        stream.write(config + "\n\n" + block)
 
 
 def main(args: list[str]) -> int:
@@ -151,11 +152,11 @@ def main(args: list[str]) -> int:
             case ["prepare", global_file, source, config, database]:
                 return migrate(Path(global_file), Path(source), Path(config), Path(database), True)
             case ["merge", global_file, installed, config]:
-                current = json.loads(Path(installed).read_text())
+                current = yaml.safe_load(Path(installed).read_text())
                 write_global_config(Path(global_file), Path(config), current["installation"])
                 return 0
             case ["refresh", global_file, source, config]:
-                target = json.loads(Path(config).read_text())["installation"]
+                target = yaml.safe_load(Path(config).read_text())["installation"]
                 legacy = cast(Legacy, json.loads(Path(source).read_text()))
                 if target["environment"] != legacy["environment"]:
                     print("Shared credentials changed after staging. Prepare the release again.", file=sys.stderr)
@@ -163,7 +164,7 @@ def main(args: list[str]) -> int:
                 return migrate(Path(global_file), Path(source), Path(config), Path(target["database"]), False)
             case _:
                 return 2
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, sqlite3.Error):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, sqlite3.Error, yaml.YAMLError):
         print("Could not migrate the existing account state.", file=sys.stderr)
         return 1
 

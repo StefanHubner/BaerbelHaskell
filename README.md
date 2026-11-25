@@ -15,10 +15,10 @@ The build uses the tested LTS package set. Package requirements specify minimum 
 
 ## Configuration and execution
 
-`config/global.json` contains shared defaults, policy, tool schemas and prompts. `config/phone-numbers.json` holds shared numbering reference metadata and is loaded beside the supplied global file. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
+`config/global.yaml` contains shared defaults, policy, tool schemas and prompts. `config/phone-numbers.json` holds shared numbering reference metadata and is loaded beside the supplied global file. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
 
 ```sh
-stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbel/user.json
+stack exec phone-assistant-server -- --check config/global.yaml ~/.config/baerbel/user.json
 ```
 
 `--check` validates local configuration and native dependencies without making provider requests. Production uses Live speech; the unused alternate STT/chat/TTS pipeline has been removed from the current source. The deployed backend settings are `gpt-6.2-sol`, `low` reasoning and `priority` service tier (reported as `fast` by the provider); the Live speech model is unchanged.

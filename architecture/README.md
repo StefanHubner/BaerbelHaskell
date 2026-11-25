@@ -1,6 +1,6 @@
 # Architecture source
 
-This diagram describes the active Haskell release. The normalized user database and combined private global configuration were activated at 2026-11-25T22:01:36Z. The existing `phone-assistant.service` owns all three loopback listeners. Production FastAGI selected the Standard and Pro users on their respective routes while Asterisk kept the same process. Real-call evidence for the Bristol owner route and earlier Gmail and forwarding paths is described in the [migration record](../docs/migration.md).
+The diagram includes the YAML and Asterisk installer layout. The normalized user database and combined JSON configuration were activated at 2026-11-25T22:01:36Z. The existing `phone-assistant.service` owns all three loopback listeners. Production FastAGI selected the Standard and Pro users on their respective routes while Asterisk kept the same process. Real-call evidence for the Bristol owner route and earlier Gmail and forwarding paths is described in the [migration record](../docs/migration.md).
 
 Edit `BAERBEL_SYSTEM_ARCHITECTURE.dot`, then run `./architecture/render.sh`. The source uses explicit coordinates; preserve the owner/public columns and use Graphviz `neato -n2`. Use DejaVu Sans and inspect both generated views for clipping and crossing labels. Commit the DOT, SVG and PNG together. Do not edit generated views by hand.
 
@@ -14,10 +14,12 @@ Phone-number validation now belongs to `Core.PhoneNumber`: `config/phone-numbers
 
 The corrective source now calculates continuous audio deadlines in `Core.Concurrent`; Runtime reads the clock, waits and preserves pause/preview suppression before delivery. Tool logs add only the failure code to their existing metadata. These changes preserve the diagram topology. Their local and focused target-provider checks passed; they remain included in active release `559d2cdf…` as recorded in [live-checks.md](../docs/live-checks.md).
 
-The source now has one production speech path: Live WebSocket audio with its delegated response backend. The unused STT/chat/TTS pipeline is removed. Production combines the shared policy and credentials in one private `global.json`. The database schema in `config/users.sql` covers account types, users, OAuth clients and grants, connections, memory, receipts and cursors. The reference metadata and development TTS fixtures remain separate. The latest route check exercised the running FastAGI listener.
+The source now has one production speech path: Live WebSocket audio with its delegated response backend. The unused STT/chat/TTS pipeline is removed. Production combines the shared policy and credentials in one private `global.yaml`. The database schema in `config/users.sql` covers account types, users, OAuth clients and grants, connections, memory, receipts and cursors. The reference metadata and development TTS fixtures remain separate. The latest route check exercised the running FastAGI listener.
 
 The design preserves existing call paths and owner/public permissions; deployment reuses the existing service. The detailed module and effect boundaries are described in [architecture.md](../docs/architecture.md). Keep policy, call flow and deployment claims consistent across those files. No private numbers, credentials or tokens belong here.
 
 The account deployment adds a shared Standard entry number and a dedicated Pro route on the existing Asterisk service. The diagram shows the deployed routes. FastAGI matches the registered caller number, and AMI supplies the account for each authorized or restricted call. The Bristol owner route has been exercised on a real call.
 
 The Bristol correction gives the shared number and dedicated Pro number separate Asterisk SIP credentials. The routing trace records only the selected route and outcome.
+
+The `asteriskconfig` installer combines private Asterisk YAML with the shared and dedicated SIP accounts in SQLite. It places generated module configuration in one `phone-assistant/` directory.

@@ -9,7 +9,7 @@ import Test.Hspec (Expectation, expectationFailure)
 
 withRule :: FromJSON a => Text -> Text -> (a -> Expectation) -> Expectation
 withRule section key run = do
-  configuration <- loadGlobal "config/global.json"
+  configuration <- loadGlobal "config/global.yaml"
   let settings = fmap (\global -> resolveSettings global (User Map.empty)) configuration
       selected = settings >>= \value -> rule value section key
   either (expectationFailure . show) run selected
