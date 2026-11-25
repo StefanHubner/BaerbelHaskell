@@ -152,11 +152,11 @@ withAccounts validate output ((ident, sub) : rest) prepared action =
     handlers services messages = withHandlers settings validate services output messages register
     register incoming owner = withAccounts validate output rest updated action
       where
-        screening = booleanSetting settings "INCOMING_SCREENING_ENABLED" == Right True
-        public | screening = Just incoming
-               | otherwise = Nothing
-        calls = AccountCalls owner public
-        updated = Map.insert ident calls prepared
+      calls = AccountCalls owner (publicHandler incoming)
+      updated = Map.insert ident calls prepared
+    publicHandler incoming
+      | booleanSetting settings "INCOMING_SCREENING_ENABLED" == Right True = Just incoming
+      | otherwise = Nothing
 
 startAccounts :: Settings -> NumberValidator -> Report -> AccountIngress -> Map Text AccountCalls -> IO (Result ())
 startAccounts shared validate output ingress accounts = Effects.continue (serveReported output) configured

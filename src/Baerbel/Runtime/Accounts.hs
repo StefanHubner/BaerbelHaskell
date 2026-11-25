@@ -96,9 +96,9 @@ accountIngress shared accounts validate = continue prepare config
       pure (Right (AccountIngress (findAccount native) route))
     dispatch natives attempts native socket headers = case Map.lookup "agi_network_script" headers of
       Just "account" -> authorize accounts attempts (telephonyRules native) socket headers
-      Just "home-dial" -> case filter (homeEnabled . routeSettings) (Map.elems natives) of
-        [cfg] -> routeHome cfg validate socket headers
-        _ -> except (Left (failure "home_channel_required"))
+      Just "home-dial" | [cfg] <- filter (homeEnabled . routeSettings) (Map.elems natives) ->
+        routeHome cfg validate socket headers
+      Just "home-dial" -> except (Left (failure "home_channel_required"))
       _ -> except (Left (failure "unknown_agi_route"))
 
 findAccount :: TelephonyConfig -> Bool -> Text -> IO (Result Text)
