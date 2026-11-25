@@ -18,7 +18,7 @@ import Baerbel.VAD (VAD, withVAD, resetVAD, isSpeech)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race, withAsync, wait)
 import Control.Concurrent.STM
-import Control.Monad (foldM, void)
+import Control.Monad (foldM, void, unless)
 import Data.Either (fromRight)
 import Data.Maybe (fromMaybe)
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=), encode)
@@ -64,16 +64,20 @@ stepFrame rules silence maximumFrames now voiced frame state = case state of
   Echo deadline | now >= deadline -> begin [] 0
   _ -> (state, [])
   where
-    begin frames run = let buffered = keepLast (pipelinePrerollFrames rules) (frames ++ [frame])
-                           nextRun = if voiced then run + 1 else 0
-                       in if nextRun >= pipelineStartFrames rules
-                          then (Recording (length buffered) 0, [Begin (BS.concat buffered)])
-                          else (Listening buffered nextRun, [])
-    record count quiet = let nextCount = count + 1
-                             nextQuiet = if voiced then 0 else quiet + 1
-                             done = nextQuiet >= silence || nextCount >= maximumFrames
-                         in if done then (Committed now "", [Append frame, Commit])
-                            else (Recording nextCount nextQuiet, [Append frame])
+    begin frames run
+      | nextRun >= pipelineStartFrames rules = (Recording (length buffered) 0, [Begin (BS.concat buffered)])
+      | otherwise = (Listening buffered nextRun, [])
+      where
+        buffered = keepLast (pipelinePrerollFrames rules) (frames ++ [frame])
+        nextRun | voiced = run + 1
+                | otherwise = 0
+    record count quiet
+      | nextQuiet >= silence || nextCount >= maximumFrames = (Committed now "", [Append frame, Commit])
+      | otherwise = (Recording nextCount nextQuiet, [Append frame])
+      where
+        nextCount = count + 1
+        nextQuiet | voiced = 0
+                  | otherwise = quiet + 1
 
 keepLast :: Int -> [a] -> [a]
 keepLast count values = drop (max 0 (length values - count)) values
@@ -128,14 +132,19 @@ pumpInput transport queue ready = do
     Right Nothing -> pure (Right ())
     Right (Just bytes) -> do
       accepted <- atomically (queueInput queue ready bytes)
-      if accepted then pumpInput transport queue ready else pure (Left (failure "pipeline_input_overflow"))
+      let continue | accepted = pumpInput transport queue ready
+                   | otherwise = pure (Left (failure "pipeline_input_overflow"))
+      continue
 
 queueInput :: TBQueue BS.ByteString -> TVar Bool -> BS.ByteString -> STM Bool
 queueInput queue ready bytes = do
   accept <- readTVar ready
   full <- isFullTBQueue queue
-  if not accept then pure True else
-    if full then pure False else writeTBQueue queue bytes >> pure True
+  let enqueue
+        | not accept = pure True
+        | full = pure False
+        | otherwise = writeTBQueue queue bytes >> pure True
+  enqueue
 
 startPipeline :: Pipeline -> Media -> TBQueue BS.ByteString -> TVar Bool -> TVar Bool -> WS.Connection -> IO (Result ())
 startPipeline pipeline transport queue ready started conn = do
@@ -156,7 +165,7 @@ pipelineOpening pipeline transport ready = do
   where
     rules = pipelineRules pipeline
     finished = do
-      if BS.null (pipelineGreeting pipeline) then pure () else threadDelay (pipelineEchoMicros rules)
+      unless (BS.null (pipelineGreeting pipeline)) (threadDelay (pipelineEchoMicros rules))
       atomically (writeTVar ready True)
       atomically retry
 
@@ -264,20 +273,25 @@ receiveTurns pipeline transport conn state history = do
   either (pure . Left) (const (receiveTurns pipeline transport conn state history)) result
 
 acceptTranscript :: TVar TurnState -> Value -> STM (Result (Maybe Text))
-acceptTranscript state (Object fields) = do
-  current <- readTVar state
-  case (KM.lookup "type" fields, current, KM.lookup "item_id" fields) of
-    (Just (String "input_audio_buffer.committed"), Committed stamp "", Just (String ident)) ->
-      writeTVar state (Committed stamp ident) >> pure (Right Nothing)
-    (Just (String "conversation.item.input_audio_transcription.completed"), Committed _ ident, Just (String received))
-      | ident == received && ident /= "" -> complete (KM.lookup "transcript" fields)
-    (Just (String kind), _, _) | kind `elem` ["input_audio_buffer.committed", "conversation.item.input_audio_transcription.completed"] ->
-      pure (Left (failure "unexpected_transcription_turn"))
-    _ -> pure (Right Nothing)
+acceptTranscript state event = stateTVar state advance
   where
-    complete (Just (String text)) = writeTVar state Replying >> pure (Right (Just text))
-    complete _ = pure (Left (failure "invalid_transcription_event"))
-acceptTranscript _ _ = pure (Left (failure "invalid_transcription_event"))
+    advance current = case transcriptStep event current of
+      Left err -> (Left err, current)
+      Right (next, text) -> (Right text, next)
+
+transcriptStep :: Value -> TurnState -> Result (TurnState, Maybe Text)
+transcriptStep (Object fields) current = case (KM.lookup "type" fields, current, KM.lookup "item_id" fields) of
+  (Just (String "input_audio_buffer.committed"), Committed stamp "", Just (String ident)) ->
+    Right (Committed stamp ident, Nothing)
+  (Just (String "conversation.item.input_audio_transcription.completed"), Committed _ ident, Just (String received))
+    | ident == received && ident /= "" -> complete (KM.lookup "transcript" fields)
+  (Just (String kind), _, _) | kind `elem` ["input_audio_buffer.committed", "conversation.item.input_audio_transcription.completed"] ->
+    Left (failure "unexpected_transcription_turn")
+  _ -> Right (current, Nothing)
+  where
+    complete (Just (String text)) = Right (Replying, Just text)
+    complete _ = Left (failure "invalid_transcription_event")
+transcriptStep _ _ = Left (failure "invalid_transcription_event")
 
 respondTurn :: Pipeline -> Media -> TVar TurnState -> IORef [Value] -> Text -> IO (Result ())
 respondTurn pipeline transport state history text = do
@@ -327,14 +341,16 @@ streamReply pipeline transport history text speakText = do
       finishChat pipeline history (previous ++ [user]) complete result
 
 finishChat :: Pipeline -> IORef [Value] -> [Value] -> ChatState -> Result () -> IO (Result ())
-finishChat _ _ _ _ (Left err) = pure (Left err)
-finishChat pipeline history previous state (Right ())
-  | not (chatCompleted state) = pure (Left (failure "chat_response_incomplete"))
-  | otherwise = do
-      let assistant = object ["role" .= ("assistant" :: Text), "content" .= chatText state]
-          next = keepLast (pipelineHistoryMessages (pipelineRules pipeline)) (previous ++ [assistant])
-      writeIORef history next
-      pure (Right ())
+finishChat pipeline history previous state result = case result >> completedHistory limit previous state of
+  Left err -> pure (Left err)
+  Right next -> writeIORef history next >> pure (Right ())
+  where limit = pipelineHistoryMessages (pipelineRules pipeline)
+
+completedHistory :: Int -> [Value] -> ChatState -> Result [Value]
+completedHistory limit previous state
+  | not (chatCompleted state) = Left (failure "chat_response_incomplete")
+  | otherwise = Right (keepLast limit (previous ++ [assistant]))
+  where assistant = object ["role" .= ("assistant" :: Text), "content" .= chatText state]
 
 consumeChat :: Pipeline -> IORef (BS.ByteString, ChatState) -> (Text -> IO (Result ())) -> BS.ByteString -> IO (Result ())
 consumeChat pipeline parsed speakText bytes = do
@@ -342,17 +358,22 @@ consumeChat pipeline parsed speakText bytes = do
   case splitEvents (pending <> bytes) of
     Left err -> pure (Left err)
     Right (events, rest) -> do
-      result <- foldM advance (Right state) events
+      result <- foldM (advanceChat chunks speakText) (Right state) events
       either (pure . Left) (\next -> writeIORef parsed (rest, next) >> pure (Right ())) result
   where
     rules = pipelineRules pipeline
     chunks = ChunkRules (pipelineChunkChars rules) (pipelineAbbreviations rules)
-    advance (Left err) _ = pure (Left err)
-    advance (Right current) event = case chatEvent chunks event current of
-      Left err -> pure (Left err)
-      Right (next, pieces) -> do
-        spoken <- foldM (\result piece -> either (pure . Left) (const (speakText piece)) result) (Right ()) pieces
-        pure (next <$ spoken)
+
+advanceChat :: ChunkRules -> (Text -> IO (Result ())) -> Result ChatState -> Value -> IO (Result ChatState)
+advanceChat _ _ (Left err) _ = pure (Left err)
+advanceChat chunks speakText (Right current) event = case chatEvent chunks event current of
+  Left err -> pure (Left err)
+  Right (next, pieces) -> do
+    spoken <- foldM speakPiece (Right ()) pieces
+    pure (next <$ spoken)
+  where
+    speakPiece :: Result () -> Text -> IO (Result ())
+    speakPiece result piece = either (pure . Left) (const (speakText piece)) result
 
 responseRequest :: Pipeline -> [Value] -> Result Request
 responseRequest pipeline history = do

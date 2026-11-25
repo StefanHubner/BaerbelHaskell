@@ -61,15 +61,21 @@ sentSamples :: Int -> Timeline -> Result Timeline
 sentSamples 0 timeline = Right timeline
 sentSamples samples timeline = case S.viewl (pendingFrames timeline) of
   EmptyL -> Left (failure "recording_timeline_missing_frame")
-  (count, timestamp) :< remaining -> do
-    let used = min samples count
-    let end = totalSamples timeline + used
-    let segment = Segment (totalSamples timeline) end timestamp
-    let retained = sentFrames timeline |> segment
-    let bounded = S.drop (max 0 (S.length retained - 30000)) retained
-    let nextFrames = if used == count then remaining else (count - used, timestamp + fromIntegral used / 24000) <| remaining
-    let updated = Timeline nextFrames bounded end
-    sentSamples (samples - used) updated
+  (count, timestamp) :< remaining -> consumeFrame samples timeline count timestamp remaining
+
+consumeFrame :: Int -> Timeline -> Int -> Double -> Seq (Int, Double) -> Result Timeline
+consumeFrame samples timeline count timestamp remaining = sentSamples left updated
+  where
+    used = min samples count
+    end = totalSamples timeline + used
+    segment = Segment (totalSamples timeline) end timestamp
+    retained = sentFrames timeline |> segment
+    bounded = S.drop (max 0 (S.length retained - 30000)) retained
+    nextFrames
+      | used == count = remaining
+      | otherwise = (count - used, timestamp + fromIntegral used / 24000) <| remaining
+    updated = Timeline nextFrames bounded end
+    left = samples - used
 
 transcriptBounds :: Double -> Double -> Timeline -> Maybe (Double, Double)
 transcriptBounds start end timeline
@@ -116,54 +122,69 @@ sampleState modified size declared previous = ArchiveState anchors (max samples 
     samples :: Int
     samples = max 0 (size - 44) `div` 2
     initial :: Seq Anchor
-    initial = if S.null (archiveAnchors previous) then S.singleton (Anchor (modified - fromIntegral samples / 8000) 0) else archiveAnchors previous
+    initial
+      | S.null (archiveAnchors previous) = S.singleton (Anchor (modified - fromIntegral samples / 8000) 0)
+      | otherwise = archiveAnchors previous
     anchors :: Seq Anchor
-    anchors = if samples > archiveSamples previous then initial |> Anchor modified samples else archiveAnchors previous
+    anchors
+      | samples > archiveSamples previous = initial |> Anchor modified samples
+      | otherwise = archiveAnchors previous
     finalized :: Bool
     finalized = declared > 0 && declared == samples * 2
 
 sampleBounds :: Seq Anchor -> Double -> Result (Double, Double)
-sampleBounds anchors timestamp = case (S.viewr before, S.viewl after, S.viewl anchors, S.viewr anchors) of
-  (_, _, EmptyL, _) -> Left (failure "recording_no_samples")
-  (left, right, first :< _, _ :> final) -> Right (project left right first final)
+sampleBounds anchors timestamp = case (S.viewl anchors, S.viewr anchors) of
+  (first :< _, _ :> final) -> Right (projectSamples timestamp first final before after)
   _ -> Left (failure "recording_no_samples")
   where
-    before :: Seq Anchor
-    after :: Seq Anchor
     (before, after) = S.spanl (\anchor -> anchorTime anchor <= timestamp) anchors
-    project :: ViewR Anchor -> ViewL Anchor -> Anchor -> Anchor -> (Double, Double)
-    project left right first final = bounds lower upper low high
-      where
-        lower :: Anchor
-        lower = case left of { EmptyR -> first; _ :> value -> value }
-        upper :: Anchor
-        upper = case right of { EmptyL -> final; value :< _ -> value }
-        low :: Double
-        low = if S.null before then 0 else fromIntegral (anchorSamples lower)
-        high :: Double
-        high = fromIntegral (anchorSamples upper)
-    bounds :: Anchor -> Anchor -> Double -> Double -> (Double, Double)
-    bounds left right low high = (min a b, max a b)
-      where
-        a :: Double
-        a = max low (min high (fromIntegral (anchorSamples left) + (timestamp - anchorTime left) * 8000))
-        b :: Double
-        b = max low (min high (fromIntegral (anchorSamples right) + (timestamp - anchorTime right) * 8000))
+
+projectSamples :: Double -> Anchor -> Anchor -> Seq Anchor -> Seq Anchor -> (Double, Double)
+projectSamples timestamp first final before after = sampleRange timestamp lower upper low high
+  where
+    (lower, low) = case S.viewr before of
+      EmptyR -> (first, 0)
+      _ :> value -> (value, fromIntegral (anchorSamples value))
+    upper = case S.viewl after of
+      EmptyL -> final
+      value :< _ -> value
+    high = fromIntegral (anchorSamples upper)
+
+sampleRange :: Double -> Anchor -> Anchor -> Double -> Double -> (Double, Double)
+sampleRange timestamp left right low high = (min a b, max a b)
+  where
+    a = project left
+    b = project right
+    project anchor = max low (min high position)
+      where position = fromIntegral (anchorSamples anchor) + (timestamp - anchorTime anchor) * 8000
+
+data Interval = Interval Double Double
+
+clipInterval :: Double -> Double -> Result Interval
+clipInterval start end
+  | not (finite start && finite end) || duration <= 0 || duration > 600 = Left (failure "recording_invalid_interval")
+  | otherwise = Right (Interval start end)
+  where
+    duration = end - start
+    finite value = not (isNaN value || isInfinite value)
 
 clipBounds :: ArchiveState -> Double -> Double -> Result (Int, Int)
-clipBounds state start end
-  | not (finite start && finite end) || spanSeconds <= 0 || spanSeconds > 600 = Left (failure "recording_invalid_interval")
-  | otherwise = do
-      (first, _) <- sampleBounds (archiveAnchors state) (start - 0.2)
-      (_, lastSample) <- sampleBounds (archiveAnchors state) (end + 0.2)
-      let begin = floor first
-      let count = (ceiling lastSample - begin) * 2
-      if count > 0 && count <= 9671936 then Right (44 + begin * 2, count) else Left (failure "recording_excerpt_exceeds_bounds")
+clipBounds state start end = clipInterval start end >>= intervalBounds state
+
+intervalBounds :: ArchiveState -> Interval -> Result (Int, Int)
+intervalBounds state (Interval start end) = do
+  (first, _) <- sampleBounds (archiveAnchors state) (start - 0.2)
+  (_, lastSample) <- sampleBounds (archiveAnchors state) (end + 0.2)
+  excerptBounds first lastSample
+
+excerptBounds :: Double -> Double -> Result (Int, Int)
+excerptBounds first lastSample
+  | count > 0 && count <= 9671936 = Right (offset, count)
+  | otherwise = Left (failure "recording_excerpt_exceeds_bounds")
   where
-    spanSeconds :: Double
-    spanSeconds = end - start
-    finite :: Double -> Bool
-    finite value = not (isNaN value || isInfinite value)
+    begin = floor first
+    count = (ceiling lastSample - begin) * 2
+    offset = 44 + begin * 2
 
 pread :: Fd -> Int -> Int -> IO (Result ByteString)
 pread (Fd descriptor) offset count = allocaBytes count readBuffer
@@ -171,7 +192,10 @@ pread (Fd descriptor) offset count = allocaBytes count readBuffer
     readBuffer :: Ptr Word8 -> IO (Result ByteString)
     readBuffer buffer = do
       size <- nativeRead descriptor buffer (fromIntegral count) (fromIntegral offset)
-      if size < 0 then pure (Left (failure "recording_read_failed")) else Right <$> B.packCStringLen (castPtr buffer, fromIntegral size)
+      copy buffer size
+    copy buffer size
+      | size < 0 = pure (Left (failure "recording_read_failed"))
+      | otherwise = Right <$> B.packCStringLen (castPtr buffer, fromIntegral size)
 
 observe :: Fd -> ArchiveState -> IO (Result ArchiveState)
 observe descriptor previous = do
@@ -241,7 +265,11 @@ waitOpen path deadline = do
 retryOpen :: FilePath -> Word64 -> IO (Result Archive)
 retryOpen path deadline = do
   now <- getMonotonicTimeNSec
-  if now >= deadline then pure (Left (failure "recording_unavailable")) else threadDelay 100000 >> waitOpen path deadline
+  retry now
+  where
+    retry now
+      | now >= deadline = pure (Left (failure "recording_unavailable"))
+      | otherwise = threadDelay 100000 >> waitOpen path deadline
 
 waitHeader :: Fd -> Word64 -> IO (Result Archive)
 waitHeader descriptor deadline = do
@@ -254,7 +282,11 @@ waitHeader descriptor deadline = do
 retryHeader :: Fd -> Word64 -> IO (Result Archive)
 retryHeader descriptor deadline = do
   now <- getMonotonicTimeNSec
-  if now >= deadline then closeFd descriptor >> pure (Left (failure "recording_unavailable")) else threadDelay 100000 >> waitHeader descriptor deadline
+  retry now
+  where
+    retry now
+      | now >= deadline = closeFd descriptor >> pure (Left (failure "recording_unavailable"))
+      | otherwise = threadDelay 100000 >> waitHeader descriptor deadline
 
 startArchive :: Fd -> ByteString -> IO (Result Archive)
 startArchive descriptor header = case validateWav header of
@@ -271,12 +303,12 @@ closeRecording archive = do
   void (ioResult "recording_close_failed" (closeFd (archiveFd archive)))
 
 readClip :: Archive -> Double -> Double -> IO (Result ByteString)
-readClip archive start end
-  | isNaN start || isNaN end || isInfinite start || isInfinite end || end <= start || end - start > 600 = pure (Left (failure "recording_invalid_interval"))
-  | otherwise = do
+readClip archive start end = either (pure . Left) readInterval (clipInterval start end)
+  where
+    readInterval interval = do
       now <- getMonotonicTimeNSec
       ready <- waitSamples archive (end + 0.2) (now + 5000000000)
-      let bounds = ready >>= (\state -> clipBounds state start end)
+      let bounds = ready >>= (`intervalBounds` interval)
       either (pure . Left) (uncurry (readExcerpt (archiveFd archive))) bounds
 
 readExcerpt :: Fd -> Int -> Int -> IO (Result ByteString)

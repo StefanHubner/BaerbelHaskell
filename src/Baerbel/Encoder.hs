@@ -36,8 +36,12 @@ communicate :: ByteString -> Maybe Handle -> Maybe Handle -> Maybe Handle -> Pro
 communicate input (Just writer) (Just reader) _ process = do
   (_, output) <- concurrently (writeInput writer input) (Bytes.hGetContents reader)
   code <- waitForProcess process
-  pure (if code == ExitSuccess then Right output else Left (failure "note_encoding_failed"))
+  pure (encodingResult code output)
 communicate _ _ _ _ _ = pure (Left (failure "note_encoding_failed"))
+
+encodingResult :: ExitCode -> ByteString -> Result ByteString
+encodingResult ExitSuccess output = Right output
+encodingResult (ExitFailure _) _ = Left (failure "note_encoding_failed")
 
 writeInput :: Handle -> ByteString -> IO ()
 writeInput writer input = Bytes.hPut writer input >> hClose writer

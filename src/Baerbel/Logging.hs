@@ -159,7 +159,9 @@ transcript :: Text -> Value -> [(Text, [Pair])]
 transcript kind value = [("live_transcript", ("speaker" .= speaker) : selected ["delta", "start_ms", "end_ms"] value)]
   where
     speaker :: Text
-    speaker = if kind == "session.input_transcript.delta" then "user" else "assistant"
+    speaker
+      | kind == "session.input_transcript.delta" = "user"
+      | otherwise = "assistant"
 
 delegation :: Value -> [Pair]
 delegation value = ["delegation_id" .= preferred "id" "delegation_id", "target" .= preferred "target" "target"]

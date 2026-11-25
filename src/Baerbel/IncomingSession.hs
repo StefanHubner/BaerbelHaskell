@@ -8,6 +8,7 @@ import Baerbel.Config (Settings, setting, rule, toolDefinitions, booleanSetting)
 import Baerbel.Error (Result, failure)
 import Baerbel.Incoming (Decision(..), evaluateDecision, restrictTools, handoffLine, callerDisplayName)
 import Baerbel.Logging (Report, reportIncomingEvent)
+import Baerbel.JSON (resultValue)
 import Baerbel.Live (LiveConfig, Media(..), runLiveSession)
 import Baerbel.ManagedMedia (Registry, ManagedCall(..), withManaged)
 import Baerbel.Messages (Messages(..), Context)
@@ -15,13 +16,13 @@ import Baerbel.Protocol (SessionRole(Restricted), SessionSettings(..), voiceIden
 import Baerbel.Provider (Execute)
 import Baerbel.Session (liveConfiguration, announcementConfig, runAnnouncement, telephonyConfiguration, playHandoff)
 import Baerbel.SMS (Receipt(..), Delivery(..))
-import Baerbel.Telephony (TelephonyConfig, IncomingControl(..), Handoffs, claimHandoff, openIncoming)
+import Baerbel.Telephony (TelephonyConfig, IncomingControl(..), IncomingEnd(..), Handoffs, claimHandoff, openIncoming)
 import Control.Concurrent.Async (Async, async, race, wait)
 import Control.Concurrent.MVar (newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (finally)
 import Control.Monad (void)
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), (.=))
 import qualified Data.Aeson.KeyMap as KM
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
@@ -69,9 +70,7 @@ boundSession settings services output identifier native transport = do
   boundedWorkflow scope `finally` finishScope scope
 
 finishScope :: IncomingScope -> IO ()
-finishScope scope = case (incomingMessages (scopeServices scope), scopeContext scope) of
-  (Just service, Just context) -> finishContext service context
-  _ -> pure ()
+finishScope scope = withContext scope finishContext
 
 eventIdentifier :: IncomingControl -> Text
 eventIdentifier = channelUniqueId . incomingNativeChannel
@@ -80,7 +79,7 @@ boundedWorkflow :: IncomingScope -> IO (Result ())
 boundedWorkflow scope = do
   let micros = floor (min 60 (incomingSeconds (scopeNative scope)) * 1000000)
   result <- timeout micros (workflow scope)
-  maybe (terminateIncoming (scopeNative scope) "SCREENING_TIMEOUT") pure result
+  maybe (terminateIncoming (scopeNative scope) ScreeningTimeout) pure result
 
 workflow :: IncomingScope -> IO (Result ())
 workflow scope = do
@@ -88,7 +87,7 @@ workflow scope = do
   name <- lookupKnown scope
   let messageOnly = channelMessageOnly (incomingNativeChannel (scopeNative scope))
   case (messageOnly && not (scopeAllowsMessages scope), name) of
-    (True, _) -> speak scope "unavailableMessage" [] >> terminateIncoming (scopeNative scope) "MESSAGE_FAILED"
+    (True, _) -> speak scope "unavailableMessage" [] >> terminateIncoming (scopeNative scope) MessageFailed
     (False, Just known) -> forwardKnown scope known
     (False, Nothing) -> screenUnknown scope started
 
@@ -115,31 +114,33 @@ forwardKnown scope name = do
   forwardWithFacts scope name "" True
 
 observeKnown :: IncomingScope -> Text -> IO ()
-observeKnown scope name = case (incomingMessages (scopeServices scope), scopeContext scope) of
-  (Just service, Just context) -> knownContext service context name
-  _ -> pure ()
+observeKnown scope name = withContext scope (\service context -> knownContext service context name)
 
 screenUnknown :: IncomingScope -> Word64 -> IO (Result ())
 screenUnknown scope started = do
   now <- getMonotonicTimeNSec
-  let callerClass = if channelMessageOnly (incomingNativeChannel (scopeNative scope)) then "message" else "unknown"
+  let callerClass | channelMessageOnly (incomingNativeChannel (scopeNative scope)) = "message"
+                  | otherwise = "unknown"
   scopeReport scope "incoming_classified" ["call_id" .= scopeIdentifier scope, "caller_class" .= (callerClass :: Text)]
   let elapsed = fromIntegral (now - started) / 1000
   case screenBudget scope elapsed of
     Left problem -> pure (Left problem)
-    Right micros | micros <= 0 -> terminateIncoming (scopeNative scope) "SCREENING_TIMEOUT"
+    Right micros | micros <= 0 -> terminateIncoming (scopeNative scope) ScreeningTimeout
     Right micros -> decideUnknown scope micros
 
 screenBudget :: IncomingScope -> Double -> Result Int
 screenBudget scope elapsed = do
   announcementSeconds <- rule settings "incoming" "ANNOUNCEMENT_TIMEOUT"
-  reserve <- rule settings "incoming" (if scopeAllowsMessages scope then "messageWaitMicros" else "reserveMicros")
+  reserve <- rule settings "incoming" reserveKey
   maximumMicros <- rule settings "incoming" "screeningMicros"
   let remaining = incomingSeconds (scopeNative scope) * 1000000 - elapsed - announcementSeconds * 1000000 - reserve
   pure (max 0 (min maximumMicros (floor remaining)))
   where
     settings :: Settings
     settings = scopeSettings scope
+    reserveKey :: Text
+    reserveKey | scopeAllowsMessages scope = "messageWaitMicros"
+               | otherwise = "reserveMicros"
 
 decideUnknown :: IncomingScope -> Int -> IO (Result ())
 decideUnknown scope micros = case restrictedSettings (scopeSettings scope) (scopeAllowsMessages scope) messageOnly of
@@ -182,7 +183,7 @@ submitDecision scope selected name arguments = do
       delivery <- startDelivery scope decision
       observeDecision scope decision
       atomically (putTMVar selected (Selected decision delivery))
-      pure (Right (object ["status" .= ("ok" :: Text), "result" .= ("decision_received" :: Text)]))
+      pure (Right (resultValue "decision_received"))
 
 startDelivery :: IncomingScope -> Decision -> IO (Maybe (Async Receipt))
 startDelivery scope (LeaveMessage name body) = case incomingMessages (scopeServices scope) of
@@ -196,9 +197,7 @@ startDelivery scope (LeaveMessage name body) = case incomingMessages (scopeServi
 startDelivery _ _ = pure Nothing
 
 observeDecision :: IncomingScope -> Decision -> IO ()
-observeDecision scope decision = case (incomingMessages (scopeServices scope), scopeContext scope) of
-  (Just service, Just context) -> decideContext service context decision
-  _ -> pure ()
+observeDecision scope decision = withContext scope (\service context -> decideContext service context decision)
 
 observeIncoming :: IncomingScope -> Value -> IO ()
 observeIncoming scope event = reportIncomingEvent (scopeReport scope) (scopeIdentifier scope) event >> observeTranscript scope event
@@ -226,21 +225,24 @@ completeDecision scope (Selected decision delivery) = do
     complete (Forward _ name summary) = speak scope "forwardAnnouncement" [] >> forwardWithFacts scope name summary False
     complete (Decline reason _ _) = do
       speak scope "declineAnnouncement" []
-      terminateIncoming (scopeNative scope) (if reason == "timeout" then "SCREENING_TIMEOUT" else "DECLINED")
+      let outcome | reason == "timeout" = ScreeningTimeout
+                  | otherwise = Declined
+      terminateIncoming (scopeNative scope) outcome
     complete (LeaveMessage _ _) = finishMessage scope delivery
 
 finishMessage :: IncomingScope -> Maybe (Async Receipt) -> IO (Result ())
 finishMessage scope delivery = do
   result <- awaitMessage (scopeSettings scope) delivery
   let status = maybe Uncertain receiptStatus result
-      successful = status == Sent
-      reason
-        | successful = "MESSAGE_SENT"
-        | status == Failed = "MESSAGE_FAILED"
-        | otherwise = "MESSAGE_UNCERTAIN"
+      (announcementKey, reason) = messageCompletion status
   scopeReport scope "incoming_message_result" ["call_id" .= scopeIdentifier scope, "status" .= status]
-  speak scope (if successful then "messageSent" else "messageUncertain") []
+  speak scope announcementKey []
   terminateIncoming (scopeNative scope) reason
+
+messageCompletion :: Delivery -> (Text, IncomingEnd)
+messageCompletion Sent = ("messageSent", MessageSent)
+messageCompletion Failed = ("messageUncertain", MessageFailed)
+messageCompletion _ = ("messageUncertain", MessageUncertain)
 
 awaitMessage :: Settings -> Maybe (Async Receipt) -> IO (Maybe Receipt)
 awaitMessage _ Nothing = pure (Just (Receipt Failed Nothing Nothing))
@@ -278,7 +280,9 @@ names :: Settings -> Result [(Text, Text)]
 names settings = do
   assistant <- spokenName settings
   fallback <- rule settings "settings" "incoming_owner_name"
-  let requested = if T.null (setting settings "INCOMING_OWNER_NAME") then fallback else setting settings "INCOMING_OWNER_NAME"
+  let configured = setting settings "INCOMING_OWNER_NAME"
+      requested | T.null configured = fallback
+                | otherwise = configured
       owner = fromMaybe fallback (callerDisplayName False requested)
   pure [("{owner}", owner), ("{assistant}", assistant)]
 
@@ -286,15 +290,17 @@ spokenName :: Settings -> Result Text
 spokenName settings = do
   active <- rule settings "voice_catalogue" "DEFAULT_ACTIVE_PRESET"
   let selected = setting settings "PHONE_ASSISTANT_VOICE_PRESET" == active && setting settings "OPENAI_LIVE_VOICE" == "willow"
-  rule settings "incoming" (if selected then "activeSpokenName" else "defaultSpokenName")
+      key | selected = "activeSpokenName"
+          | otherwise = "defaultSpokenName"
+  rule settings "incoming" key
 
 restrictedSettings :: Settings -> Bool -> Bool -> Result LiveConfig
 restrictedSettings settings allowMessages messageOnly = do
   identity <- voiceIdentity settings
   fields <- names settings
   template <- rule settings "incoming" (instructionKey allowMessages messageOnly)
-  greetingTemplate <- rule settings "incoming" (if messageOnly then "messageGreeting" else "screenGreeting")
-  tokens <- rule settings "incoming" (if allowMessages then "messageTokenLimit" else "screenTokenLimit")
+  greetingTemplate <- rule settings "incoming" greetingKey
+  tokens <- rule settings "incoming" tokenKey
   rate <- rule settings "runtime" "provider_rate"
   let instructions = applyInstructions template (("{identity}", identity) : fields)
       greeting = applyInstructions greetingTemplate fields
@@ -304,6 +310,13 @@ restrictedSettings settings allowMessages messageOnly = do
         (setting settings "OPENAI_LIVE_VOICE") instructions (setting settings "OPENAI_CHAT_MODEL")
         instructions (setting settings "OPENAI_CHAT_REASONING_EFFORT") tokens tools rate
   liveConfiguration settings session greeting
+  where
+    greetingKey :: Text
+    greetingKey | messageOnly = "messageGreeting"
+                | otherwise = "screenGreeting"
+    tokenKey :: Text
+    tokenKey | allowMessages = "messageTokenLimit"
+             | otherwise = "screenTokenLimit"
 
 instructionKey :: Bool -> Bool -> Text
 instructionKey False False = "screenWithoutMessages"

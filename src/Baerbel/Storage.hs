@@ -1,6 +1,6 @@
 module Baerbel.Storage (databaseResult, withDatabase, privateFile, atomicWrite) where
 
-import Control.Monad (join)
+import Control.Monad (join, unless)
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
 import Control.Exception (bracket, finally, try)
 import qualified Data.ByteString as Bytes
@@ -42,12 +42,14 @@ privateFile path = do
     metadata <- getFdStatus descriptor
     owner <- getEffectiveUserID
     let valid = isRegularFile metadata && fileOwner metadata == owner && linkCount metadata == 1
-    if valid then setFdMode descriptor 0o600 >> pure (Right ()) else pure (Left (failure "private_file_invalid"))
+    secure descriptor valid
+  secure descriptor True = setFdMode descriptor 0o600 >> pure (Right ())
+  secure _ False = pure (Left (failure "private_file_invalid"))
 
 privateDirectory :: FilePath -> IO ()
 privateDirectory path = do
   exists <- doesDirectoryExist path
-  if exists then pure () else createDirectoryIfMissing True path >> setFileMode path 0o700
+  unless exists (createDirectoryIfMissing True path >> setFileMode path 0o700)
 
 atomicWrite :: FilePath -> Bytes.ByteString -> IO (Result ())
 atomicWrite path content = do

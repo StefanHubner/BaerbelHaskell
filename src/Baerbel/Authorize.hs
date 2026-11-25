@@ -9,7 +9,7 @@ import Baerbel.Error (Result, failure, ioResult)
 import Baerbel.HTTP (RawSend, Request(..), Response(..), Body(..))
 import Baerbel.JSON (decodeBytes, encodeBytes, decodeValue, camelOptions)
 import Baerbel.Storage (atomicWrite)
-import Control.Monad (join, void)
+import Control.Monad (join, void, unless)
 import Data.Bifunctor (second)
 import Control.Concurrent.Async (race)
 import Control.Concurrent.STM
@@ -41,6 +41,7 @@ import System.FilePath (takeDirectory, (</>))
 import System.IO.Error (isDoesNotExistError)
 import System.Posix.Files (FileStatus, getSymbolicLinkStatus, isDirectory, isSymbolicLink, fileOwner, fileMode, accessModes, setFileMode)
 import System.Posix.User (getEffectiveUserID)
+import System.Posix.Types (UserID)
 import System.Timeout (timeout)
 import Text.Read (readMaybe)
 import Data.Bits ((.&.))
@@ -94,10 +95,14 @@ clientDocument rules (Object document) = case KM.lookup "installed" document of
     tokenEndpoint <- optionalText "token_uri" (authTokenEndpoint rules) fields
     ident <- requiredText "client_id" fields
     secret <- requiredText "client_secret" fields
-    if endpoint `elem` [authEndpoint rules, authLegacyEndpoint rules] && tokenEndpoint == authTokenEndpoint rules
-      then Right (DesktopClient ident secret) else Left (failure "authorization_client_endpoints_invalid")
+    checkedClient rules endpoint tokenEndpoint (DesktopClient ident secret)
   _ -> Left (failure "authorization_desktop_client_required")
 clientDocument _ _ = Left (failure "authorization_desktop_client_required")
+
+checkedClient :: AuthorizationRules -> Text -> Text -> DesktopClient -> Result DesktopClient
+checkedClient rules endpoint tokenEndpoint client
+  | endpoint `elem` [authEndpoint rules, authLegacyEndpoint rules] && tokenEndpoint == authTokenEndpoint rules = Right client
+  | otherwise = Left (failure "authorization_client_endpoints_invalid")
 
 requiredText :: Data.Aeson.Key.Key -> KM.KeyMap Value -> Result Text
 requiredText key fields = case KM.lookup key fields of
@@ -161,24 +166,27 @@ callbackApplication rules state selected request respond = do
     headers :: ResponseHeaders
     headers = [(hContentType, "text/plain; charset=utf-8"), (hCacheControl, "no-store"), ("Referrer-Policy", "no-referrer")]
 
-exchangeCode :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> Text -> AuthorizationEffects -> IO (Result Value)
-exchangeCode rules groups client scopes code verifier redirect effects
-  | not (supportedScopes groups scopes) = pure (Left (failure "authorization_scopes_unsupported"))
-  | otherwise = do
-      response <- authorizationSend effects request
-      now <- authorizationClock effects
-      pure (response >>= checkedResponse >>= tokenDocument rules client scopes now)
+codeRequest :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> Text -> Result Request
+codeRequest rules groups client scopes code verifier redirect
+  | not (supportedScopes groups scopes) = Left (failure "authorization_scopes_unsupported")
+  | otherwise = Right (Request "POST" (authTokenEndpoint rules) [] [] body (authResponseBytes rules) (authExchangeSeconds rules))
   where
-    body :: Body
     body = FormBody (map (second T.encodeUtf8)
       [("client_id", desktopId client), ("client_secret", desktopSecret client), ("code", code),
        ("code_verifier", verifier), ("redirect_uri", redirect), ("grant_type", "authorization_code")])
-    request :: Request
-    request = Request "POST" (authTokenEndpoint rules) [] [] body (authResponseBytes rules) (authExchangeSeconds rules)
-    checkedResponse :: Response -> Result Value
-    checkedResponse response
-      | responseStatus response /= 200 = Left (failure "authorization_exchange_failed")
-      | otherwise = decodeBytes "authorization_invalid_token_response" (responseBody response)
+
+exchangeCode :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> Text -> AuthorizationEffects -> IO (Result Value)
+exchangeCode rules groups client scopes code verifier redirect effects = case codeRequest rules groups client scopes code verifier redirect of
+  Left issue -> pure (Left issue)
+  Right request -> do
+    response <- authorizationSend effects request
+    now <- authorizationClock effects
+    pure (response >>= checkedResponse >>= tokenDocument rules client scopes now)
+
+checkedResponse :: Response -> Result Value
+checkedResponse response
+  | responseStatus response /= 200 = Left (failure "authorization_exchange_failed")
+  | otherwise = decodeBytes "authorization_invalid_token_response" (responseBody response)
 
 supportedScopes :: ScopeGroups -> [Text] -> Bool
 supportedScopes groups scopes = not (Set.null requested) && requested == union && all complete intersecting
@@ -199,10 +207,15 @@ tokenDocument rules client scopes now (Object fields) = do
   access <- tokenText "access_token" fields
   refresh <- tokenText "refresh_token" fields
   lifetime <- expiryValue rules (KM.lookup "expires_in" fields)
-  if Set.fromList (T.words granted) /= Set.fromList scopes then Left (failure "authorization_scopes_mismatch") else
-    if T.toLower kind /= "bearer" then Left (failure "authorization_token_type_invalid") else
-      Right (authorizedDocument rules client scopes now access refresh lifetime)
+  validateGrant scopes granted kind
+  Right (authorizedDocument rules client scopes now access refresh lifetime)
 tokenDocument _ _ _ _ _ = Left (failure "authorization_invalid_token_response")
+
+validateGrant :: [Text] -> Text -> Text -> Result ()
+validateGrant scopes granted kind
+  | Set.fromList (T.words granted) /= Set.fromList scopes = Left (failure "authorization_scopes_mismatch")
+  | T.toLower kind /= "bearer" = Left (failure "authorization_token_type_invalid")
+  | otherwise = Right ()
 
 tokenText :: Data.Aeson.Key.Key -> KM.KeyMap Value -> Result Text
 tokenText key fields = case KM.lookup key fields of
@@ -216,13 +229,16 @@ expiryValue rules value = converted >>= validate
     converted = case value of
       Nothing -> Right (authDefaultExpiry rules)
       Just (Number number) -> Right (realToFrac number)
-      Just (Bool boolean) -> Right (if boolean then 1 else 0)
+      Just (Bool True) -> Right 1
+      Just (Bool False) -> Right 0
       Just (String text) -> maybe invalid Right (readMaybe (T.unpack (T.strip text)))
       _ -> invalid
     invalid :: Result Double
     invalid = Left (failure "authorization_token_expiry_invalid")
     validate :: Double -> Result Double
-    validate seconds = if isNaN seconds || isInfinite seconds || seconds <= 0 || seconds > authMaximumExpiry rules then invalid else Right seconds
+    validate seconds
+      | isNaN seconds || isInfinite seconds || seconds <= 0 || seconds > authMaximumExpiry rules = invalid
+      | otherwise = Right seconds
 
 authorizedDocument :: AuthorizationRules -> DesktopClient -> [Text] -> UTCTime -> Text -> Text -> Double -> Value
 authorizedDocument rules client scopes now access refresh lifetime = object
@@ -243,15 +259,19 @@ prepareTokenPath raw = do
     prepare path = do
       let parent = takeDirectory path
       exists <- doesDirectoryExist parent
-      if exists then pure () else createDirectoryIfMissing True parent >> setFileMode parent 0o700
+      unless exists (createDirectoryIfMissing True parent >> setFileMode parent 0o700)
       inspectPath path parent
 
 inspectPath :: FilePath -> FilePath -> IO (Result FilePath)
 inspectPath path parent = do
   metadata <- getSymbolicLinkStatus parent
   owner <- getEffectiveUserID
-  let private = isDirectory metadata && fileOwner metadata == owner && fileMode metadata .&. accessModes == 0o700
-  if not private then pure (Left (failure "authorization_token_directory_invalid")) else inspectToken path
+  either (pure . Left) (const (inspectToken path)) (privateDirectory owner metadata)
+
+privateDirectory :: UserID -> FileStatus -> Result ()
+privateDirectory owner metadata
+  | isDirectory metadata && fileOwner metadata == owner && fileMode metadata .&. accessModes == 0o700 = Right ()
+  | otherwise = Left (failure "authorization_token_directory_invalid")
 
 inspectToken :: FilePath -> IO (Result FilePath)
 inspectToken path = do
@@ -308,7 +328,7 @@ consent rules groups options client effects scopes tokenPath verifier state conn
       let challenge = pkceChallenge verifier
           url = authorizationURL rules client scopes redirect state challenge
       announceAuthorization effects (T.replace "{url}" url (message rules "openURL"))
-      if authNoBrowser options then pure () else openAuthorizationBrowser effects url
+      unless (authNoBrowser options) (openAuthorizationBrowser effects url)
       received <- awaitConsent rules options state connection
       either (pure . Left) (exchangeAndSave rules groups client scopes verifier redirect effects tokenPath) received
 
@@ -320,10 +340,12 @@ awaitConsent rules options state connection = do
       waitCode = atomically (takeTMVar selected)
       micros = floor (authTimeout options * 1000000)
   result <- timeout micros (race server waitCode)
-  pure (case result of
-    Nothing -> Left (failure "authorization_timeout")
-    Just (Left ()) -> Left (failure "authorization_callback_stopped")
-    Just (Right received) -> received)
+  pure (consentResult result)
+
+consentResult :: Maybe (Either () (Result Text)) -> Result Text
+consentResult Nothing = Left (failure "authorization_timeout")
+consentResult (Just (Left ())) = Left (failure "authorization_callback_stopped")
+consentResult (Just (Right received)) = received
 
 exchangeAndSave :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> AuthorizationEffects -> FilePath -> Text -> IO (Result ())
 exchangeAndSave rules groups client scopes verifier redirect effects path code = do

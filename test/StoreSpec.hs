@@ -6,12 +6,13 @@ import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import System.Timeout (timeout)
 import Baerbel.Config (Settings, loadSettings, rule)
 import Baerbel.Error (Result, failure)
-import Baerbel.Profile (ProfileState(..), emptyProfile)
+import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile)
 import Baerbel.Store (profileStore, validateProfileFile)
 import Baerbel.JSON (encodeBytes, decodeUnique)
 import Data.Aeson (Value, object)
 import qualified Data.ByteString as Bytes
 import qualified Data.Map.Strict as Map
+import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Posix.Files (setFileMode, createSymbolicLink, createLink)
@@ -25,6 +26,7 @@ spec = do
     it "allows an absent profile in an existing private directory" $ withStoreConfig $ \settings directory -> do
       let path = directory </> "profile.json"
       validate settings path `shouldReturn` Right ()
+    it "reads typed snapshots without creating a mutation lock" $ withStoreConfig readWithoutLock
     it "rejects a public parent directory" $ withStoreConfig $ \settings directory -> do
       setFileMode directory 0o755
       validate settings (directory </> "profile.json") `shouldReturn` Left (failure "profile_unsafe_storage")
@@ -64,10 +66,23 @@ spec = do
           either (expectationFailure . show) (verify path state) prepared
   where
   verify path state store = do
-    result <- store (\_ -> Right (state, object []))
+    result <- profileUpdate store (\_ -> Right (state, object []))
     result `shouldBe` Right (object [])
+    profileRead store `shouldReturn` Right state
     raw <- Bytes.readFile path
     (decodeUnique "invalid" raw :: Result ProfileState) `shouldBe` Right state
+
+readWithoutLock :: Settings -> FilePath -> IO ()
+readWithoutLock settings directory = either (expectationFailure . show) open configured
+  where
+    path = directory </> "profile.json"
+    configured = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
+    open (profileRules, storeRules) = do
+      prepared <- profileStore profileRules storeRules path
+      either (expectationFailure . show) verify prepared
+    verify store = do
+      profileRead store `shouldReturn` Right emptyProfile
+      doesFileExist (path <> ".lock") `shouldReturn` False
 
 withStoreConfig :: (Settings -> FilePath -> IO ()) -> IO ()
 withStoreConfig action = do
@@ -95,7 +110,7 @@ acceptedSave settings directory = do
       started <- newEmptyMVar
       release <- newEmptyMVar
       waiterGone <- newEmptyMVar
-      let operation () = putMVar started () >> takeMVar release >> store (\_ -> Right (state, object []))
+      let operation () = putMVar started () >> takeMVar release >> profileUpdate store (\_ -> Right (state, object []))
           scope = withWorker operation (cancelWaiter started waiterGone)
       withAsync scope (verifyDrain release waiterGone)
     verifyDrain :: MVar () -> MVar () -> Async (Result ()) -> IO ()

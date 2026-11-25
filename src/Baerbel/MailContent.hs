@@ -2,7 +2,7 @@ module Baerbel.MailContent (htmlText, htmlTextWith, decodeWords, decodeCharset) 
 
 import Baerbel.Error (Result, failure, ioResult)
 import Control.Exception (evaluate, try)
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
+import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import Data.Char (isAscii, isAlphaNum)
 import Data.Either (fromRight)
 import Data.ByteArray.Encoding (Base(..), convertFromBase)
@@ -116,7 +116,7 @@ data HeaderPiece = Literal Text | Encoded Text ByteString
 
 decodeWords :: Text -> IO (Result Text)
 decodeWords input = runExceptT $ do
-  pieces <- ExceptT (pure (parseWords input))
+  pieces <- except (parseWords input)
   decoded <- traverse (ExceptT . renderPiece) pieces
   pure (Text.concat decoded)
 

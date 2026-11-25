@@ -65,8 +65,8 @@ encodePacket (Packet kind payload) = do
   let size = B.length payload
   validateSize kind size
   let upper = fromIntegral (size `div` 256)
-  let lower = fromIntegral (size `mod` 256)
-  let header = B.pack [kindByte kind, upper, lower]
+      lower = fromIntegral (size `mod` 256)
+      header = B.pack [kindByte kind, upper, lower]
   pure (header <> payload)
 
 parseHeader :: ByteString -> Result (PacketKind, Int)
@@ -82,10 +82,9 @@ decodePacket :: ByteString -> Result (Packet, ByteString)
 decodePacket bytes = do
   let (header, body) = B.splitAt 3 bytes
   (kind, size) <- parseHeader header
-  let (payload, remaining) = B.splitAt size body
-  if B.length payload == size
-    then Right (Packet kind payload, remaining)
-    else Left (failure "audiosocket_incomplete_payload")
+  case B.splitAt size body of
+    (payload, remaining) | B.length payload == size -> Right (Packet kind payload, remaining)
+    _ -> Left (failure "audiosocket_incomplete_payload")
 
 readExact :: Socket -> Int -> IO (Result ByteString)
 readExact socket size = go size []
@@ -95,7 +94,9 @@ readExact socket size = go size []
     go remaining chunks = do
       chunk <- N.recv socket remaining
       let next = remaining - B.length chunk
-      if B.null chunk then pure (Left (failure "audiosocket_incomplete_read")) else go next (chunk : chunks)
+      case B.uncons chunk of
+        Nothing -> pure (Left (failure "audiosocket_incomplete_read"))
+        Just _ -> go next (chunk : chunks)
 
 readBody :: Socket -> Result ByteString -> IO (Result Packet)
 readBody _ (Left problem) = pure (Left problem)
@@ -126,7 +127,10 @@ boundedWritePacket rules socket packet = do
 uuidText :: ByteString -> Result Text
 uuidText bytes
   | B.length bytes /= 16 = Left (failure "audiosocket_invalid_uuid")
-  | otherwise = Right (T.intercalate "-" groups)
+  | otherwise = Right (renderUuid bytes)
+
+renderUuid :: ByteString -> Text
+renderUuid bytes = T.intercalate "-" groups
   where
     hex :: Word8 -> Text
     hex byte = T.justifyRight 2 '0' (T.pack (showHex byte ""))
@@ -142,5 +146,5 @@ readCallId socket = do
   pure (packet >>= extract)
   where
     extract :: Packet -> Result Text
-    extract (Packet CallId bytes) = uuidText bytes
+    extract (Packet CallId bytes) = Right (renderUuid bytes)
     extract _ = Left (failure "audiosocket_uuid_required")

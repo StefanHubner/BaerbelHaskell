@@ -1,8 +1,8 @@
 module Baerbel.JSON
-  ( jsonOptions, camelOptions, argumentOptions, decodeValue, decodeBytes, encodeBytes, encodeReference, decodeUnique, decodeUniqueIntegers ) where
+  ( jsonOptions, camelOptions, argumentOptions, resultValue, decodeValue, decodeBytes, encodeBytes, encodeReference, decodeUnique, decodeUniqueIntegers ) where
 
 import Baerbel.Error (Result, failure)
-import Data.Aeson (FromJSON, ToJSON, Value, Options (..), defaultOptions,
+import Data.Aeson (FromJSON, ToJSON(..), Value, Options (..), defaultOptions, genericToJSON,
                    eitherDecodeStrict', encode, camelTo2)
 import qualified Data.Aeson.Key
 import Data.Aeson.Decoding.ByteString (bsToTokens)
@@ -16,6 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Numeric (showHex)
+import GHC.Generics (Generic)
 
 jsonOptions :: Int -> Options
 jsonOptions count = defaultOptions
@@ -28,6 +29,12 @@ argumentOptions count = (jsonOptions count)
 camelOptions :: Int -> Options
 camelOptions count = defaultOptions
   { fieldLabelModifier = lowerFirst . drop count }
+
+data ToolResult = ToolResult {resultStatus :: Text, resultResult :: Text} deriving (Generic)
+instance ToJSON ToolResult where toJSON = genericToJSON (jsonOptions 6)
+
+resultValue :: Text -> Value
+resultValue outcome = toJSON (ToolResult "ok" outcome)
 
 lowerFirst :: String -> String
 lowerFirst [] = []
@@ -70,7 +77,9 @@ decodeUniqueNumbers accepted code bytes = either (const (Left (failure code))) (
 uniqueTokens :: (Number -> Bool) -> Tokens k e -> Either () k
 uniqueTokens _ (TkLit _ rest) = Right rest
 uniqueTokens _ (TkText _ rest) = Right rest
-uniqueTokens accepted (TkNumber number rest) = if accepted number then Right rest else Left ()
+uniqueTokens accepted (TkNumber number rest)
+  | accepted number = Right rest
+  | otherwise = Left ()
 uniqueTokens accepted (TkArrayOpen items) = uniqueArray accepted items
 uniqueTokens accepted (TkRecordOpen fields) = uniqueRecord accepted Set.empty fields
 uniqueTokens _ (TkErr _) = Left ()

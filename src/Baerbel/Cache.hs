@@ -1,7 +1,7 @@
 module Baerbel.Cache (memoize, onceSuccess, insertBounded) where
 
 import Baerbel.Error (Result)
-import Control.Concurrent.MVar (modifyMVar, newMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
@@ -28,23 +28,28 @@ seconds = fmap ((/ 1000000000) . fromIntegral) getMonotonicTimeNSec
 memoize :: Ord key => Int -> Double -> (query -> key) -> (query -> IO (Result a)) -> IO (query -> IO (Result a))
 memoize capacity ttl keyOf operation = do
   state <- newMVar Map.empty
-  let lookupValue now key = modifyMVar state (pure . lookupEntry now ttl key)
-      store now key value = modifyMVar state (\cache -> pure (insertEntry capacity now key value cache, Right value))
-      request query = do
-        now <- seconds
-        let key = keyOf query
-        cached <- lookupValue now key
-        maybe (load key query) (pure . Right) cached
-      load key query = do
-        result <- operation query
-        now <- seconds
-        either (pure . Left) (store now key) result
-  pure request
+  pure (cachedRequest state capacity ttl keyOf operation)
+
+cachedRequest :: Ord key => MVar (Cache key a) -> Int -> Double -> (query -> key) -> (query -> IO (Result a)) -> query -> IO (Result a)
+cachedRequest state capacity ttl keyOf operation query = do
+  now <- seconds
+  let key = keyOf query
+  cached <- modifyMVar state (pure . lookupEntry now ttl key)
+  maybe (loadEntry state capacity key (operation query)) (pure . Right) cached
+
+loadEntry :: Ord key => MVar (Cache key a) -> Int -> key -> IO (Result a) -> IO (Result a)
+loadEntry state capacity key operation = do
+  result <- operation
+  now <- seconds
+  let store value = modifyMVar state (\cache -> pure (insertEntry capacity now key value cache, Right value))
+  either (pure . Left) store result
 
 insertBounded :: Ord key => Int -> key -> value -> (Map key value, [key]) -> (Map key value, [key])
 insertBounded capacity key value (entries, order) = (retained, kept)
   where
-    added = if Map.member key entries then order else order <> [key]
+    added
+      | Map.member key entries = order
+      | otherwise = order <> [key]
     count = max 0 (length added - capacity)
     (removed, kept) = splitAt count added
     retained = foldl' (flip Map.delete) (Map.insert key value entries) removed

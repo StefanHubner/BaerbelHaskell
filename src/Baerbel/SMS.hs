@@ -8,6 +8,7 @@ import Baerbel.Error (Result, failure)
 import Baerbel.HTTP (Request(..), Body(..), RawSend, Response(..))
 import Baerbel.JSON (jsonOptions)
 import Baerbel.Storage (databaseResult, withDatabase)
+import Control.Monad (unless)
 import Control.Concurrent.MVar (newMVar, withMVar)
 import Crypto.Hash (Digest, SHA256, hash)
 import Data.Aeson (FromJSON(..), ToJSON(..), Value(String), Options(..), genericParseJSON, genericToJSON)
@@ -67,7 +68,9 @@ units :: Text -> Int
 units = Text.foldl' (\total char -> total + cost char) 0
 
 cost :: Char -> Int
-cost char = if ord char > 0xffff then 2 else 1
+cost char
+  | ord char > 0xffff = 2
+  | otherwise = 1
 
 prefix :: Int -> Text -> Text
 prefix remaining text = case Text.uncons text of
@@ -102,8 +105,8 @@ initialize connection = do
   execute_ connection "CREATE TABLE IF NOT EXISTS sms_sends (request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'notification', fallback INTEGER NOT NULL DEFAULT 0)"
   columns <- query_ connection "SELECT name FROM pragma_table_info('sms_sends')" :: IO [Only Text]
   let names = map fromOnly columns
-  if "kind" `elem` names then pure () else execute_ connection "ALTER TABLE sms_sends ADD COLUMN kind TEXT NOT NULL DEFAULT 'notification'"
-  if "fallback" `elem` names then pure () else execute_ connection "ALTER TABLE sms_sends ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0"
+  unless ("kind" `elem` names) (execute_ connection "ALTER TABLE sms_sends ADD COLUMN kind TEXT NOT NULL DEFAULT 'notification'")
+  unless ("fallback" `elem` names) (execute_ connection "ALTER TABLE sms_sends ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0")
 
 reserveSMS :: Connection -> Text -> Text -> Kind -> IO (Maybe Delivery)
 reserveSMS connection ident body kind = withTransaction connection reserve
@@ -112,7 +115,10 @@ reserveSMS connection ident body kind = withTransaction connection reserve
   reserve = do
     execute connection "INSERT OR IGNORE INTO sms_sends VALUES (?, ?, 'uncertain', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 0)" (ident, digest, kindText kind)
     inserted <- changes connection
-    if inserted > 0 then pure Nothing else previous
+    reserved inserted
+  reserved count
+    | count > 0 = pure Nothing
+    | otherwise = previous
   previous = do
     rows <- query connection "SELECT status, kind, fallback FROM sms_sends WHERE request_id=?" (Only ident)
     resumeReservation connection ident digest kind rows

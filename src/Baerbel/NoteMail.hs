@@ -58,13 +58,18 @@ deliver owner rules gmailRules send clock ident transcript audio = do
   either (pure . Left) (submit now) sender
   where
     submit now origin = do
-      let body = noteMailBodyPrefix rules <> transcript <> noteMailBodySuffix rules
-          messageId = "<owner-note-" <> ident <> "@phone-assistant.local>"
-          envelope = Envelope origin [origin] (noteMailSubject rules) body now messageId []
-          name = Text.pack (formatTime defaultTimeLocale (noteMailFilenamePattern rules) now)
-          file = File (noteMailMime rules) name audio
+      let (envelope, file) = noteMessage rules now origin ident transcript audio
       result <- sendEnvelope gmailRules send envelope [file] Nothing
       pure (toJSON (Receipt "ok" "sent") <$ result)
+
+noteMessage :: NoteMailRules -> UTCTime -> Text -> Text -> Text -> ByteString -> (Envelope, File)
+noteMessage rules now origin ident transcript audio = (envelope, file)
+  where
+    body = noteMailBodyPrefix rules <> transcript <> noteMailBodySuffix rules
+    messageId = "<owner-note-" <> ident <> "@phone-assistant.local>"
+    envelope = Envelope origin [origin] (noteMailSubject rules) body now messageId []
+    name = Text.pack (formatTime defaultTimeLocale (noteMailFilenamePattern rules) now)
+    file = File (noteMailMime rules) name audio
 
 data MailFailure = MailFailure {mailFailureStatus :: Text, mailFailureError :: Text} deriving (Generic)
 instance ToJSON MailFailure where toJSON = genericToJSON (jsonOptions 11)

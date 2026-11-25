@@ -9,7 +9,8 @@ import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
 import Baerbel.MapTypes (Point(..))
 import Baerbel.MapsRoute (heading, gainLoss, samplePath)
 import Baerbel.Notes
-import Baerbel.Profile (ProfileState(..), emptyProfile, transition)
+import qualified Baerbel.Profile as Profile
+import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile, transition, parseCommand, profile)
 import Baerbel.ProviderConfig (ContactsRules, GmailRules, ProfileRules, RouteRules)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent (threadDelay)
@@ -97,13 +98,27 @@ unchangedProfile :: ProfileRules -> Expectation
 unchangedProfile rules = case initial of
   Left issue -> expectationFailure (show issue)
   Right (state, _) -> do
-    let updated = transition rules later "profile_set" arguments state
+    let updated = prepared >>= \command -> transition rules later command state
     fmap (profileUpdatedAt . fst) updated `shouldBe` Right (profileUpdatedAt state)
     fmap (profileValues . fst) updated `shouldBe` Right (Map.singleton "project_2" "value")
   where
     arguments = object ["key" .= ("project_2" :: Text), "value" .= (" value " :: Text)]
-    initial = transition rules now "profile_set" arguments emptyProfile
+    prepared = parseCommand rules "profile_set" arguments
+    initial = prepared >>= \command -> transition rules now command emptyProfile
     later = UTCTime (fromGregorian 2026 11 20) 0
+
+readOnlyProfile :: ProfileRules -> Expectation
+readOnlyProfile rules = do
+  clocks <- newIORef (0 :: Int)
+  writes <- newIORef (0 :: Int)
+  let state = emptyProfile {profileValues = Map.singleton "home" "Vienna"}
+      store = ProfileStore (pure (Right state)) (\_ -> modifyIORef' writes (+ 1) >> pure (Left (failure "unexpected_write")))
+      clock = modifyIORef' clocks (+ 1) >> pure now
+      arguments = object ["key" .= ("home" :: Text)]
+      expected = Profile.snapshot rules state (Just "home")
+  profile rules store clock "profile_get" arguments "read" `shouldReturn` Right expected
+  readIORef clocks `shouldReturn` 0
+  readIORef writes `shouldReturn` 0
 
 invalidSend :: GmailRules -> Expectation
 invalidSend rules = do
@@ -157,6 +172,7 @@ spec = describe "Provider behavior against the unchanged Python implementation" 
   it "matches observed completion phrases" completionGolden
   it "finds unique quotes across transcription fragments" quoteGolden
   it "preserves profile no-op timestamps and numeric key components" (withRules "profile" unchangedProfile)
+  it "reads profile values without reading the clock or invoking writes" (withRules "profile" readOnlyProfile)
   it "rejects invalid send recipients before reserving or requesting" (withRules "gmail" invalidSend)
   it "uses a bounded call-local LRU cache" cachedRequests
   it "completes accepted delivery after the tool caller is cancelled" (withRule "notes" "selection" cancelledDelivery)

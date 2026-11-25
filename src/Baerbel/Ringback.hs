@@ -26,8 +26,11 @@ instance FromJSON RingRules where parseJSON = genericParseJSON (jsonOptions 4)
 data Ring = Ring { ringActive :: TVar Bool, ringUntil :: TVar Word64, ringLock :: MVar () }
 
 ringFrame :: RingRules -> Int -> BS.ByteString
-ringFrame rules index = if audible then tone else BS.replicate (ringFrameSamples rules * 2) 0
+ringFrame rules index
+  | audible = tone
+  | otherwise = BS.replicate silenceBytes 0
   where
+    silenceBytes = ringFrameSamples rules * 2
     phase = index `mod` ringCycleFrames rules
     audible = any (\(start, end) -> phase >= start && phase < end) (ringToneRanges rules)
     sample number = round (ringAmplitude rules * sum (map (wave number) (ringFrequencies rules)))
@@ -57,26 +60,35 @@ runTone rules media ring epoch index = do
     advance :: IO (Result a)
     advance = do
       active <- readTVarIO (ringActive ring)
-      if not active then atomically retry else next
+      let continue | active = next
+                   | otherwise = atomically retry
+      continue
     next :: IO (Result a)
     next = waitTone ring >> runTone rules media ring epoch (index + 1)
 
 writeTone :: RingRules -> Media -> Ring -> Int -> IO (Result ())
 writeTone rules media ring index = do
   active <- readTVarIO (ringActive ring)
-  if not active then pure (Right ()) else do
-    result <- sendAudio media (ringFrame rules index)
-    now <- getMonotonicTimeNSec
-    let deadline = now + fromIntegral (ringFrameMicros rules) * 1000
-    atomically (writeTVar (ringUntil ring) deadline)
-    pure (void result)
+  let play | active = deliver
+           | otherwise = pure (Right ())
+  play
+  where
+    deliver = do
+      let frame = ringFrame rules index
+      result <- sendAudio media frame
+      now <- getMonotonicTimeNSec
+      let deadline = now + fromIntegral (ringFrameMicros rules) * 1000
+      atomically (writeTVar (ringUntil ring) deadline)
+      pure (void result)
 
 writeSpeech :: Media -> Ring -> BS.ByteString -> IO (Result AudioDelivery)
 writeSpeech media ring frame = do
   active <- readTVarIO (ringActive ring)
-  if active && not (audiblePCM frame) then pure (Right Suppressed) else do
-    atomically (writeTVar (ringActive ring) False)
-    withMVar (ringLock ring) (const deliver)
+  let play | active && not (audiblePCM frame) = pure (Right Suppressed)
+           | otherwise = do
+               atomically (writeTVar (ringActive ring) False)
+               withMVar (ringLock ring) (const deliver)
+  play
   where
     deliver = waitTone ring >> sendAudio media frame
 
@@ -84,5 +96,6 @@ waitTone :: Ring -> IO ()
 waitTone ring = do
   deadline <- readTVarIO (ringUntil ring)
   now <- getMonotonicTimeNSec
-  let micros = if deadline > now then fromIntegral ((deadline - now) `div` 1000) else 0
+  let micros | deadline > now = fromIntegral ((deadline - now) `div` 1000)
+             | otherwise = 0
   threadDelay micros

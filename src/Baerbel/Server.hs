@@ -76,8 +76,12 @@ acceptLoop :: ServerConfig -> (Socket -> IO (Result ())) -> Socket -> TVar (Set.
 acceptLoop cfg handler listener children = mask $ \restore -> do
   (client, _) <- restore (accept listener)
   count <- Set.size <$> readTVarIO children
-  if count >= connectionLimit cfg then close client else startChild cfg handler client children
+  admit count client
   restore (acceptLoop cfg handler listener children)
+  where
+    admit count client
+      | count >= connectionLimit cfg = close client
+      | otherwise = startChild cfg handler client children
 
 startChild :: ServerConfig -> (Socket -> IO (Result ())) -> Socket -> TVar (Set.Set ThreadId) -> IO ()
 startChild cfg handler client children = do

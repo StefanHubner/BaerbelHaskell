@@ -68,7 +68,8 @@ timestamp value = case parsed of
   Just _ -> Right value
   Nothing -> Left (failure "maps_invalid_hours_response")
   where
-    normalized = if "Z" `Text.isSuffixOf` value then Text.dropEnd 1 value <> "+00:00" else value
+    normalized | "Z" `Text.isSuffixOf` value = Text.dropEnd 1 value <> "+00:00"
+               | otherwise = value
     parsed = parseTimeM True defaultTimeLocale "%FT%T%Q%Ez" (Text.unpack normalized) :: Maybe ZonedTime
 
 openingHours :: MapsRules -> (Text -> Text) -> Maybe RawHours -> Result (Maybe Hours)
@@ -79,14 +80,20 @@ openingHours rules redact (Just value) = do
   nextOpen <- traverse (fmap redact . timestamp) (rawHoursNextOpenTime value)
   nextClose <- traverse (fmap redact . timestamp) (rawHoursNextCloseTime value)
   let descriptions = fmap (map (Text.take (mapsHoursDescriptionChars rules) . redact) . take (mapsWeekdayLimit rules)) (rawHoursWeekdayDescriptions value)
-      output = Hours (rawHoursOpenNow value) descriptions periods specials nextOpen nextClose (if truncated then Just True else Nothing)
-      present = or [isJust (rawHoursOpenNow value), isJust descriptions, isJust periods, isJust specials, isJust nextOpen, isJust nextClose]
-  Right (if present then Just output else Nothing)
+      output = Hours (rawHoursOpenNow value) descriptions periods specials nextOpen nextClose truncatedFlag
+  Right (nonemptyHours output)
   where
+    exceeds :: Int -> Maybe [a] -> Bool
     exceeds cap = maybe False ((> cap) . length)
+    truncatedFlag | truncated = Just True
+                  | otherwise = Nothing
     longDescription = any ((> mapsHoursDescriptionChars rules) . Text.length) (fromMaybe [] (rawHoursWeekdayDescriptions value))
     truncated = longDescription || exceeds (mapsWeekdayLimit rules) (rawHoursWeekdayDescriptions value)
       || exceeds (mapsPeriodLimit rules) (rawHoursPeriods value) || exceeds (mapsSpecialDayLimit rules) (rawHoursSpecialDays value)
+
+nonemptyHours :: Hours -> Maybe Hours
+nonemptyHours (Hours Nothing Nothing Nothing Nothing Nothing Nothing _) = Nothing
+nonemptyHours hours = Just hours
 
 hoursAvailable :: Hours -> Bool
 hoursAvailable value = isJust (hoursOpenNow value) || isJust (hoursPeriods value)

@@ -114,5 +114,9 @@ withProxyEnvironment action = bracket save restore (const (set >> action))
   where
     keys = ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "no_proxy", "NO_PROXY"]
     save = traverse (\key -> (,) key <$> lookupEnv key) keys
-    set = mapM_ (\key -> setEnv key (if key `elem` ["no_proxy", "NO_PROXY"] then "" else "http://127.0.0.1:1")) keys
+    set = mapM_ setProxy keys
+    setProxy :: String -> IO ()
+    setProxy key
+      | key `elem` ["no_proxy", "NO_PROXY"] = setEnv key ""
+      | otherwise = setEnv key "http://127.0.0.1:1"
     restore = mapM_ (\(key, previous) -> maybe (unsetEnv key) (setEnv key) previous)

@@ -1,20 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Telephony
-  ( TelephonyConfig(..), TelephonyRules(..), TelephonyMedia(..), OwnerControl(..), IncomingControl(..)
+  ( TelephonyConfig(..), TelephonyRules(..), TelephonyMedia(..), OwnerControl(..), IncomingControl(..), IncomingEnd(..)
   , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler
   ) where
 
 import Baerbel.AMI (AMI(..), AMIRules, Channel(..), Message, connectAMI, field, variable, ownerChannel, incomingChannel)
 import Baerbel.CallState
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
-import Baerbel.JSON (jsonOptions)
+import Baerbel.JSON (jsonOptions, resultValue)
 import Baerbel.Incoming (trustedEndpoint, callbackNumber, remainingBudget)
 import Baerbel.Recording (Archive, openRecording)
 import Baerbel.Routing
 import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar_, modifyMVar, withMVar)
 import Control.Concurrent.STM (TChan, atomically, newBroadcastTChanIO, dupTChan, readTChan, writeTChan)
 import Control.Exception (finally, onException)
-import Control.Monad (when, void)
+import Control.Monad (when, unless, void)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, except)
 import Crypto.Random (getRandomBytes)
@@ -30,12 +30,12 @@ import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8', encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, decodeUtf8', encodeUtf8)
 import GHC.Generics (Generic)
 import GHC.Clock (getMonotonicTimeNSec)
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as N
-import Numeric (showHex)
+import Data.ByteArray.Encoding (Base(Base16), convertToBase)
 import System.Timeout (timeout)
 
 data TelephonyConfig = TelephonyConfig
@@ -63,13 +63,17 @@ data OwnerControl = OwnerControl
 data IncomingControl = IncomingControl
   { incomingNativeChannel :: Channel, incomingMessagesEnabled :: Bool
   , incomingCallback :: Maybe Text, incomingSeconds :: Double
-  , forwardIncoming :: Text -> IO (Result ()), terminateIncoming :: Text -> IO (Result ())
+  , forwardIncoming :: Text -> IO (Result ()), terminateIncoming :: IncomingEnd -> IO (Result ())
   , closeIncoming :: IO () }
+
+data IncomingEnd = Declined | ScreeningTimeout | ScreeningError | MessageSent | MessageFailed | MessageUncertain
 
 data OwnerRuntime = OwnerRuntime
   { ownerAMI :: AMI, ownerState :: MVar CallState, ownerEvents :: TChan ()
   , ownerLock :: MVar (), ownerConfig :: TelephonyConfig, ownerMedia :: TelephonyMedia
   , ownerReconnect :: IO (Result ()) }
+
+data DirectMode = InspectRoute | DialNumber deriving (Eq)
 
 data DirectArgs = DirectArgs
   { argumentNumber :: Text, argumentLabel :: Maybe Text
@@ -84,7 +88,7 @@ freshToken :: IO Text
 freshToken = render <$> (getRandomBytes 16 :: IO ByteString)
   where
     render :: ByteString -> Text
-    render = T.concat . map (\byte -> T.justifyRight 2 '0' (T.pack (showHex byte ""))) . B.unpack
+    render = decodeUtf8 . convertToBase Base16
 
 textArgument :: Text -> KM.KeyMap Value -> Result Text
 textArgument key fields = case KM.lookup (K.fromText key) fields of
@@ -98,13 +102,24 @@ nullableText key fields = case KM.lookup (K.fromText key) fields of
   Just (String value) -> Right (Just value)
   _ -> Left (failure "invalid_arguments")
 
-parseDirect :: TelephonyRules -> Text -> Value -> Result DirectArgs
-parseDirect rules name (Object fields)
-  | name `notElem` ["direct_call", "direct_call_route"] || any (`notElem` allowed) (KM.keys fields) = Left (failure "invalid_arguments")
-  | otherwise = DirectArgs <$> directNumber name fields <*> label <*> token <*> confirmation
+parseDirect :: TelephonyRules -> Text -> Value -> Result (DirectMode, DirectArgs)
+parseDirect rules name arguments = do
+  mode <- directMode name
+  args <- directArguments rules mode arguments
+  pure (mode, args)
+
+directMode :: Text -> Result DirectMode
+directMode "direct_call" = Right DialNumber
+directMode "direct_call_route" = Right InspectRoute
+directMode _ = Left (failure "invalid_arguments")
+
+directArguments :: TelephonyRules -> DirectMode -> Value -> Result DirectArgs
+directArguments rules mode (Object fields)
+  | any (`notElem` allowed) (KM.keys fields) = Left (failure "invalid_arguments")
+  | otherwise = DirectArgs <$> directNumber mode fields <*> label <*> token <*> confirmation
   where
     allowed :: [K.Key]
-    allowed = ["number", "display_name"] ++ [key | name == "direct_call", key <- ["route_token", "international_confirmed"]]
+    allowed = ["number", "display_name"] ++ [key | mode == DialNumber, key <- ["route_token", "international_confirmed"]]
     label :: Result (Maybe Text)
     label = nullableText "display_name" fields >>= checkLabel rules
     token :: Result (Maybe Text)
@@ -114,7 +129,7 @@ parseDirect rules name (Object fields)
       Nothing -> Right False
       Just (Bool value) -> Right value
       _ -> Left (failure "invalid_arguments")
-parseDirect _ _ _ = Left (failure "invalid_arguments")
+directArguments _ _ _ = Left (failure "invalid_arguments")
 
 checkLabel :: TelephonyRules -> Maybe Text -> Result (Maybe Text)
 checkLabel rules value
@@ -206,10 +221,10 @@ executeOwner runtime pending validate name args requestId = withMVar (ownerLock 
   where
     operation :: () -> IO (Result Value)
     operation () = runExceptT $ do
-      parsed <- except (parseDirect (telephonyRules (ownerConfig runtime)) name args)
+      (mode, parsed) <- except (parseDirect (telephonyRules (ownerConfig runtime)) name args)
       route <- ExceptT (validatedRoute runtime validate parsed)
       state <- lift (currentState runtime pending)
-      maybe (executeBound runtime pending name requestId parsed route state) except (cachedCommand runtime requestId state)
+      maybe (executeBound runtime pending mode requestId parsed route state) except (cachedCommand runtime requestId state)
 
 verifyHome :: Route -> Channel -> Result ()
 verifyHome route channel
@@ -224,14 +239,16 @@ validatedRoute runtime validate args
     settings :: RouteSettings
     settings = routeSettings (ownerConfig runtime)
 
-runDirect :: OwnerRuntime -> MVar (Maybe CallState) -> Text -> Text -> DirectArgs -> Route -> IO (Result Value)
-runDirect runtime pending name requestId args route = do
+runDirect :: OwnerRuntime -> MVar (Maybe CallState) -> DirectMode -> Text -> DirectArgs -> Route -> IO (Result Value)
+runDirect runtime pending mode requestId args route = do
   token <- freshToken
   attempt <- freshToken
   now <- seconds
   state <- currentState runtime pending
   let request = DialRequest requestId attempt (argumentToken args) route (argumentLabel args) (argumentConfirmed args) token now
-  if name == "direct_call_route" then proposal runtime pending request state else executeDial runtime pending request state
+  case mode of
+    InspectRoute -> proposal runtime pending request state
+    DialNumber -> executeDial runtime pending request state
 
 proposal :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> CallState -> IO (Result Value)
 proposal runtime pending request state = do
@@ -264,7 +281,7 @@ owned runtime pending = runExceptT $ do
 checkVariable :: AMI -> Channel -> (Text, Text) -> ExceptT Failure IO ()
 checkVariable ami channel (name, expected) = do
   actual <- ExceptT (getVariable ami channel name)
-  if actual == expected then pure () else except (Left (failure "owner_call_required"))
+  unless (actual == expected) (except (Left (failure "owner_call_required")))
 
 nativeDial :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> ExceptT Failure IO Value
 nativeDial runtime pending request = do
@@ -294,7 +311,7 @@ setDialVariables runtime channel request = setVariables (ownerAMI runtime) chann
     route :: Route
     route = dialRoute request
     provider :: Text
-    provider = case routeProvider route of { AA -> "aa"; Telematica -> "telematica"; Home -> "home" }
+    provider = providerName (routeProvider route)
     variables :: [(Text, Text)]
     variables = [("PA_DIRECT_NUMBER", routeNumber route), ("PA_DIRECT_PROVIDER", provider),
       ("PA_DIRECT_ATTEMPT", dialAttemptId request), ("PA_DIRECT_TIMEOUT", T.pack (show (dialTimeoutSeconds (ownerConfig runtime))))]
@@ -311,7 +328,7 @@ awaitDial runtime pending request = do
   let micros = (dialTimeoutSeconds (ownerConfig runtime) + nativeDialGraceSeconds (telephonyRules (ownerConfig runtime))) * 1000000
   result <- timeout micros (waitResult runtime pending events (dialRequestId request))
   case result of
-    Nothing -> recoverOwner runtime pending >> pure (Right (object ["status" .= ("ok" :: Text), "result" .= ("failed" :: Text)]))
+    Nothing -> recoverOwner runtime pending >> pure (Right (resultValue "failed"))
     Just value -> completeDial runtime pending value
 
 waitResult :: OwnerRuntime -> MVar (Maybe CallState) -> TChan () -> Text -> IO Value
@@ -319,30 +336,32 @@ waitResult runtime pending events identifier = do
   state <- currentState runtime pending
   case M.lookup identifier (callResults state) of
     Just value -> pure value
-    Nothing | callPhase state == Ended -> pure (object ["status" .= ("ok" :: Text), "result" .= ("cancelled" :: Text)])
+    Nothing | callPhase state == Ended -> pure (resultValue "cancelled")
     Nothing -> atomically (readTChan events) >> waitResult runtime pending events identifier
 
 completeDial :: OwnerRuntime -> MVar (Maybe CallState) -> Value -> IO (Result Value)
 completeDial runtime pending result = do
   state <- currentState runtime pending
-  if callPhase state `elem` [Connected, Ended] then pure (Right result) else resumeAfterResult runtime pending result
+  let complete | callPhase state `elem` [Connected, Ended] = pure (Right result)
+               | otherwise = resumeAfterResult runtime pending result
+  complete
 
 recoverOwner :: OwnerRuntime -> MVar (Maybe CallState) -> IO ()
 recoverOwner runtime pending = do
   state <- currentState runtime pending
   let ready = callPhase state `elem` [Connected, Ended, Announcing] || isNothing (callRequest state)
-  if ready then pure () else recoverPaused runtime pending
+  unless ready (recoverPaused runtime pending)
 
 recoverPaused :: OwnerRuntime -> MVar (Maybe CallState) -> IO ()
 recoverPaused runtime pending = do
   result <- timeout (nativeRecoveryMicros (telephonyRules (ownerConfig runtime))) recovery
-  if result == Just (Right ()) then pure () else abandonOwner runtime pending
+  unless (result == Just (Right ())) (abandonOwner runtime pending)
   where
     recovery :: IO (Result ())
     recovery = runExceptT $ do
       channel <- ExceptT (owned runtime pending)
       state <- lift (currentState runtime pending)
-      if callPhase state `elem` [Connected, Ended] then pure () else resume channel
+      unless (callPhase state `elem` [Connected, Ended]) (resume channel)
     resume :: Channel -> ExceptT Failure IO ()
     resume channel = do
       ExceptT (redirect (ownerAMI runtime) channel "phone-assistant-resume")
@@ -359,7 +378,8 @@ recordOwner :: OwnerRuntime -> IO (Result Archive)
 recordOwner runtime = runExceptT $ do
   state <- lift (readMVar (ownerState runtime))
   result <- ExceptT (getVariable (ownerAMI runtime) (callChannel state) "PA_RECORDING_ACTIVE")
-  if result /= "1" then except (Left (failure "call_recording_unavailable")) else ExceptT (openRecording directory (channelUniqueId (callChannel state)))
+  unless (result == "1") (except (Left (failure "call_recording_unavailable")))
+  ExceptT (openRecording directory (channelUniqueId (callChannel state)))
   where
     directory :: FilePath
     directory = recordingDirectory (ownerConfig runtime)
@@ -379,13 +399,17 @@ waitFinished runtime pending = atomically (dupTChan (ownerEvents runtime)) >>= l
     loop :: TChan () -> IO (Result ())
     loop events = do
       state <- currentState runtime pending
-      if callControlLost state then verify events else await events state
+      let proceed | callControlLost state = verify events
+                  | otherwise = await events state
+      proceed
     verify :: TChan () -> IO (Result ())
     verify events = do
       result <- owned runtime pending
       either finished (const (loop events)) result
     finished :: Failure -> IO (Result ())
-    finished problem = pure (if failureCode problem == "owner_call_required" then Right () else Left problem)
+    finished problem
+      | failureCode problem == "owner_call_required" = pure (Right ())
+      | otherwise = pure (Left problem)
     await :: TChan () -> CallState -> IO (Result ())
     await events state
       | callPhase state == Ended = pure (Right ())
@@ -458,7 +482,8 @@ checkHandoff ami token pending = do
   statuses <- ExceptT (amiAction ami "Status" [("Variables", "PA_CALL_ID,PA_PERMISSION,PA_OWNER_AUTHORIZED,PA_INCOMING_MODE,PA_HANDOFF_ID,PA_HANDOFF_PARENT")] (Just "StatusComplete"))
   channel <- except (handoffChannel token pending statuses)
   endpoint <- ExceptT (getVariable ami channel "CHANNEL(endpoint)")
-  if ownerEndpoint channel endpoint then pure (Just (handoffText pending)) else except (Left (failure "incoming_handoff_untrusted_endpoint"))
+  unless (ownerEndpoint channel endpoint) (except (Left (failure "incoming_handoff_untrusted_endpoint")))
+  pure (Just (handoffText pending))
 
 ownerEndpoint :: Channel -> Text -> Bool
 ownerEndpoint channel endpoint = endpoint `elem` ["phone-assistant-aa-outbound", "phone-assistant-home"]
@@ -510,7 +535,8 @@ bindIncoming ami handoffs identifier pause = do
   statuses <- ExceptT (incomingStatuses ami)
   channel <- except (incomingChannel identifier statuses)
   endpoint <- ExceptT (getVariable ami channel "CHANNEL(endpoint)")
-  if trustedEndpoint channel endpoint then configureIncoming ami handoffs identifier pause channel else except (Left (failure "incoming_untrusted_endpoint"))
+  unless (trustedEndpoint channel endpoint) (except (Left (failure "incoming_untrusted_endpoint")))
+  configureIncoming ami handoffs identifier pause channel
 
 configureIncoming :: AMI -> Handoffs -> Text -> IO () -> Channel -> ExceptT Failure IO IncomingControl
 configureIncoming ami handoffs identifier pause channel = do
@@ -519,18 +545,20 @@ configureIncoming ami handoffs identifier pause channel = do
   privacy <- ExceptT (getVariable ami channel "CDR(tf_privacy)")
   callback <- ExceptT (getVariable ami channel "TF_CALLBACK")
   state <- lift (newMVar (initialCall identifier Screening channel))
-  if channelMessageOnly channel && enabled /= "1" then except (Left (failure "incoming_messages_disabled"))
-    else pure (makeIncoming ami handoffs identifier pause channel state (enabled == "1") budget (callbackNumber privacy callback))
+  when (channelMessageOnly channel && enabled /= "1") (except (Left (failure "incoming_messages_disabled")))
+  let messages = enabled == "1"
+      number = callbackNumber privacy callback
+  pure (makeIncoming ami handoffs identifier pause channel state messages budget number)
 
 makeIncoming :: AMI -> Handoffs -> Text -> IO () -> Channel -> MVar CallState -> Bool -> Double -> Maybe Text -> IncomingControl
 makeIncoming ami handoffs identifier pause channel state messages budget callback = IncomingControl channel messages callback budget forward terminate close
   where
     forward :: Text -> IO (Result ())
     forward = forwardNative ami handoffs identifier pause channel state
-    terminate :: Text -> IO (Result ())
+    terminate :: IncomingEnd -> IO (Result ())
     terminate = terminateNative ami identifier channel state
     close :: IO ()
-    close = void (terminate "SCREENING_ERROR") `finally` amiClose ami
+    close = void (terminate ScreeningError) `finally` amiClose ami
 
 isIncomingOwned :: AMI -> Text -> Channel -> IO (Result Bool)
 isIncomingOwned ami identifier expected = fmap (fmap valid) (incomingStatuses ami)
@@ -563,19 +591,27 @@ redirectIncoming ami handoffs pause channel token state = do
   when (either ((== "ami_action_rejected") . failureCode) (const False) result) (forgetHandoff handoffs token)
   pure (forwardResult result state, result)
 
-terminateNative :: AMI -> Text -> Channel -> MVar CallState -> Text -> IO (Result ())
+terminateNative :: AMI -> Text -> Channel -> MVar CallState -> IncomingEnd -> IO (Result ())
 terminateNative ami identifier channel state reason = modifyMVar state proceed
   where
     proceed :: CallState -> IO (CallState, Result ())
     proceed previous | callPhase previous `elem` [RedirectPending, Forwarded, Ended] = pure (previous, Right ())
     proceed previous = do
       ownership <- isIncomingOwned ami identifier channel
-      result <- if ownership == Right True then terminate else pure (Right ())
+      let stop | ownership == Right True = terminate
+               | otherwise = pure (Right ())
+      result <- stop
       pure (previous {callPhase = Ended}, result)
     terminate :: IO (Result ())
-    terminate = runExceptT (ExceptT (setVariables ami channel [("TF_RESULT", checkedReason)]) >> ExceptT (hangup ami channel "21"))
-    checkedReason :: Text
-    checkedReason = if reason `elem` ["DECLINED", "SCREENING_TIMEOUT", "SCREENING_ERROR", "MESSAGE_SENT", "MESSAGE_FAILED", "MESSAGE_UNCERTAIN"] then reason else "DECLINED"
+    terminate = runExceptT (ExceptT (setVariables ami channel [("TF_RESULT", incomingReason reason)]) >> ExceptT (hangup ami channel "21"))
+
+incomingReason :: IncomingEnd -> Text
+incomingReason Declined = "DECLINED"
+incomingReason ScreeningTimeout = "SCREENING_TIMEOUT"
+incomingReason ScreeningError = "SCREENING_ERROR"
+incomingReason MessageSent = "MESSAGE_SENT"
+incomingReason MessageFailed = "MESSAGE_FAILED"
+incomingReason MessageUncertain = "MESSAGE_UNCERTAIN"
 
 homeRouteHandler :: TelephonyConfig -> ValidateNumber -> Socket -> IO (Result ())
 homeRouteHandler cfg validate connection = do
@@ -608,7 +644,7 @@ homeIdentity cfg headers
     destination :: Text
     destination = headerValue "agi_extension"
     digits :: Text
-    digits = if T.isPrefixOf "+" destination then T.drop 1 destination else destination
+    digits = fromMaybe destination (T.stripPrefix "+" destination)
     validNumber :: Bool
     validNumber = T.length digits >= 3 && T.length digits <= 17 && T.all (\char -> isAscii char && isDigit char) digits
     domestic :: Bool
@@ -622,7 +658,7 @@ homeCommands :: Route -> [(Text, Text)]
 homeCommands route = map command [("PA_DIRECT_NUMBER", routeNumber route), ("PA_DIRECT_PROVIDER", provider), ("PA_HOME_DIAL_READY", "1")]
   where
     provider :: Text
-    provider = case routeProvider route of {AA -> "aa"; Telematica -> "telematica"; Home -> "home"}
+    provider = providerName (routeProvider route)
     command :: (Text, Text) -> (Text, Text)
     command (key, value) = ("SET VARIABLE " <> key <> " \"" <> value <> "\"", "200 result=1")
 
@@ -630,7 +666,12 @@ agiCommand :: TelephonyRules -> Socket -> Text -> Text -> IO (Result ())
 agiCommand rules connection command expected = do
   N.sendAll connection (encodeUtf8 (command <> "\n"))
   response <- readAgiLine rules connection
-  pure (response >>= (\line -> if line == expected then Right () else Left (failure "agi_command_failed")))
+  pure (response >>= verify)
+  where
+    verify :: Text -> Result ()
+    verify line
+      | line == expected = Right ()
+      | otherwise = Left (failure "agi_command_failed")
 
 readAgiLine :: TelephonyRules -> Socket -> IO (Result Text)
 readAgiLine rules connection = collect [] 0
@@ -659,18 +700,26 @@ readAgiHeaders rules connection count size headers
       Left problem -> pure (Left problem)
       Right (key, value) -> readAgiHeaders rules connection (count + 1) (size + T.length line) (M.insert key value headers)
     header :: Text -> Result (Text, Text)
-    header line = let (key, rest) = T.breakOn ": " line in
-      if validKey key && not (T.null rest) && M.notMember key headers then Right (key, T.drop 2 rest) else Left (failure "invalid_agi_headers")
+    header line
+      | validKey key && not (T.null rest) && M.notMember key headers = Right (key, T.drop 2 rest)
+      | otherwise = Left (failure "invalid_agi_headers")
+      where (key, rest) = T.breakOn ": " line
     validKey :: Text -> Bool
     validKey key = T.isPrefixOf "agi_" key && T.length key > 4 && T.all (`elem` ("abcdefghijklmnopqrstuvwxyz_0123456789" :: String)) (T.drop 4 key)
 
 storeOutcome :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> Value -> IO (Result Value)
 storeOutcome runtime pending request result = do
   state <- currentState runtime pending
-  let results = M.insert (dialRequestId request) result (callResults state)
-  let phase = if callPhase state `elem` [Ended, Connected] then callPhase state else Conversing
-  saveState runtime pending state {callPhase = phase, callResults = results}
+  let updated = completedOutcome (dialRequestId request) result state
+  saveState runtime pending updated
   pure (Right result)
+
+completedOutcome :: Text -> Value -> CallState -> CallState
+completedOutcome identifier result state = state {callPhase = phase, callResults = results}
+  where
+    results = M.insert identifier result (callResults state)
+    phase | callPhase state `elem` [Ended, Connected] = callPhase state
+          | otherwise = Conversing
 
 redirectOwner :: OwnerRuntime -> MVar (Maybe CallState) -> Channel -> IO (Result ())
 redirectOwner runtime pending channel = do
@@ -698,14 +747,14 @@ failedDial runtime pending request = do
         | callPhase state == Connected = "connected"
         | callPhase state == Ended = "cancelled"
         | otherwise = "failed"
-  let output = addDestination request (object ["status" .= ("ok" :: Text), "result" .= (result :: Text)])
+  let output = addDestination request (resultValue result)
   storeOutcome runtime pending request output
 
 addDestination :: DialRequest -> Value -> Value
 addDestination request (Object fields) = Object (KM.union fields additions)
   where
     provider :: Text
-    provider = case routeProvider (dialRoute request) of {AA -> "aa"; Telematica -> "telematica"; Home -> "home"}
+    provider = providerName (routeProvider (dialRoute request))
     additions :: KM.KeyMap Value
     additions = KM.fromList [("number", String (routeNumber (dialRoute request))), ("provider", String provider), ("display_name", maybe Null String (dialLabel request))]
 addDestination _ value = value
@@ -713,16 +762,16 @@ addDestination _ value = value
 cachedCommand :: OwnerRuntime -> Text -> CallState -> Maybe (Result Value)
 cachedCommand runtime identifier state
   | Just result <- M.lookup identifier (callResults state) = Just (Right result)
-  | callPhase state == Ended = Just (Right (object ["status" .= ("ok" :: Text), "result" .= ("cancelled" :: Text)]))
-  | callPhase state == Connected = Just (Right (object ["status" .= ("ok" :: Text), "result" .= ("connected" :: Text)]))
+  | callPhase state == Ended = Just (Right (resultValue "cancelled"))
+  | callPhase state == Connected = Just (Right (resultValue "connected"))
   | not (directEnabled (ownerConfig runtime)) = Just (Left (failure "direct_calls_disabled"))
   | otherwise = Nothing
 
-executeBound :: OwnerRuntime -> MVar (Maybe CallState) -> Text -> Text -> DirectArgs -> Route -> CallState -> ExceptT Failure IO Value
-executeBound runtime pending name identifier args route state = do
+executeBound :: OwnerRuntime -> MVar (Maybe CallState) -> DirectMode -> Text -> DirectArgs -> Route -> CallState -> ExceptT Failure IO Value
+executeBound runtime pending mode identifier args route state = do
   channel <- ExceptT (bindOwner (amiRules (ownerConfig runtime)) (ownerAMI runtime) (callId state))
   except (verifyHome route channel)
-  ExceptT (runDirect runtime pending name identifier args route)
+  ExceptT (runDirect runtime pending mode identifier args route)
 
 storeFinal :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> Value -> IO (Result Value)
 storeFinal runtime pending request output = do
@@ -753,11 +802,13 @@ replaceAMI state active next = do
   modifyMVar_ state (pure . fmap (\current -> current {callControlLost = False}))
   pure (Right ())
 
-directNumber :: Text -> KM.KeyMap Value -> Result Text
-directNumber name fields = do
-  number <- textArgument "number" fields
-  if name /= "direct_call" || number == "home" || normalizeDestination number == Right number
-    then Right number else Left (failure "invalid_e164_number")
+directNumber :: DirectMode -> KM.KeyMap Value -> Result Text
+directNumber mode fields = textArgument "number" fields >>= canonical
+  where
+    canonical :: Text -> Result Text
+    canonical number
+      | mode == InspectRoute || number == "home" || normalizeDestination number == Right number = Right number
+      | otherwise = Left (failure "invalid_e164_number")
 
 resumeAfterResult :: OwnerRuntime -> MVar (Maybe CallState) -> Value -> IO (Result Value)
 resumeAfterResult runtime pending result

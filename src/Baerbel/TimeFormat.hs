@@ -17,4 +17,5 @@ localText value = date <> fractional
     date = Text.pack (formatTime defaultTimeLocale "%FT%T" value)
     micros = floor (toRational (todSec (localTimeOfDay value)) * 1000000) `mod` 1000000 :: Integer
     digits = Text.justifyRight 6 '0' (Text.pack (show micros))
-    fractional = if micros == 0 then "" else "." <> digits
+    fractional | micros == 0 = ""
+               | otherwise = "." <> digits

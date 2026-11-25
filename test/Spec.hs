@@ -9,6 +9,8 @@ import qualified EventsSpec
 import qualified HTTPSpec
 import qualified LoggingSpec
 import qualified AuthSpec
+import qualified ConfigPathsSpec
+import qualified ContactsSpec
 import qualified ToolsSpec
 import qualified BoundarySpec
 import qualified StoreSpec
@@ -31,6 +33,8 @@ main = hspec $ do
   CoreSpec.spec
   StoreSpec.spec
   BoundarySpec.spec
+  ConfigPathsSpec.spec
+  ContactsSpec.spec
   ToolsSpec.spec
   LiveSpec.spec
   TelephonySpec.spec

@@ -84,7 +84,8 @@ withSMSFixture status action = withSettings $ \settings -> expectResult prepare 
   prepare rules = withSystemTempDirectory "baerbel-sms" $ \directory -> do
     count <- newIORef 0
     let path = directory </> "sms.sqlite3"
-        response = if status == Failed then Response 200 [] "ERR: rejected" else Response 502 [] ""
+        response | status == Failed = Response 200 [] "ERR: rejected"
+                 | otherwise = Response 502 [] ""
         sender _ = modifyIORef' count (+ 1) >> pure (Right response)
     result <- withSMS rules credentials sender path (\sms -> action sms count >> pure (Right ()))
     result `shouldBe` Right ()

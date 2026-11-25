@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Routing
   ( Permission(..), Provider(..), Route(..), RouteSettings(..)
-  , NumberValidator, normalizeDestination, selectRoute, providerLabel
+  , NumberValidator, normalizeDestination, selectRoute, providerLabel, providerName
   , announcement, internationalWarning, routeValue
   ) where
 
@@ -41,7 +41,8 @@ normalizeDestination value
     prefix :: Bool
     prefix = T.isPrefixOf "+" value || T.isPrefixOf "00" value
     body :: Text
-    body = if T.isPrefixOf "+" value then T.drop 1 value else T.drop 2 value
+    body | T.isPrefixOf "+" value = T.drop 1 value
+         | otherwise = T.drop 2 value
     permitted :: Char -> Bool
     permitted char = asciiDigit char || char `elem` (" ()-" :: String)
     digits :: Text
@@ -80,20 +81,26 @@ providerLabel AA = "A&A"
 providerLabel Telematica = "Telematica"
 providerLabel Home = "Home"
 
+providerName :: Provider -> Text
+providerName AA = "aa"
+providerName Telematica = "telematica"
+providerName Home = "home"
+
 internationalWarning :: Text
 internationalWarning = "That is an international call via AAISP and may cost more. Shall I continue?"
 
 announcement :: Route -> Maybe Text -> Text
-announcement route label
-  | routeProvider route == Home = "Calling Home. I'll connect you now."
-  | otherwise = "Calling " <> destination <> " via " <> provider <> ". I'll connect you now."
+announcement Route {routeProvider = Home} _ = "Calling Home. I'll connect you now."
+announcement route label = "Calling " <> destination <> " via " <> provider <> ". I'll connect you now."
   where
     digits :: Text
-    digits = T.intercalate " " (map T.singleton (T.unpack (T.takeEnd 3 (routeNumber route))))
+    digits = spokenSuffix (routeNumber route)
     destination :: Text
     destination = maybe ("the number ending in " <> digits) (\name -> name <> ", ending in " <> digits) label
     provider :: Text
-    provider = if routeProvider route == AA then "A and A" else providerLabel (routeProvider route)
+    provider = case routeProvider route of
+      AA -> "A and A"
+      selected -> providerLabel selected
 
 routeValue :: Text -> Route -> Maybe Text -> Value
 routeValue token route label = object
@@ -106,12 +113,18 @@ routeValue token route label = object
   ]
   where
     result :: Text
-    result = if routeConfirmation route then "confirmation_required" else "route_ready"
-    provider :: Text
-    provider = case routeProvider route of { AA -> "aa"; Telematica -> "telematica"; Home -> "home" }
     warning :: Text
-    warning = if routeConfirmation route then internationalWarning else ""
+    (result, warning)
+      | routeConfirmation route = ("confirmation_required", internationalWarning)
+      | otherwise = ("route_ready", "")
+    provider :: Text
+    provider = providerName (routeProvider route)
     confirmation :: Text
-    confirmation = if routeProvider route == Home then "Home" else "ending in " <> digits
+    confirmation = case routeProvider route of
+      Home -> "Home"
+      _ -> "ending in " <> digits
     digits :: Text
-    digits = T.intercalate " " (map T.singleton (T.unpack (T.takeEnd 3 (routeNumber route))))
+    digits = spokenSuffix (routeNumber route)
+
+spokenSuffix :: Text -> Text
+spokenSuffix = T.intercalate " " . map T.singleton . T.unpack . T.takeEnd 3

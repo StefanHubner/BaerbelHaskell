@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 module Baerbel.Messages
   ( MessageRules(..), Context, Messages(..), withMessages, emptyContext, outcomeText ) where
 
@@ -48,6 +47,7 @@ data Messages = Messages
 data TextSource = ConstantText Text | ContextText (ScreeningContext -> Text)
 
 data Job = Job {jobKind :: Kind, jobResult :: TMVar Receipt, jobStarted :: TVar Bool}
+data JobPlan = RejectJob | UseJob Job | ReplaceJob (Maybe Job)
 data State = State
   { stateJobs :: Map Text Job, stateContexts :: Map Text Context
   , statePending :: Int, stateClosed :: Bool, stateNextContext :: Integer }
@@ -65,7 +65,9 @@ render rules key = foldl replace template
   replace text (name, value) = Text.replace ("{" <> name <> "}") value text
 
 cleanName :: MessageRules -> Text -> Text
-cleanName rules value = if Text.toCaseFold name `elem` messageUnknownNames rules then "" else name
+cleanName rules value
+  | Text.toCaseFold name `elem` messageUnknownNames rules = ""
+  | otherwise = name
   where name = Text.strip value
 
 sentence :: Text -> Text
@@ -79,14 +81,19 @@ outcomeText rules reason callback context = Text.intercalate " " parts
   where
   name = cleanName rules (contextName context)
   number = fromMaybe "" callback
-  named = name <> if Text.null number then "" else " (" <> number <> ")"
-  identityKey = if Text.null name then (if Text.null number then "anonymous" else "number") else "named"
+  named | Text.null number = name
+        | otherwise = name <> " (" <> number <> ")"
+  identityKey | not (Text.null name) = "named"
+              | Text.null number = "anonymous"
+              | otherwise = "number"
   identity = render rules identityKey [("name", named), ("number", number)]
   base = Map.findWithDefault "" reason (messageReasons rules)
   description = describeOutcome rules reason context base
   excerpt = Text.unwords (Text.words (contextExcerpt context))
-  quote = (if contextTruncated context then "…" else "") <> excerpt
-  detail = if Text.null (contextSummary context) then render rules "excerpt" [("text", sentence quote)] else sentence (contextSummary context)
+  quote | contextTruncated context = "…" <> excerpt
+        | otherwise = excerpt
+  detail | Text.null (contextSummary context) = render rules "excerpt" [("text", sentence quote)]
+         | otherwise = sentence (contextSummary context)
   hasDetail = not (Text.null excerpt && Text.null (contextSummary context))
   parts = [identity] ++ [detail | hasDetail] ++ [description]
 
@@ -105,15 +112,14 @@ withMessages rules report sender action = do
   finally (action service) (drain state)
 
 begin :: MessageRules -> TVar State -> Text -> IO (Maybe Context)
-begin rules state ident = atomically $ do
-  current <- readTVar state
-  if stateClosed current then pure Nothing else allocate rules state ident current
+begin rules state ident = atomically (readTVar state >>= allocate rules state ident)
 
 allocate :: MessageRules -> TVar State -> Text -> State -> STM (Maybe Context)
-allocate rules state ident current = case Map.lookup ident contexts of
-  Just context -> activate context
-  Nothing -> createContext rules state ident current
-  where contexts = stateContexts current
+allocate rules state ident current
+  | stateClosed current = pure Nothing
+  | otherwise = case Map.lookup ident (stateContexts current) of
+      Just context -> activate context
+      Nothing -> createContext rules state ident current
 
 activate :: Context -> STM (Maybe Context)
 activate context = modifyTVar' (contextValue context) increment >> pure (Just context)
@@ -122,9 +128,7 @@ activate context = modifyTVar' (contextValue context) increment >> pure (Just co
 createContext :: MessageRules -> TVar State -> Text -> State -> STM (Maybe Context)
 createContext rules state ident current = do
   available <- traverse inactive (sortOn (contextOrder . snd) (Map.toList (stateContexts current)))
-  let removable = [key | (key, True) <- available]
-      contexts = if Map.size (stateContexts current) < messageContextLimit rules then Just (stateContexts current)
-        else case removable of key : _ -> Just (Map.delete key (stateContexts current)); [] -> Nothing
+  let contexts = chooseContexts (messageContextLimit rules) (stateContexts current) available
   maybe (pure Nothing) insert contexts
   where
   inactive (key, Context _ value) = fmap (\context -> (key, contextActive context == 0)) (readTVar value)
@@ -134,17 +138,28 @@ createContext rules state ident current = do
     writeTVar state current {stateContexts = Map.insert ident context contexts, stateNextContext = stateNextContext current + 1}
     pure (Just context)
 
+chooseContexts :: Int -> Map Text Context -> [(Text, Bool)] -> Maybe (Map Text Context)
+chooseContexts limit contexts available
+  | Map.size contexts < limit = Just contexts
+  | otherwise = case [key | (key, True) <- available] of
+      key : _ -> Just (Map.delete key contexts)
+      [] -> Nothing
+
 finish :: Context -> IO ()
 finish (Context _ value) = atomically (modifyTVar' value decrement)
   where decrement current = current {contextActive = max 0 (contextActive current - 1)}
 
 observe :: MessageRules -> Context -> Text -> IO ()
-observe rules (Context _ value) delta = atomically (modifyTVar' value append)
+observe rules (Context _ value) delta = atomically (modifyTVar' value (appendExcerpt rules delta))
+
+appendExcerpt :: MessageRules -> Text -> ScreeningContext -> ScreeningContext
+appendExcerpt rules delta current = current
+  {contextExcerpt = Text.takeEnd bound text, contextTruncated = contextTruncated current || Text.length text > bound}
   where
-  clean = Text.filter allowed delta
-  allowed char = (ord char >= 32 || char == '\n' || char == '\t') && not (ord char >= 127 && ord char <= 159) && not (ord char >= 0xd800 && ord char <= 0xdfff)
-  append current = current {contextExcerpt = Text.takeEnd bound text, contextTruncated = contextTruncated current || Text.length text > bound}
-    where text = contextExcerpt current <> clean; bound = messageExcerptChars rules
+    clean = Text.filter allowed delta
+    allowed char = (ord char >= 32 || char == '\n' || char == '\t') && not (ord char >= 127 && ord char <= 159) && not (ord char >= 0xd800 && ord char <= 0xdfff)
+    text = contextExcerpt current <> clean
+    bound = messageExcerptChars rules
 
 decide :: MessageRules -> Context -> Decision -> IO ()
 decide rules (Context _ value) decision = atomically (modifyTVar' value (decided rules decision))
@@ -160,9 +175,13 @@ decided rules (LeaveMessage name body) = \current -> current
 screenFacts :: Text -> Text -> Text -> Text -> ScreeningContext -> ScreeningContext
 screenFacts decision reason name summary current = current
   { contextDecision = decision, contextReason = reason
-  , contextName = if Text.null name then contextName current else name
-  , contextSummary = if Text.null summary then contextSummary current else summary
+  , contextName = retain name (contextName current)
+  , contextSummary = retain summary (contextSummary current)
   , contextKnown = Text.null name && contextKnown current }
+  where
+    retain provided previous
+      | Text.null provided = previous
+      | otherwise = provided
 
 known :: Context -> Text -> IO ()
 known (Context _ value) name = atomically (modifyTVar' value update)
@@ -172,7 +191,8 @@ submitMessage :: MessageRules -> Report -> SMS -> TVar State -> Text -> Text -> 
 submitMessage rules report sender state ident call name body callback = submit rules (reported rules report ident (Just call) sender) state ident Message (ConstantText text)
   where
   named = cleanName rules name
-  caller = if Text.null named then render rules "caller" [] else named
+  caller | Text.null named = render rules "caller" []
+         | otherwise = named
   number = maybe "" (\value -> " (" <> value <> ")") callback
   text = render rules "message" [("name", caller <> number), ("message", Text.strip body)]
 
@@ -190,7 +210,8 @@ snapshot state ident = atomically $ do
   maybe (pure emptyContext) (\(Context _ value) -> readTVar value) (Map.lookup ident (stateContexts current))
 
 unsubmitted :: Kind -> Receipt
-unsubmitted kind = Receipt Failed Nothing (if kind == Outcome then Just True else Nothing)
+unsubmitted Outcome = Receipt Failed Nothing (Just True)
+unsubmitted _ = Receipt Failed Nothing Nothing
 
 submit :: MessageRules -> SMS -> TVar State -> Text -> Kind -> TextSource -> IO Receipt
 submit rules sender state ident kind text = mask $ \restore -> do
@@ -207,14 +228,22 @@ selectJob rules state ident kind = do
   current <- readTVar state
   let previous = Map.lookup ident (stateJobs current)
   started <- maybe (pure False) (readTVar . jobStarted) previous
-  let replace = maybe True (\job -> kind == Outcome && jobKind job == Message || kind == Message && jobKind job == Outcome && not started) previous
-  let outcomeStarted = kind == Message && started && maybe False ((== Outcome) . jobKind) previous
-  if stateClosed current || outcomeStarted then pure Nothing else choose current previous replace
+  case planJob rules current kind started previous of
+    RejectJob -> pure Nothing
+    UseJob job -> pure (Just (job, Nothing))
+    ReplaceJob earlier -> newJob state ident kind current earlier
+
+planJob :: MessageRules -> State -> Kind -> Bool -> Maybe Job -> JobPlan
+planJob rules current kind started previous
+  | stateClosed current || outcomeStarted = RejectJob
+  | not replace = maybe RejectJob UseJob previous
+  | statePending current >= messageTaskLimit rules = RejectJob
+  | otherwise = ReplaceJob previous
   where
-  choose _ previous False = pure ((, Nothing) <$> previous)
-  choose current previous True
-    | statePending current >= messageTaskLimit rules = pure Nothing
-    | otherwise = newJob state ident kind current previous
+    replace = case previous of
+      Nothing -> True
+      Just job -> kind == Outcome && jobKind job == Message || kind == Message && jobKind job == Outcome && not started
+    outcomeStarted = kind == Message && started && maybe False ((== Outcome) . jobKind) previous
 
 newJob :: TVar State -> Text -> Kind -> State -> Maybe Job -> STM (Maybe (Job, Maybe (Maybe Job)))
 newJob state ident kind current previous = do
@@ -227,7 +256,9 @@ newJob state ident kind current previous = do
 deliverJob :: MessageRules -> SMS -> TVar State -> Text -> Job -> Maybe Job -> TextSource -> IO Receipt
 deliverJob rules sender state ident job previous text = do
   inherited <- previousResult
-  if receiptStatus inherited /= Failed then pure inherited else sendNew
+  case receiptStatus inherited of
+    Failed -> sendNew
+    _ -> pure inherited
   where
   previousResult = case previous of
     Just earlier | jobKind job == Outcome -> atomically (readTMVar (jobResult earlier))
@@ -236,7 +267,9 @@ deliverJob rules sender state ident job previous text = do
     when (jobKind job == Outcome) (waitContext rules state ident)
     replacement <- atomically (replacementJob state ident job)
     inherited <- maybe (pure (Receipt Failed Nothing Nothing)) (atomically . readTMVar . jobResult) replacement
-    if receiptStatus inherited == Failed then perform else pure inherited
+    case receiptStatus inherited of
+      Failed -> perform
+      _ -> pure inherited
   perform = do
     when (jobKind job == Outcome) (atomically (writeTVar (jobStarted job) True))
     sendText text
@@ -272,8 +305,10 @@ completed ident job receipt state = state {statePending = statePending state - 1
   where
   current = Map.lookup ident (stateJobs state)
   matches = maybe False (\value -> jobResult value == jobResult job) current
-  jobs = if matches then Map.delete ident (stateJobs state) else stateJobs state
-  contexts = if jobKind job == Outcome && receiptRetryable receipt /= Just True then Map.delete ident (stateContexts state) else stateContexts state
+  jobs | matches = Map.delete ident (stateJobs state)
+       | otherwise = stateJobs state
+  contexts | jobKind job == Outcome && receiptRetryable receipt /= Just True = Map.delete ident (stateContexts state)
+           | otherwise = stateContexts state
 
 drain :: TVar State -> IO ()
 drain state = atomically close >> atomically await
@@ -289,12 +324,19 @@ reported :: MessageRules -> Report -> Text -> Maybe Text -> SMS -> SMS
 reported rules report ident call sender key body kind = do
   result <- timeout (messageDeliveryMicros rules) (sender key body kind)
   let receipt = normalizeReceipt (fromMaybe unknownReceipt result)
-      status = case receiptStatus receipt of {Sent -> "sent"; Failed -> "failed"; _ -> "uncertain"} :: Text
+      status = case receiptStatus receipt of
+        Sent -> "sent"
+        Failed -> "failed"
+        _ -> "uncertain" :: Text
   report "incoming_message_delivery" ["call_id" .= call, "event_id" .= ident, "status" .= status]
   pure receipt
 
 normalizeReceipt :: Receipt -> Receipt
 normalizeReceipt receipt = receipt {receiptStatus = status, receiptRetryable = retryable}
   where
-    status = case receiptStatus receipt of {Skipped -> Uncertain; value -> value}
-    retryable = if receiptRetryable receipt == Just True then Just True else Nothing
+    status = case receiptStatus receipt of
+      Skipped -> Uncertain
+      value -> value
+    retryable = case receiptRetryable receipt of
+      Just True -> Just True
+      _ -> Nothing

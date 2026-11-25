@@ -26,4 +26,5 @@ configure globalPath userPath action = do
   either rejected action checked
 
 report :: String -> Result () -> IO ()
-report success = either rejected (const (if null success then pure () else putStrLn success))
+report "" = either rejected pure
+report success = either rejected (const (putStrLn success))

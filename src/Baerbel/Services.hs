@@ -16,8 +16,9 @@ import Baerbel.NoteMail (NoteDelivery, noteSession)
 import Baerbel.Worker (withWorker)
 import Baerbel.Windguru (windguru)
 import Baerbel.OAuth (loadCredentials, tokenSource)
-import Baerbel.Profile (profile, ProfileState(..), ProfileStore, snapshot)
+import Baerbel.Profile (profile, ProfileState(..), ProfileStore(..), snapshot)
 import Baerbel.Provider (Execute)
+import Baerbel.ProviderConfig (ProfileRules)
 import Baerbel.Store (profileStore)
 import Baerbel.TimeZones (timeZones)
 import Data.Aeson (Value, toJSON, FromJSON(..), ToJSON, genericParseJSON, genericToJSON)
@@ -36,12 +37,19 @@ data Service = Service
   { servicePrefix :: Text, serviceTools :: [Value], serviceExecute :: Execute }
 
 data Services = Services
-  { serviceFactories :: [IO Service]
-  , ownerProfileContext :: IO (Result Text)
+  { serviceFactories :: Factories
+  , ownerProfileContext :: Maybe (IO (Result Text))
   , lookupPublicCaller :: LookupCaller
   , deliverOwnerNote :: Maybe (IO NoteDelivery)
   }
-type Factories = [IO Service]
+data Factory = Shared Service | Scoped (IO Service)
+type Factories = [Factory]
+
+sharedService :: Text -> [Value] -> Execute -> Factory
+sharedService name schemas execute = Shared (Service name schemas execute)
+
+scopedService :: Text -> [Value] -> IO Execute -> Factory
+scopedService name schemas prepare = Scoped (Service name schemas <$> prepare)
 type Accounts = Map Text Send
 
 data AccountSpec = AccountSpec Text Text Text
@@ -103,30 +111,40 @@ prefixErrors prefix sender request = fmap rename (sender request)
   addPrefix err = err {failureCode = prefix <> "_" <> failureCode err}
 
 bindGoogle :: Settings -> Send -> (Services -> IO (Result a)) -> Accounts -> IO (Result a)
-bindGoogle settings sender action prepared =
-  withOptionalLedger gmailPath withMail
+bindGoogle settings sender action prepared = withOptionalLedger gmailPath withMail
   where
-  gmailPath = enabledPath "gmail" "PHONE_ASSISTANT_GMAIL_STATE_FILE"
-  calendarPath = enabledPath "calendar" "PHONE_ASSISTANT_CALENDAR_STATE_FILE"
-  enabledPath name key = if Map.member name prepared then Just (Text.unpack (setting settings key)) else Nothing
-  withMail mailLedger = withOptionalLedger calendarPath (withCalendar mailLedger)
-  withCalendar mailLedger calendarLedger = do
-    rest <- otherServices settings sender prepared
-    context <- profileContext settings
-    let assembled = assemble <$> googleServices settings prepared mailLedger calendarLedger <*> rest <*> delivery
-        assemble primary extras note lookupCaller = Services (primary ++ extras) context lookupCaller note
-    case (assembled, rule settings "incoming_contacts" "directory") of
-      (Right services, Right directoryRules) -> withDirectory directoryRules directorySender (action . services)
-      (Left err, _) -> pure (Left err)
-      (_, Left err) -> pure (Left err)
-    where
-    directorySender = if booleanSetting settings "INCOMING_SCREENING_ENABLED" == Right True then Map.lookup "contacts" prepared else Nothing
-    delivery = case (Map.lookup "gmail" prepared, mailLedger) of
-      (Just authorized, Just ledger) -> do
-        rules <- rule settings "notes" "mail"
-        mailRules <- rule settings "providers" "gmail"
-        pure (Just (noteSession rules mailRules authorized (durable ledger) getCurrentTime))
-      _ -> Right Nothing
+    gmailPath = enabledPath "gmail" "PHONE_ASSISTANT_GMAIL_STATE_FILE"
+    calendarPath = enabledPath "calendar" "PHONE_ASSISTANT_CALENDAR_STATE_FILE"
+    enabledPath name key
+      | Map.member name prepared = Just (Text.unpack (setting settings key))
+      | otherwise = Nothing
+    withMail mailLedger = withOptionalLedger calendarPath (withCalendar mailLedger)
+    withCalendar mailLedger calendarLedger = do
+      stored <- optionalProfileStore settings
+      let assembled = stored >>= assembleServices settings sender prepared mailLedger calendarLedger
+      either (pure . Left) bindDirectory assembled
+    bindDirectory services = either (pure . Left) withLookup directoryRules
+      where withLookup rules = withDirectory rules directorySender (action . services)
+    directoryRules = rule settings "incoming_contacts" "directory"
+    directorySender
+      | booleanSetting settings "INCOMING_SCREENING_ENABLED" == Right True = Map.lookup "contacts" prepared
+      | otherwise = Nothing
+
+assembleServices :: Settings -> Send -> Accounts -> Maybe Ledger -> Maybe Ledger -> Maybe ProfileStore -> Result (LookupCaller -> Services)
+assembleServices settings sender prepared mailLedger calendarLedger store = do
+  primary <- googleServices settings prepared mailLedger calendarLedger
+  extras <- otherServices settings sender prepared store
+  context <- profileContext settings store
+  note <- noteDelivery settings prepared mailLedger
+  Right (\lookupCaller -> Services (primary ++ extras) context lookupCaller note)
+
+noteDelivery :: Settings -> Accounts -> Maybe Ledger -> Result (Maybe (IO NoteDelivery))
+noteDelivery settings prepared mailLedger = case (Map.lookup "gmail" prepared, mailLedger) of
+  (Just authorized, Just ledger) -> do
+    rules <- rule settings "notes" "mail"
+    mailRules <- rule settings "providers" "gmail"
+    Right (Just (noteSession rules mailRules authorized (durable ledger) getCurrentTime))
+  _ -> Right Nothing
 
 withOptionalLedger :: Maybe FilePath -> (Maybe Ledger -> IO (Result a)) -> IO (Result a)
 withOptionalLedger Nothing action = action Nothing
@@ -136,37 +154,37 @@ googleServices :: Settings -> Accounts -> Maybe Ledger -> Maybe Ledger -> Result
 googleServices settings prepared mailLedger calendarLedger = do
   mailRules <- rule settings "providers" "gmail"
   calendarRules <- rule settings "providers" "calendar"
-  let mail = make "gmail" "GMAIL_TOOLS" mailLedger (\sender ledger -> gmailSession mailRules sender (durable ledger) getCurrentTime)
-      agenda = make "calendar" "CALENDAR_TOOLS" calendarLedger (\sender ledger -> pure (calendar calendarRules sender (durable ledger) (lookupExisting ledger) timeZones))
+  let mail = make "gmail" "GMAIL_TOOLS" mailLedger (\schemas sender ledger ->
+        scopedService "gmail" schemas (gmailSession mailRules sender (durable ledger) getCurrentTime))
+      agenda = make "calendar" "CALENDAR_TOOLS" calendarLedger (\schemas sender ledger ->
+        sharedService "calendar" schemas (calendar calendarRules sender (durable ledger) (lookupExisting ledger) timeZones))
   pure (mail ++ agenda)
   where
   make name group ledger build = case (Map.lookup name prepared, ledger) of
-    (Just sender, Just state) -> [Service name (toolDefinitions settings group) <$> build sender state]
+    (Just sender, Just state) -> [build (toolDefinitions settings group) sender state]
     _ -> []
 
-otherServices :: Settings -> Send -> Accounts -> IO (Result Factories)
-otherServices settings sender prepared = do
-  stored <- storedProfile settings
-  winds <- windServices settings sender
-  pure ((\profileItems contactItems mapsItems windItems -> profileItems ++ contactItems ++ mapsItems ++ windItems) <$> stored <*> contactServices settings prepared <*> mapServices settings sender <*> winds)
+otherServices :: Settings -> Send -> Accounts -> Maybe ProfileStore -> Result Factories
+otherServices settings sender prepared store = concat <$> sequence
+  [ storedProfile settings store
+  , contactServices settings prepared
+  , mapServices settings sender
+  , windServices settings sender store
+  ]
 
-storedProfile :: Settings -> IO (Result Factories)
-storedProfile settings
-  | Text.null path = pure (Right [])
-  | otherwise = do
-      store <- prepareProfileStore settings
-      pure (build <$> store <*> rule settings "providers" "profile")
-  where
-  path = setting settings "PHONE_ASSISTANT_PROFILE_FILE"
-  schemas = toolDefinitions settings "PROFILE_TOOLS"
-  build store rules = [pure (Service "profile" schemas (profile rules store getCurrentTime))]
+storedProfile :: Settings -> Maybe ProfileStore -> Result Factories
+storedProfile _ Nothing = Right []
+storedProfile settings (Just store) = do
+  rules <- rule settings "providers" "profile"
+  let schemas = toolDefinitions settings "PROFILE_TOOLS"
+  Right [sharedService "profile" schemas (profile rules store getCurrentTime)]
 
 contactServices :: Settings -> Accounts -> Result Factories
 contactServices settings prepared = do
   rules <- rule settings "providers" "contacts"
   pure (maybe [] (build rules) (Map.lookup "contacts" prepared))
   where
-  build rules sender = [Service "contacts" schemas <$> contacts rules sender]
+  build rules sender = [scopedService "contacts" schemas (contacts rules sender)]
   schemas = toolDefinitions settings "CONTACTS_TOOLS"
 
 mapServices :: Settings -> Send -> Result Factories
@@ -175,7 +193,7 @@ mapServices settings sender
   | otherwise = do
       rules <- rule settings "providers" "maps"
       routeRules <- rule settings "providers" "route"
-      pure [Service "maps" schemas <$> maps rules routeRules (Text.replace key "[redacted]") authorized elevation getCurrentTime]
+      pure [scopedService "maps" schemas (maps rules routeRules (Text.replace key "[redacted]") authorized elevation getCurrentTime)]
   where
   key = setting settings "GOOGLE_MAPS_API_KEY"
   authorized request = sender (mapsAuthorization key request)
@@ -193,7 +211,10 @@ mapsAuthorization key request
   parameter = ("key", Just encoded)
 
 withCallServices :: Services -> ([Service] -> IO (Result a)) -> IO (Result a)
-withCallServices services action = sequence (serviceFactories services) >>= scopeServices action
+withCallServices services action = traverse open (serviceFactories services) >>= scopeServices action
+  where
+    open (Shared service) = pure service
+    open (Scoped prepare) = prepare
 
 scopeServices :: ([Service] -> IO (Result a)) -> [Service] -> IO (Result a)
 scopeServices action [] = action []
@@ -212,24 +233,29 @@ dispatch services name arguments ident = case filter matches services of
   where
   matches service = (servicePrefix service <> "_") `Text.isPrefixOf` name
 
-windServices :: Settings -> Send -> IO (Result Factories)
-windServices settings sender
-  | not enabled = pure (Right [])
+windServices :: Settings -> Send -> Maybe ProfileStore -> Result Factories
+windServices settings sender store
+  | not enabled = Right []
   | otherwise = do
-      prepared <- if Text.null path then pure (Right Nothing) else fmap (Just <$>) (prepareProfileStore settings)
-      pure (build <$> rule settings "providers" "windguru" <*> prepared)
+      rules <- rule settings "providers" "windguru"
+      let prepare = windguru rules sender getCurrentTime (zonedInstant timeZones) (readForecastSet store)
+      Right [scopedService "windguru" schemas prepare]
   where
-  path = setting settings "PHONE_ASSISTANT_PROFILE_FILE"
-  enabled = booleanSetting settings "PHONE_ASSISTANT_WINDGURU" == Right True
-  schemas = toolDefinitions settings "WINDGURU_TOOLS" ++ [item | not (Text.null path), item <- toolDefinitions settings "WINDGURU_SET_TOOL"]
-  readSet Nothing = pure (Left (failure "windguru_forecast_set_not_configured"))
-  readSet (Just store) = fmap (>>= select) (store unchanged)
-  build rules store = [Service "windguru" schemas <$> windguru rules sender getCurrentTime (zonedInstant timeZones) (readSet store)]
-  unchanged value = Right (value, toJSON (profileValues value))
-  select :: Value -> Result Text
-  select value = case (Baerbel.JSON.decodeValue "windguru_forecast_set_not_configured" value :: Result (Map Text Text)) of
-    Left err -> Left err
-    Right values -> maybe (Left (failure "windguru_forecast_set_not_configured")) Right (Map.lookup "windguru_forecast_set" values)
+    enabled = booleanSetting settings "PHONE_ASSISTANT_WINDGURU" == Right True
+    schemas = toolDefinitions settings "WINDGURU_TOOLS" ++ setSchemas
+    setSchemas = maybe [] (const (toolDefinitions settings "WINDGURU_SET_TOOL")) store
+
+readForecastSet :: Maybe ProfileStore -> IO (Result Text)
+readForecastSet Nothing = pure (Left (failure "windguru_forecast_set_not_configured"))
+readForecastSet (Just store) = fmap (>>= select) (profileRead store)
+  where
+    select state = maybe missing Right (Map.lookup "windguru_forecast_set" (profileValues state))
+    missing = Left (failure "windguru_forecast_set_not_configured")
+
+optionalProfileStore :: Settings -> IO (Result (Maybe ProfileStore))
+optionalProfileStore settings
+  | Text.null (setting settings "PHONE_ASSISTANT_PROFILE_FILE") = pure (Right Nothing)
+  | otherwise = fmap (Just <$>) (prepareProfileStore settings)
 
 prepareProfileStore :: Settings -> IO (Result ProfileStore)
 prepareProfileStore settings = either (pure . Left) prepare rules
@@ -237,24 +263,22 @@ prepareProfileStore settings = either (pure . Left) prepare rules
   rules = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
   prepare (profileRules, storeRules) = profileStore profileRules storeRules (Text.unpack (setting settings "PHONE_ASSISTANT_PROFILE_FILE"))
 
-profileContext :: Settings -> IO (IO (Result Text))
-profileContext settings
-  | Text.null path = pure (pure (Right ""))
-  | otherwise = do
-      store <- prepareProfileStore settings
-      pure (either (pure . Left) load ((,,) <$> store <*> rule settings "providers" "profile" <*> rule settings "profile" "contextPrefix"))
-  where
-  path = setting settings "PHONE_ASSISTANT_PROFILE_FILE"
-  load (store, rules, prefix) = do
-    result <- store (\state -> Right (state, snapshot rules state Nothing))
-    let value = either (toJSON . unavailableProfile) id result
-    pure (Right (prefix <> Baerbel.JSON.encodeReference value))
+profileContext :: Settings -> Maybe ProfileStore -> Result (Maybe (IO (Result Text)))
+profileContext _ Nothing = Right Nothing
+profileContext settings (Just store) = do
+  rules <- rule settings "providers" "profile"
+  prefix <- rule settings "profile" "contextPrefix"
+  Right (Just (Right . renderProfileContext rules prefix <$> profileRead store))
+
+renderProfileContext :: ProfileRules -> Text -> Result ProfileState -> Text
+renderProfileContext rules prefix result = prefix <> Baerbel.JSON.encodeReference value
+  where value = either (toJSON . unavailableProfile) (\state -> snapshot rules state Nothing) result
 
 checkServices :: Settings -> IO (Result ())
 checkServices settings = do
   sender <- newSender
   accountsResult <- prepareAccounts settings sender
-  profileResult <- if Text.null (setting settings "PHONE_ASSISTANT_PROFILE_FILE") then pure (Right ()) else fmap (const () <$>) (prepareProfileStore settings)
+  profileResult <- optionalProfileStore settings
   pure (void accountsResult <* profileResult)
 
 data UnavailableProfile = UnavailableProfile

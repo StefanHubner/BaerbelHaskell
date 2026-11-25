@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.EndCall
   ( EndConfig(..), EndContext(..), EndEffects(..), EndReason(..)
-  , checkEndRequest, executeEndCall
+  , parseEndReason, checkEndRequest, executeEndCall
   ) where
 
 import Baerbel.Error (Result, failure)
-import Data.Aeson (Value(..), object, (.=))
-import qualified Data.Aeson.KeyMap as KM
+import Baerbel.JSON (argumentOptions, decodeValue, jsonOptions, resultValue)
+import Data.Aeson (Value, FromJSON(..), Options(..), camelTo2, genericParseJSON)
+import GHC.Generics (Generic)
 import Data.Text (Text)
 import System.Timeout (timeout)
 
@@ -25,20 +26,20 @@ data EndEffects = EndEffects
   , markEnded :: IO ()
   }
 
-data EndReason = OwnerRequested | ConversationComplete deriving (Eq, Show)
+data EndReason = OwnerRequested | ConversationComplete deriving (Eq, Show, Generic)
+instance FromJSON EndReason where
+  parseJSON = genericParseJSON ((jsonOptions 0) {constructorTagModifier = camelTo2 '_'})
 
-checkEndRequest :: EndContext -> Text -> Value -> Result EndReason
-checkEndRequest context name args
-  | name /= "end_call" = Left (failure "invalid_arguments")
+newtype EndArgs = EndArgs {endReason :: EndReason} deriving (Generic)
+instance FromJSON EndArgs where parseJSON = genericParseJSON (argumentOptions 3)
+
+parseEndReason :: Value -> Result EndReason
+parseEndReason value = endReason <$> decodeValue "invalid_arguments" value
+
+checkEndRequest :: EndContext -> EndReason -> Result EndReason
+checkEndRequest context reason
   | not (endOwner context) || endPaused context = Left (failure "end_call_unavailable")
-  | otherwise = parseReason args >>= checkPending context
-
-parseReason :: Value -> Result EndReason
-parseReason (Object fields) | KM.size fields == 1 = case KM.lookup "reason" fields of
-  Just (String "owner_requested") -> Right OwnerRequested
-  Just (String "conversation_complete") -> Right ConversationComplete
-  _ -> Left (failure "invalid_arguments")
-parseReason _ = Left (failure "invalid_arguments")
+  | otherwise = checkPending context reason
 
 checkPending :: EndContext -> EndReason -> Result EndReason
 checkPending context ConversationComplete
@@ -46,10 +47,10 @@ checkPending context ConversationComplete
       Left (failure "finish_pending_work_before_ending_call")
 checkPending _ reason = Right reason
 
-executeEndCall :: EndConfig -> IO EndContext -> EndEffects -> Text -> Value -> Text -> IO (Result Value)
-executeEndCall cfg snapshot effects name args _ = do
+executeEndCall :: EndConfig -> IO EndContext -> EndEffects -> EndReason -> IO (Result Value)
+executeEndCall cfg snapshot effects reason = do
   context <- snapshot
-  case checkEndRequest context name args of
+  case checkEndRequest context reason of
     Left err -> pure (Left err)
     Right _ -> completeCall cfg effects
 
@@ -58,11 +59,8 @@ completeCall cfg effects = do
   let farewell = announceFarewell effects (endFarewellText cfg) (endCompletionText cfg)
   spoken <- timeout (endTimeoutMicros cfg) farewell
   case spoken of
-    Just (Right False) -> pure (Right (result "caller_interrupted_continue_conversation"))
+    Just (Right False) -> pure (Right (resultValue "caller_interrupted_continue_conversation"))
     _ -> do
       _ <- terminateCall effects
       markEnded effects
-      pure (Right (result "call_ending"))
-
-result :: Text -> Value
-result outcome = object ["status" .= ("ok" :: Text), "result" .= outcome]
+      pure (Right (resultValue "call_ending"))

@@ -2,10 +2,11 @@ module Baerbel.Ledger (Ledger, withLedger, durable, lookupExisting, fingerprint)
 
 import Baerbel.Error (Failure (..), Result, failure)
 import qualified Baerbel.Storage as Storage
-import Baerbel.JSON (decodeBytes, encodeBytes)
+import Baerbel.JSON (decodeBytes, encodeBytes, jsonOptions)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Crypto.Hash (Digest, SHA256, hash)
-import Data.Aeson (Value (..), encode, object, (.=))
+import Data.Aeson (Value (..), ToJSON(..), encode, genericToJSON)
+import GHC.Generics (Generic)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.ByteString (ByteString)
@@ -59,8 +60,11 @@ insertReservation :: Connection -> Text -> Text -> IO [(Text, Text)]
 insertReservation connection ident digest = do
   execute connection "INSERT OR IGNORE INTO sends VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))" (ident, digest, pending)
   inserted <- changes connection
-  if inserted > 0 then pure [] else query connection "SELECT fingerprint, result FROM sends WHERE request_id=?" (Only ident)
+  existing inserted
   where
+  existing count
+    | count > 0 = pure []
+    | otherwise = query connection "SELECT fingerprint, result FROM sends WHERE request_id=?" (Only ident)
   pending = Data.Text.Encoding.decodeUtf8 (encodeBytes (failureValue (Failure "send_in_progress_or_interrupted" True)))
 
 resolve :: Text -> [(Text, Text)] -> Result (Maybe Value)
@@ -80,9 +84,15 @@ remember (Ledger connection gate) ident result = withMVar gate update
   bytes = Data.Text.Encoding.decodeUtf8 (encodeBytes result)
 
 failureValue :: Failure -> Value
-failureValue err = object ["status" .= status, "error" .= failureCode err, "retry_safe" .= False]
+failureValue err = toJSON (FailureReceipt status (failureCode err) False)
   where
-  status = if failureUncertain err then ("unknown" :: Text) else "error"
+    status
+      | failureUncertain err = "unknown"
+      | otherwise = "error"
+
+data FailureReceipt = FailureReceipt
+  { receiptStatus :: Text, receiptError :: Text, receiptRetrySafe :: Bool } deriving (Generic)
+instance ToJSON FailureReceipt where toJSON = genericToJSON (jsonOptions 7)
 
 fingerprint :: Text -> Value -> Text
 fingerprint name arguments = Text.pack (show digest)

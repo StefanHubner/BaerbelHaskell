@@ -4,9 +4,9 @@ module Baerbel.Contacts (contacts, candidate, Candidate(..), Phone(..), Person(.
 
 import Baerbel.Error (Result, failure)
 import Baerbel.HTTP (Send)
-import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions)
+import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions, decodeValue)
 import Baerbel.ProviderConfig (ContactsRules(..))
-import Baerbel.Provider (Execute, checked, clean, fetch, firstOr, get, textParam)
+import Baerbel.Provider (Execute, clean, fetch, firstOr, get, textParam)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import Data.Aeson hiding (Result)
@@ -19,6 +19,8 @@ import GHC.Generics (Generic)
 
 data Query = Query {queryQuery :: Text, queryLimit :: Int} deriving (Generic)
 instance FromJSON Query where parseJSON = genericParseJSON (argumentOptions 5)
+
+data Search = Search {searchText :: Text, searchLimit :: Int}
 
 data Name = Name {nameDisplayName :: Maybe Text, nameGivenName :: Maybe Text} deriving (Generic)
 instance FromJSON Name where parseJSON = genericParseJSON (camelOptions 4)
@@ -96,7 +98,8 @@ warm rules send ready = modifyMVar ready operation
       result <- lookupContacts rules send "" 1
       case result of
         Left issue -> pure (False, Left issue)
-        Right _ -> threadDelay (contactsWarmupSeconds rules * 1000000) >> pure (True, Right ())
+        Right _ -> threadDelay delay >> pure (True, Right ())
+    delay = contactsWarmupSeconds rules * 1000000
 
 contacts :: ContactsRules -> Send -> IO Execute
 contacts rules send = do
@@ -106,21 +109,25 @@ contacts rules send = do
 execute :: ContactsRules -> Send -> MVar Bool -> Execute
 execute rules send ready name arguments _
   | name /= "contacts_search" = pure (Left (failure "contacts_unknown_tool"))
-  | otherwise = checked "contacts_invalid_arguments" (search rules send ready) arguments
+  | otherwise = either (pure . Left) (search rules send ready) prepared
+  where prepared = decodeValue "contacts_invalid_arguments" arguments >>= prepareSearch rules
 
-search :: ContactsRules -> Send -> MVar Bool -> Query -> IO (Result Value)
-search rules send ready query
-  | Text.null text || Text.length text > contactsQueryChars rules || count < 1 || count > contactsSearchLimit rules = pure (Left (failure "contacts_invalid_arguments"))
-  | otherwise = do
-      warmed <- warm rules send ready
-      either (pure . Left) (const perform) warmed
+prepareSearch :: ContactsRules -> Query -> Result Search
+prepareSearch rules query
+  | Text.null text || Text.length text > contactsQueryChars rules || count < 1 || count > contactsSearchLimit rules = Left (failure "contacts_invalid_arguments")
+  | otherwise = Right (Search text count)
   where
     text = Text.strip (queryQuery query)
     count = queryLimit query
-    perform = do
-      let requested = count + 1
-      result <- lookupContacts rules send text requested
-      pure (fmap (toJSON . summarize rules count) result)
+
+search :: ContactsRules -> Send -> MVar Bool -> Search -> IO (Result Value)
+search rules send ready query = do
+  warmed <- warm rules send ready
+  either (pure . Left) (const perform) warmed
+  where
+    count = searchLimit query
+    requested = count + 1
+    perform = fmap (fmap (toJSON . summarize rules count)) (lookupContacts rules send (searchText query) requested)
 
 summarize :: ContactsRules -> Int -> Matches -> SearchResult
 summarize rules count response = SearchResult "ok" "google_contacts" found size more multiple scope True

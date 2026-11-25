@@ -62,9 +62,10 @@ loadResampler lib inputRate outputRate = do
   pending <- newIORef BS.empty
   done <- newIORef False
   ptr <- makeCreate createPtr input output 1 nullPtr nullPtr nullPtr nullPtr
-  if ptr == nullPtr
-    then dlclose lib >> pure (Left (failure "audio_resampler_failed"))
-    else pure (Right (Resampler lib ptr (makeProcess processPtr) (makeDelete deletePtr) (makeClear clearPtr) rate pending done))
+  let loaded
+        | ptr == nullPtr = dlclose lib >> pure (Left (failure "audio_resampler_failed"))
+        | otherwise = pure (Right (Resampler lib ptr (makeProcess processPtr) (makeDelete deletePtr) (makeClear clearPtr) rate pending done))
+  loaded
 
 closeResampler :: Resampler -> IO ()
 closeResampler converter = destroy converter (handle converter) >> dlclose (library converter)
@@ -73,15 +74,29 @@ resample :: Resampler -> BS.ByteString -> Bool -> IO (Result BS.ByteString)
 resample converter bytes final = do
   done <- readIORef (finished converter)
   pending <- readIORef (remainder converter)
-  let combined = pending <> bytes
-      size = BS.length combined - BS.length combined `mod` 2
-      (complete, rest) = BS.splitAt size combined
-  if done || (final && not (BS.null rest)) then pure (Left (failure "invalid_pcm_stream")) else do
-    writeIORef (remainder converter) rest
-    first <- processPCM converter complete False
-    lastPCM <- if final then processPCM converter BS.empty True else pure (Right BS.empty)
-    writeIORef (finished converter) final
-    pure ((<>) <$> first <*> lastPCM)
+  case preparePCM done final pending bytes of
+    Left err -> pure (Left err)
+    Right (complete, rest) -> processChunk converter final complete rest
+
+preparePCM :: Bool -> Bool -> BS.ByteString -> BS.ByteString -> Result (BS.ByteString, BS.ByteString)
+preparePCM done final pending bytes
+  | done || (final && not (BS.null rest)) = Left (failure "invalid_pcm_stream")
+  | otherwise = Right (complete, rest)
+  where
+    combined = pending <> bytes
+    size = BS.length combined - BS.length combined `mod` 2
+    (complete, rest) = BS.splitAt size combined
+
+processChunk :: Resampler -> Bool -> BS.ByteString -> BS.ByteString -> IO (Result BS.ByteString)
+processChunk converter final complete rest = do
+  writeIORef (remainder converter) rest
+  first <- processPCM converter complete False
+  lastPCM <- flush
+  writeIORef (finished converter) final
+  pure ((<>) <$> first <*> lastPCM)
+  where
+    flush | final = processPCM converter BS.empty True
+          | otherwise = pure (Right BS.empty)
 
 processPCM :: Resampler -> BS.ByteString -> Bool -> IO (Result BS.ByteString)
 processPCM _ bytes False | BS.null bytes = pure (Right BS.empty)

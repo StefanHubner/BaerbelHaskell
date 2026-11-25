@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Baerbel.Profile (ProfileState(..), ProfileStore, profile, transition, emptyProfile, readEntry, snapshot, validKey, validValue) where
+module Baerbel.Profile (ProfileState(..), ProfileStore(..), Command(..), profile, parseCommand, transition, emptyProfile, snapshot, validKey, validValue) where
 
 import Baerbel.Error (Result, failure)
 import Baerbel.JSON (argumentOptions, decodeValue, jsonOptions)
@@ -22,7 +22,12 @@ data ProfileState = ProfileState
 instance FromJSON ProfileState where parseJSON = genericParseJSON (jsonOptions 7)
 instance ToJSON ProfileState where toJSON = genericToJSON (jsonOptions 7)
 
-type ProfileStore = (ProfileState -> Result (ProfileState, Value)) -> IO (Result Value)
+data ProfileStore = ProfileStore
+  { profileRead :: IO (Result ProfileState)
+  , profileUpdate :: (ProfileState -> Result (ProfileState, Value)) -> IO (Result Value)
+  }
+
+data Command = ReadProfile (Maybe Text) | WriteProfile Text (Maybe Text)
 
 newtype GetArgs
   = GetArgs {getKey :: Maybe Text}
@@ -69,29 +74,30 @@ snapshot rules state key = combine [toJSON base, entry]
     base = Snapshot "ok" "local_profile" values (isNothing key) (profileUpdatedAt state) True (profileHomeLocationRole rules)
     entry = maybe (Object mempty) (\name -> toJSON (Entry name (Map.member name values) (Map.lookup name values))) key
 
-readEntry :: ProfileRules -> ProfileState -> Text -> Result Value
-readEntry rules state key = do
-  valid <- validateKey rules key
-  Right (snapshot rules state (Just valid))
+parseCommand :: ProfileRules -> Text -> Value -> Result Command
+parseCommand rules "profile_get" arguments = do
+  args <- decodeValue "profile_invalid_arguments" arguments
+  key <- traverse (validateKey rules) (getKey args)
+  Right (ReadProfile key)
+parseCommand rules "profile_set" arguments = do
+  args <- decodeValue "profile_invalid_arguments" arguments
+  key <- validateKey rules (setKey args)
+  value <- validatedValue rules (setValue args)
+  Right (WriteProfile key (Just value))
+parseCommand rules "profile_forget" arguments = do
+  args <- decodeValue "profile_invalid_arguments" arguments
+  key <- validateKey rules (forgetKey args)
+  Right (WriteProfile key Nothing)
+parseCommand _ _ _ = Left (failure "profile_unknown_tool")
 
-transition :: ProfileRules -> UTCTime -> Text -> Value -> ProfileState -> Result (ProfileState, Value)
-transition rules now name arguments state = case name of
-  "profile_get" -> do
-    args <- decodeValue "profile_invalid_arguments" arguments
-    key <- traverse (validateKey rules) (getKey args)
-    Right (state, snapshot rules state key)
-  "profile_set" -> do
-    args <- decodeValue "profile_invalid_arguments" arguments
-    key <- validateKey rules (setKey args)
-    let value = Text.strip (setValue args)
-    if not (validValue rules (setValue args))
-      then Left (failure "profile_invalid_value")
-      else change rules now state key (Just value)
-  "profile_forget" -> do
-    args <- decodeValue "profile_invalid_arguments" arguments
-    key <- validateKey rules (forgetKey args)
-    change rules now state key Nothing
-  _ -> Left (failure "profile_unknown_tool")
+validatedValue :: ProfileRules -> Text -> Result Text
+validatedValue rules value
+  | validValue rules value = Right (Text.strip value)
+  | otherwise = Left (failure "profile_invalid_value")
+
+transition :: ProfileRules -> UTCTime -> Command -> ProfileState -> Result (ProfileState, Value)
+transition rules _ (ReadProfile key) state = Right (state, snapshot rules state key)
+transition rules now (WriteProfile key value) state = change rules now state key value
 
 change :: ProfileRules -> UTCTime -> ProfileState -> Text -> Maybe Text -> Result (ProfileState, Value)
 change rules now state key value
@@ -102,13 +108,18 @@ change rules now state key value
     changed = Map.lookup key values /= value
     timestamp = Text.pack (formatTime defaultTimeLocale "%FT%TZ" now)
     entries = maybe (Map.delete key values) (\item -> Map.insert key item values) value
-    updated = if changed then state {profileValues = entries, profileUpdatedAt = Just timestamp} else state
-    operation = if isJust value then "set" else "forget"
+    updated
+      | changed = state {profileValues = entries, profileUpdatedAt = Just timestamp}
+      | otherwise = state
+    operation = maybe "forget" (const "set") value
     detail = Change operation key value changed
     result = combine [snapshot rules updated Nothing, toJSON detail]
 
 profile :: ProfileRules -> ProfileStore -> IO UTCTime -> Execute
-profile rules store clock name arguments _ = do
-  now <- clock
-  let operation = transition rules now name arguments
-  store operation
+profile rules store clock name arguments _ = either (pure . Left) run prepared
+  where
+    prepared = parseCommand rules name arguments
+    run (ReadProfile key) = fmap (\state -> snapshot rules state key) <$> profileRead store
+    run command = do
+      now <- clock
+      profileUpdate store (transition rules now command)

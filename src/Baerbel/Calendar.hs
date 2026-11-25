@@ -117,9 +117,12 @@ eventUrl rules ident = calendarEventsUrl rules <> encoded <> "/events"
   where encoded = Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 ident))
 
 parseDay :: Text -> Result Day
-parseDay text = maybe (Left (failure "invalid_calendar_date")) Right parsed
+parseDay text
+  | validDaySyntax text = maybe invalid Right parsed
+  | otherwise = invalid
   where
-    parsed = if validDaySyntax text then parseTimeM True defaultTimeLocale "%F" (Text.unpack text) else Nothing
+    invalid = Left (failure "invalid_calendar_date")
+    parsed = parseTimeM True defaultTimeLocale "%F" (Text.unpack text)
 
 validDaySyntax :: Text -> Bool
 validDaySyntax value = map Text.length parts == [4, 2, 2] && all (Text.all asciiDigit) parts
@@ -139,7 +142,9 @@ validClock supplied = validOffset && case Text.splitOn ":" time of
   _ -> False
   where
     utcSuffix = "Z" `Text.isSuffixOf` supplied
-    time = Text.dropEnd (if utcSuffix then 1 else 6) supplied
+    suffixLength | utcSuffix = 1
+                 | otherwise = 6
+    time = Text.dropEnd suffixLength supplied
     offset = Text.takeEnd 6 supplied
     validOffset = utcSuffix || (Text.take 1 offset `elem` ["+", "-"] && case Text.splitOn ":" (Text.drop 1 offset) of
       [hours, minutes] -> number 23 hours && number 59 minutes
@@ -150,9 +155,14 @@ validClock supplied = validOffset && case Text.splitOn ":" time of
       [whole, fraction] -> number 59 whole && Text.length fraction `elem` [3, 6] && Text.all asciiDigit fraction
       _ -> False
 parseInstant :: Text -> Result UTCTime
-parseInstant text = maybe (Left (failure "invalid_calendar_timestamp")) (Right . zonedTimeToUTC) parsed
-  where parsed = if validTimestampSyntax text then parseTimeM True defaultTimeLocale "%FT%T%Q%Ez" (Text.unpack normalized) else Nothing
-        normalized = if "Z" `Text.isSuffixOf` text then Text.dropEnd 1 text <> "+00:00" else text
+parseInstant text
+  | validTimestampSyntax text = maybe invalid (Right . zonedTimeToUTC) parsed
+  | otherwise = invalid
+  where
+    invalid = Left (failure "invalid_calendar_timestamp")
+    parsed = parseTimeM True defaultTimeLocale "%FT%T%Q%Ez" (Text.unpack normalized)
+    normalized | "Z" `Text.isSuffixOf` text = Text.dropEnd 1 text <> "+00:00"
+               | otherwise = text
 
 bounds :: TimeZones -> Maybe Text -> Event -> Result (UTCTime, UTCTime, Bool)
 bounds zones selected event = case (eventStart event, eventEnd event) of
@@ -178,24 +188,30 @@ visible event = eventStatus event /= Just "cancelled" && not declined
     declined = any (\item -> attendeeSelf item == Just True && attendeeResponseStatus item == Just "declined") attendees
 
 eventSummary :: CalendarRules -> TimeZones -> CalendarEntry -> Event -> Result EventSummary
-eventSummary rules zones entry event = do
-  (start, end, allDay) <- bounds zones (entryTimeZone entry) event
-  let selected = if allDay then fromMaybe (calendarZone rules) (entryTimeZone entry) else calendarZone rules
+eventSummary rules zones entry event = bounds zones (entryTimeZone entry) event >>= summarizeEvent rules zones entry event
+
+summarizeEvent :: CalendarRules -> TimeZones -> CalendarEntry -> Event -> (UTCTime, UTCTime, Bool) -> Result EventSummary
+summarizeEvent rules zones entry event (start, end, allDay) = do
   first <- zonedInstant zones selected start
   lastTime <- zonedInstant zones selected end
-  let format = if allDay then "%F" else "%FT%T%Q%Ez"
-      beginning = if allDay then Text.pack (formatTime defaultTimeLocale format first) else isoZoned first
-      finish = if allDay then Text.pack (formatTime defaultTimeLocale format lastTime) else isoZoned lastTime
-      title = Text.take (calendarTitleChars rules) (nonempty (calendarUntitled rules) (eventSummaryText event))
-      location = Text.take (calendarLocationChars rules) (fromMaybe "" (eventLocation event))
-      ident = Text.take (calendarIdentifierChars rules) (fromMaybe "" (eventId event))
-      busy = eventTransparency event /= Just "transparent"
+  let beginning = format first
+      finish = format lastTime
   Right (EventSummary (entryId entry) (entryName rules entry) selected ident title beginning finish allDay location busy)
+  where
+    selected | allDay = fromMaybe (calendarZone rules) (entryTimeZone entry)
+             | otherwise = calendarZone rules
+    format :: ZonedTime -> Text
+    format | allDay = Text.pack . formatTime defaultTimeLocale "%F"
+           | otherwise = isoZoned
+    title = Text.take (calendarTitleChars rules) (nonempty (calendarUntitled rules) (eventSummaryText event))
+    location = Text.take (calendarLocationChars rules) (fromMaybe "" (eventLocation event))
+    ident = Text.take (calendarIdentifierChars rules) (fromMaybe "" (eventId event))
+    busy = eventTransparency event /= Just "transparent"
 
 nonempty :: Text -> Maybe Text -> Text
-nonempty fallback
-  = maybe
-      fallback (\ text -> if Text.null text then fallback else text)
+nonempty fallback Nothing = fallback
+nonempty fallback (Just "") = fallback
+nonempty _ (Just text) = text
 
 entryName :: CalendarRules -> CalendarEntry -> Text
 entryName rules entry = Text.take (calendarTitleChars rules) chosen
@@ -209,21 +225,23 @@ listCalendars rules send = loop 0 0 [] Set.empty [] Nothing
     loop :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Maybe Text -> IO Discovery
     loop pages scanned found ids seen token
       | pages >= calendarListPages rules || scanned >= calendarCalendarLimit rules = pure (Discovery found False Nothing)
-      | otherwise = do
-          response <- fetch "calendar_invalid_calendar_list" (get (calendarHttp rules) send (calendarCalendarUrl rules) (params token))
-          either (pure . Discovery found False . Just . failureCode) (next pages scanned found ids seen) response
+      | otherwise = requestPage pages scanned found ids seen token
+    requestPage :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Maybe Text -> IO Discovery
+    requestPage pages scanned found ids seen token = do
+      response <- fetch "calendar_invalid_calendar_list" (get (calendarHttp rules) send (calendarCalendarUrl rules) (params token))
+      either (pure . Discovery found False . Just . failureCode) (next pages scanned found ids seen) response
     params token = [textParam "showDeleted" "false", textParam "showHidden" "true", textParam "maxResults" (Text.pack (show (calendarListPageSize rules))), textParam "fields" (calendarListFields rules)]
       <> maybe [] (pure . textParam "pageToken") token
     next pages scanned found ids seen response = case collectCalendars rules scanned found ids (fromMaybe [] (listItems response)) of
       Left (issue, entries) -> pure (Discovery entries False (Just (failureCode issue)))
       Right (count, entries, known, cut) -> advance pages count entries known seen cut (listNextPageToken response)
-    advance pages count entries known seen cut token
-      | cut = pure (Discovery entries False Nothing)
-      | otherwise = case token of
-          Nothing -> pure (Discovery entries True Nothing)
-          Just "" -> pure (Discovery entries True Nothing)
-          Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Discovery entries False (Just "calendar_invalid_pagination"))
-          Just page -> loop (pages + 1) count entries known (page : seen) (Just page)
+    advance :: Int -> Int -> [CalendarEntry] -> Set.Set Text -> [Text] -> Bool -> Maybe Text -> IO Discovery
+    advance _ _ entries _ _ True _ = pure (Discovery entries False Nothing)
+    advance pages count entries known seen False token = case token of
+      Nothing -> pure (Discovery entries True Nothing)
+      Just "" -> pure (Discovery entries True Nothing)
+      Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Discovery entries False (Just "calendar_invalid_pagination"))
+      Just page -> loop (pages + 1) count entries known (page : seen) (Just page)
 
 data CalendarIdentity = CalendarIdentity
   { identityCalendarId :: Text, identityCalendarName :: Text, identityAccessRole :: Text
@@ -238,8 +256,13 @@ normalizeEntry :: CalendarRules -> CalendarEntry -> CalendarEntry
 normalizeEntry rules entry = entry {entryAccessRole = Just role, entryTimeZone = zone}
   where
     supplied = fromMaybe "unknown" (entryAccessRole entry)
-    role = if supplied `elem` ("freeBusyReader" : calendarReadableRoles rules) then supplied else "unknown"
-    zone = entryTimeZone entry >>= \name -> if Text.length name <= calendarZoneChars rules then Just name else Nothing
+    role | supplied `elem` ("freeBusyReader" : calendarReadableRoles rules) = supplied
+         | otherwise = "unknown"
+    zone = entryTimeZone entry >>= boundedZone
+    boundedZone :: Text -> Maybe Text
+    boundedZone name
+      | Text.length name <= calendarZoneChars rules = Just name
+      | otherwise = Nothing
 
 collectCalendars :: CalendarRules -> Int -> [CalendarEntry] -> Set.Set Text -> [Value] -> Either (Failure, [CalendarEntry]) (Int, [CalendarEntry], Set.Set Text, Bool)
 collectCalendars _ scanned found ids [] = Right (scanned, found, ids, False)
@@ -274,20 +297,22 @@ listEvents rules send zones first lastTime query entry = loop 0 0 [] Set.empty [
     loop :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
     loop pages scanned events ids seen token
       | pages >= calendarEventPages rules || scanned >= calendarEventScanLimit rules = pure (Right (events, True))
-      | otherwise = do
-          response <- fetch "calendar_invalid_response" (get (calendarHttp rules) send url (params token))
-          either (pure . Left) (next pages scanned events ids seen) response
-    next pages scanned events ids seen response = either (pure . Left) advance collected
-      where
-        collected = collectEvents rules zones first lastTime entry scanned events ids (fromMaybe [] (eventsItems response))
-        advance (count, values, known, cut) = advanceEvents pages count values known seen cut (eventsNextPageToken response)
-    advanceEvents pages count values known seen cut token
-      | cut = pure (Right (values, True))
-      | otherwise = case token of
-          Nothing -> pure (Right (values, False))
-          Just "" -> pure (Right (values, False))
-          Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Left (failure "calendar_invalid_pagination"))
-          Just page -> loop (pages + 1) count values known (page : seen) (Just page)
+      | otherwise = requestPage pages scanned events ids seen token
+    requestPage :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
+    requestPage pages scanned events ids seen token = do
+      response <- fetch "calendar_invalid_response" (get (calendarHttp rules) send url (params token))
+      either (pure . Left) (next pages scanned events ids seen) response
+    next :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> EventPage -> IO (Result ([CalendarEvent], Bool))
+    next pages scanned events ids seen response = case collectEvents rules zones first lastTime entry scanned events ids (fromMaybe [] (eventsItems response)) of
+      Left issue -> pure (Left issue)
+      Right (count, values, known, cut) -> advanceEvents pages count values known seen cut (eventsNextPageToken response)
+    advanceEvents :: Int -> Int -> [CalendarEvent] -> Set.Set Text -> [Text] -> Bool -> Maybe Text -> IO (Result ([CalendarEvent], Bool))
+    advanceEvents _ _ values _ _ True _ = pure (Right (values, True))
+    advanceEvents pages count values known seen False token = case token of
+      Nothing -> pure (Right (values, False))
+      Just "" -> pure (Right (values, False))
+      Just page | Text.length page > calendarTokenChars rules || page `elem` seen -> pure (Left (failure "calendar_invalid_pagination"))
+      Just page -> loop (pages + 1) count values known (page : seen) (Just page)
 
 collectEvents :: CalendarRules -> TimeZones -> UTCTime -> UTCTime -> CalendarEntry -> Int -> [CalendarEvent] -> Set.Set Text -> [Value] -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
 collectEvents _ _ _ _ _ scanned found ids [] = Right (scanned, found, ids, False)
@@ -298,18 +323,19 @@ collectEvents rules zones first lastTime entry scanned found ids (value : rest)
 collectEvent :: CalendarRules -> TimeZones -> UTCTime -> UTCTime -> CalendarEntry -> Int -> [CalendarEvent] -> Set.Set Text -> [Value] -> Event -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
 collectEvent rules zones first lastTime entry scanned found ids rest event
   | not (visible event) = next found ids
-  | otherwise = do
-      (begin, end, _) <- bounds zones (entryTimeZone entry) event
-      if end <= first || begin >= lastTime then next found ids else include begin
+  | otherwise = bounds zones (entryTimeZone entry) event >>= include
   where
     ident = fromMaybe "" (eventId event)
+    next :: [CalendarEvent] -> Set.Set Text -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
     next values known = collectEvents rules zones first lastTime entry (scanned + 1) values known rest
-    include begin
+    include :: (UTCTime, UTCTime, Bool) -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
+    include period@(begin, end, _)
+      | end <= first || begin >= lastTime = next found ids
       | Text.null ident || Text.length ident > calendarIdChars rules = Left (failure "calendar_invalid_response")
       | Set.member ident ids = next found ids
-      | otherwise = do
-          summaryValue <- eventSummary rules zones entry event
-          next (found <> [(begin, summaryValue)]) (Set.insert ident ids)
+      | otherwise = summarizeEvent rules zones entry event period >>= appendSummary begin
+    appendSummary :: UTCTime -> EventSummary -> Result (Int, [CalendarEvent], Set.Set Text, Bool)
+    appendSummary begin summaryValue = next (found <> [(begin, summaryValue)]) (Set.insert ident ids)
 
 row :: CalendarRules -> CalendarEntry -> Text -> Maybe Text -> CalendarRow
 row rules entry
@@ -329,67 +355,87 @@ selectCalendars rules selection entries
   where
     exact = filter (\entry -> entryId entry == selection || selection == "primary" && entryPrimary entry == Just True) entries
     labels = filter (\entry -> Text.toCaseFold (entryName rules entry) == Text.toCaseFold selection) entries
-    chosen = if null exact then labels else exact
+    chosen = case exact of
+      [] -> labels
+      _ -> exact
 
-scan :: CalendarRules -> Send -> TimeZones -> UTCTime -> UTCTime -> Text -> Text -> IO (Result ([CalendarEvent], Coverage))
-scan rules send zones first lastTime query selection = listCalendars rules send >>= scanListed
+data Period = Period {periodStart :: UTCTime, periodEnd :: UTCTime}
+data AgendaMode = SingleDay | DateRange
+data AgendaRequest = AgendaRequest
+  { agendaMode :: AgendaMode, agendaArguments :: SearchArgs, agendaPeriod :: Period }
+data CreateRequest = CreateRequest {createArguments :: CreateArgs, createPeriod :: Period}
+data CalendarCommand = ReadAgenda AgendaRequest | CreateEvent CreateRequest
+
+type ScannedCalendar = ([CalendarEvent], CalendarRow)
+
+scan :: CalendarRules -> Send -> TimeZones -> Period -> Text -> Text -> IO ([CalendarEvent], Coverage)
+scan rules send zones period query selection = do
+  discovery <- listCalendars rules send
+  let (entries, selectionError) = selectCalendars rules selection (discoveredEntries discovery)
+      tasks = scheduleScans rules selectionError entries
+  results <- boundedMap (calendarConcurrency rules) scanOne tasks
+  pure (scanResults discovery selectionError results)
   where
-    scanListed discovery = do
-      let (entries, selectionError) = selectCalendars rules selection (discoveredEntries discovery)
-          tasks = schedule entries selectionError
-      results <- boundedMap (calendarConcurrency rules) scanOne tasks
-      let rows = map snd results
-          events = concatMap fst results
-          complete = discoveredComplete discovery && isNothing selectionError && all ((== "complete") . rowStatus) rows
-          checkedCount = length (filter (\item -> rowStatus item `elem` ["complete", "partial"]) rows)
-          truncated = not (discoveredComplete discovery) && isNothing (discoveredError discovery)
-          coverage = Coverage complete (discoveredComplete discovery) (Nullable (discoveredError discovery)) truncated (length rows) checkedCount rows selectionError
-      pure (Right (events, coverage))
-    schedule entries selectionError = snd (mapAccumL choose 0 entries)
-      where
-        choose count entry = case skipReason count selectionError entry of
-          Just reason -> (count, (entry, Just reason))
-          Nothing -> (count + 1, (entry, Nothing))
-    skipReason count selectionError entry
+    scanOne :: (CalendarEntry, Maybe Text) -> IO ScannedCalendar
+    scanOne (entry, Just reason) = pure ([], row rules entry "skipped" (Just reason))
+    scanOne (entry, Nothing) = do
+      result <- listEvents rules send zones (periodStart period) (periodEnd period) query entry
+      pure (scannedCalendar rules entry result)
+
+scheduleScans :: CalendarRules -> Maybe Text -> [CalendarEntry] -> [(CalendarEntry, Maybe Text)]
+scheduleScans rules selectionError = snd . mapAccumL choose 0
+  where
+    choose :: Int -> CalendarEntry -> (Int, (CalendarEntry, Maybe Text))
+    choose count entry = case skipReason count entry of
+      Just reason -> (count, (entry, Just reason))
+      Nothing -> (count + 1, (entry, Nothing))
+    skipReason :: Int -> CalendarEntry -> Maybe Text
+    skipReason count entry
       | isJust selectionError = selectionError
       | entryAccessRole entry == Just "freeBusyReader" = Just "free_busy_only"
       | fromMaybe "" (entryAccessRole entry) `notElem` calendarReadableRoles rules = Just "unreadable_access_role"
       | count >= calendarCalendarsChecked rules = Just "calendar_limit"
       | otherwise = Nothing
-    scanOne (entry, Just reason) = pure ([], row rules entry "skipped" (Just reason))
-    scanOne (entry, Nothing) = do
-      result <- listEvents rules send zones first lastTime query entry
-      pure (either (failed entry) (finished entry) result)
-    failed entry issue = ([], row rules entry "failed" (Just (failureCode issue)))
-    finished entry (events, cut) = (events, row rules entry (if cut then "partial" else "complete") (if cut then Just "event_scan_limit" else Nothing))
 
-agenda :: CalendarRules -> Send -> TimeZones -> Bool -> SearchArgs -> IO (Result Value)
-agenda rules send zones single args = case range of
-  Left issue -> pure (Left issue)
-  Right (first, lastTime) -> do
-    result <- scan rules send zones first lastTime (searchQuery args) (searchCalendar args)
-    pure (fmap finish result)
+scannedCalendar :: CalendarRules -> CalendarEntry -> Result ([CalendarEvent], Bool) -> ScannedCalendar
+scannedCalendar rules entry result = case result of
+  Left issue -> ([], row rules entry "failed" (Just (failureCode issue)))
+  Right (events, True) -> (events, row rules entry "partial" (Just "event_scan_limit"))
+  Right (events, False) -> (events, row rules entry "complete" Nothing)
+
+scanResults :: Discovery -> Maybe Text -> [ScannedCalendar] -> ([CalendarEvent], Coverage)
+scanResults discovery selectionError results = (events, coverage)
   where
-    range = do
-      firstDay <- parseDay (searchStartDate args)
-      lastDay <- parseDay (searchEndDate args)
-      let following = addDays 1 lastDay
-      first <- localInstant zones (calendarZone rules) (LocalTime firstDay midnight)
-      lastTime <- localInstant zones (calendarZone rules) (LocalTime following midnight)
-      if firstDay > lastDay then Left (failure "invalid_calendar_date_range") else Right (first, lastTime)
-    finish (events, coverage) = combine [toJSON output, toJSON changed]
-      where
-        ordered = map snd (sortOn fst events)
-        remaining = calendarOutputBytes rules - referenceSize coverage
-        (bounded, cut) = limitJson (calendarOutputCount rules) remaining ordered
-        truncated = cut || not (coverageCoverageComplete coverage)
-        changed = coverage {coverageCoverageComplete = not truncated}
-        optional value = if single then Nothing else Just value
-        problem = coverageError coverage
-        status = maybe "ok" (const "error") problem
-        output = Agenda status (if single then Just (searchStartDate args) else Nothing)
-          (optional (searchStartDate args)) (optional (searchEndDate args)) (optional (searchQuery args))
-          (optional (searchCalendar args)) (calendarZone rules) bounded (length bounded) truncated truncated cut True problem
+    rows = map snd results
+    events = concatMap fst results
+    complete = discoveredComplete discovery && isNothing selectionError && all ((== "complete") . rowStatus) rows
+    checkedCount = length (filter (\item -> rowStatus item `elem` ["complete", "partial"]) rows)
+    truncated = not (discoveredComplete discovery) && isNothing (discoveredError discovery)
+    coverage = Coverage complete (discoveredComplete discovery) (Nullable (discoveredError discovery)) truncated (length rows) checkedCount rows selectionError
+
+agenda :: CalendarRules -> Send -> TimeZones -> AgendaRequest -> IO Value
+agenda rules send zones request = do
+  result <- scan rules send zones (agendaPeriod request) (searchQuery args) (searchCalendar args)
+  pure (agendaResult rules request result)
+  where args = agendaArguments request
+
+agendaResult :: CalendarRules -> AgendaRequest -> ([CalendarEvent], Coverage) -> Value
+agendaResult rules request (events, coverage) = combine [toJSON output, toJSON changed]
+  where
+    args = agendaArguments request
+    ordered = map snd (sortOn fst events)
+    remaining = calendarOutputBytes rules - referenceSize coverage
+    (bounded, cut) = limitJson (calendarOutputCount rules) remaining ordered
+    truncated = cut || not (coverageCoverageComplete coverage)
+    changed = coverage {coverageCoverageComplete = not truncated}
+    problem = coverageError coverage
+    status = maybe "ok" (const "error") problem
+    (date, start, end, query, selection) = agendaFields (agendaMode request) args
+    output = Agenda status date start end query selection (calendarZone rules) bounded (length bounded) truncated truncated cut True problem
+
+agendaFields :: AgendaMode -> SearchArgs -> (Maybe Text, Maybe Text, Maybe Text, Maybe Text, Maybe Text)
+agendaFields SingleDay args = (Just (searchStartDate args), Nothing, Nothing, Nothing, Nothing)
+agendaFields DateRange args = (Nothing, Just (searchStartDate args), Just (searchEndDate args), Just (searchQuery args), Just (searchCalendar args))
 
 coverageError :: Coverage -> Maybe Text
 coverageError coverage
@@ -399,98 +445,150 @@ coverageError coverage
   | any ((== "failed") . rowStatus) (coverageCalendarResults coverage) = Just "calendar_events_unavailable"
   | otherwise = Nothing
 
-createEvent :: CalendarRules -> Send -> Durable -> TimeZones -> Text -> Value -> CreateArgs -> IO (Result Value)
-createEvent rules send durable zones requestId arguments args = case interval of
-  Left issue -> pure (Left issue)
-  Right (first, lastTime) -> if createAllowConflicts args then commit else check first lastTime
+createEvent :: CalendarRules -> Send -> Durable -> Existing -> TimeZones -> Text -> CreateRequest -> IO (Result Value)
+createEvent rules send durable existing zones requestId request = do
+  previous <- existing requestId "calendar_create" normalized
+  either (pure . Left) (maybe create (pure . Right)) previous
   where
-    interval = do
-      first <- parseInstant (createStart args)
-      lastTime <- parseInstant (createEnd args)
-      if lastTime <= first then Left (failure "calendar_end_must_follow_start") else Right (first, lastTime)
-    commit = durable requestId "calendar_create" arguments operation
-    check first lastTime = do
-      result <- scan rules send zones first lastTime "" ""
-      either (pure . Left) decide result
-    decide (events, coverage)
-      | not (null busy) = pure (Right (combine [toJSON conflict, toJSON coverage]))
-      | not (coverageCoverageComplete coverage) = pure (Right (combine [toJSON incomplete, toJSON coverage]))
-      | otherwise = commit
-      where
-        incomplete = Incomplete "error" "calendar_conflict_check_incomplete" False True
-        busy = map snd (sortOn fst (filter (sumBusy . snd) events))
-        conflict = Conflict "error" "schedule_conflict" False (take (calendarConflictCount rules) busy) (length busy > calendarConflictCount rules || not (coverageCoverageComplete coverage)) True
+    args = createArguments request
+    normalized = toJSON args
+    resource = creationResource rules requestId args
+    commit = durable requestId "calendar_create" normalized operation
+    create :: IO (Result Value)
+    create
+      | createAllowConflicts args = commit
+      | otherwise = checkConflicts
+    checkConflicts :: IO (Result Value)
+    checkConflicts = do
+      result <- scan rules send zones (createPeriod request) "" ""
+      maybe commit (pure . Right) (conflictResult rules result)
     operation = do
-      response <- post (calendarHttp rules) send url params resource
-      pure (response >>= decodeReceipt)
-    decodeReceipt value = Bifunctor.first uncertain (decodeValue "calendar_create_response_missing_receipt" value >>= receipt)
-    uncertain issue = issue {failureUncertain = True}
+      response <- post (calendarHttp rules) send (eventUrl rules "primary") params resource
+      pure (response >>= creationReceipt rules zones (createPeriod request) resource)
+    updates = case resourceAttendees resource of
+      [] -> "none"
+      _ -> "all"
+    params = [textParam "sendUpdates" updates]
+
+conflictResult :: CalendarRules -> ([CalendarEvent], Coverage) -> Maybe Value
+conflictResult rules (events, coverage)
+  | not (null busy) = Just (combine [toJSON conflict, toJSON coverage])
+  | not (coverageCoverageComplete coverage) = Just (combine [toJSON incomplete, toJSON coverage])
+  | otherwise = Nothing
+  where
+    incomplete = Incomplete "error" "calendar_conflict_check_incomplete" False True
+    busy = map snd (sortOn fst (filter (sumBusy . snd) events))
+    conflict = Conflict "error" "schedule_conflict" False (take (calendarConflictCount rules) busy) (length busy > calendarConflictCount rules || not (coverageCoverageComplete coverage)) True
+
+creationResource :: CalendarRules -> Text -> CreateArgs -> EventResource
+creationResource rules requestId args = EventResource ident (createSummary args) start end (createDescription args) (createLocation args) recipients
+  where
     rawId = Text.encodeUtf8 ("phone-assistant-calendar:" <> requestId)
     ident = Text.pack (show (hash rawId :: Digest SHA256))
-    recipients = nub (createAttendees args)
+    recipients = map Email (createAttendees args)
     start = EventTime Nothing (Just (createStart args)) (Just (calendarZone rules))
     end = EventTime Nothing (Just (createEnd args)) (Just (calendarZone rules))
-    resource = EventResource ident (createSummary args) start end (createDescription args) (createLocation args) (map Email recipients)
-    url = eventUrl rules "primary"
-    params = [textParam "sendUpdates" (if null recipients then "none" else "all")]
-    entry = CalendarEntry "primary" (Just (calendarPrimaryName rules)) Nothing (Just "owner") (Just True) Nothing (Just (calendarZone rules))
+
+creationReceipt :: CalendarRules -> TimeZones -> Period -> EventResource -> Value -> Result Value
+creationReceipt rules zones expected resource value = Bifunctor.first uncertain decoded
+  where
+    decoded = decodeValue "calendar_create_response_missing_receipt" value >>= receipt
+    uncertain :: Failure -> Failure
+    uncertain issue = issue {failureUncertain = True}
+    receipt :: Event -> Result Value
     receipt response
-      | eventId response /= Just ident || eventStatus response `notElem` [Just "confirmed", Just "tentative"] = Left (Failure "calendar_create_response_missing_receipt" True)
-      | otherwise = do
-          (actualStart, actualEnd, allDay) <- receiptBounds response
-          (expectedStart, expectedEnd) <- interval
-          if allDay || actualStart /= expectedStart || actualEnd /= expectedEnd
-            then Left (Failure "calendar_create_response_invalid_receipt" True) else Right ()
-          summaryValue <- eventSummary rules zones entry response
-          let value = Created "ok" True summaryValue recipients (not (null recipients)) False
-          Right (toJSON value)
+      | eventId response /= Just (resourceId resource) || eventStatus response `notElem` [Just "confirmed", Just "tentative"] = Left (failure "calendar_create_response_missing_receipt")
+      | otherwise = confirmReceipt rules zones expected resource response
 
-    receiptBounds response = either (const (Left (Failure "calendar_create_response_invalid_receipt" True))) Right (bounds zones (Just (calendarZone rules)) response)
+confirmReceipt :: CalendarRules -> TimeZones -> Period -> EventResource -> Event -> Result Value
+confirmReceipt rules zones expected resource response = case bounds zones (Just (calendarZone rules)) response of
+  Right actual@(first, lastTime, False)
+    | first == periodStart expected && lastTime == periodEnd expected -> render actual
+  _ -> Left (failure "calendar_create_response_invalid_receipt")
+  where
+    entry = CalendarEntry "primary" (Just (calendarPrimaryName rules)) Nothing (Just "owner") (Just True) Nothing (Just (calendarZone rules))
+    recipients = map emailEmail (resourceAttendees resource)
+    render :: (UTCTime, UTCTime, Bool) -> Result Value
+    render actual = do
+      summaryValue <- summarizeEvent rules zones entry response actual
+      let created = Created "ok" True summaryValue recipients (not (null recipients)) False
+      Right (toJSON created)
 
-validateCreate :: CalendarRules -> TimeZones -> CreateArgs -> Result CreateArgs
-validateCreate rules zones args
+prepareCreate :: CalendarRules -> TimeZones -> CreateArgs -> Result CreateRequest
+prepareCreate rules zones args
   | length (createAttendees args) > calendarAttendeeLimit rules = Left (failure "invalid_calendar_attendees")
   | otherwise = do
       title <- textValue (calendarCreateTitleChars rules) True (createSummary args)
       description <- optionalText (calendarDescriptionChars rules) False (createDescription args)
       location <- optionalText (calendarCreateLocationChars rules) True (createLocation args)
-      first <- parseInstant (createStart args)
-      lastTime <- parseInstant (createEnd args)
-      if lastTime <= first then Left (failure "calendar_end_must_follow_start") else Right ()
+      period <- parsePeriod (createStart args) (createEnd args)
       recipients <- traverse address (createAttendees args)
-      start <- zonedInstant zones (calendarZone rules) first
-      end <- zonedInstant zones (calendarZone rules) lastTime
-      Right (CreateArgs title (isoZoned start) (isoZoned end) description location (nub recipients) (createAllowConflicts args))
+      start <- zonedInstant zones (calendarZone rules) (periodStart period)
+      end <- zonedInstant zones (calendarZone rules) (periodEnd period)
+      let normalized = CreateArgs title (isoZoned start) (isoZoned end) description location (nub recipients) (createAllowConflicts args)
+      Right (CreateRequest normalized period)
+
+parsePeriod :: Text -> Text -> Result Period
+parsePeriod start end = do
+  first <- parseInstant start
+  lastTime <- parseInstant end
+  case Period first lastTime of
+    period | lastTime > first -> Right period
+    _ -> Left (failure "calendar_end_must_follow_start")
 
 optionalText :: Int -> Bool -> Text -> Result Text
 optionalText _ _ "" = Right ""
 optionalText cap header value = textValue cap header value
 
-validateSearch :: CalendarRules -> SearchArgs -> Result SearchArgs
-validateSearch rules args = do
+prepareSearch :: CalendarRules -> TimeZones -> SearchArgs -> Result AgendaRequest
+prepareSearch rules zones args = do
   first <- parseDay (searchStartDate args)
   lastDay <- parseDay (searchEndDate args)
-  if lastDay < first || lastDay >= fromGregorian 9999 12 31 then Left (failure "invalid_calendar_date_range") else Right ()
-  query <- optionalText (calendarFilterChars rules) True (searchQuery args)
-  selection <- optionalText (calendarFilterChars rules) True (searchCalendar args)
-  Right args {searchQuery = query, searchCalendar = selection}
+  prepareDateRange rules zones args first lastDay
+
+prepareDateRange :: CalendarRules -> TimeZones -> SearchArgs -> Day -> Day -> Result AgendaRequest
+prepareDateRange rules zones args first lastDay
+  | lastDay < first || lastDay >= fromGregorian 9999 12 31 = Left (failure "invalid_calendar_date_range")
+  | otherwise = do
+      query <- optionalText (calendarFilterChars rules) True (searchQuery args)
+      selection <- optionalText (calendarFilterChars rules) True (searchCalendar args)
+      period <- datePeriod rules zones first lastDay
+      let normalized = args {searchQuery = query, searchCalendar = selection}
+      Right (AgendaRequest DateRange normalized period)
+
+prepareAgenda :: CalendarRules -> TimeZones -> AgendaArgs -> Result AgendaRequest
+prepareAgenda rules zones args = do
+  day <- parseDay (agendaDate args)
+  period <- datePeriod rules zones day day
+  let normalized = SearchArgs (agendaDate args) (agendaDate args) "" ""
+  Right (AgendaRequest SingleDay normalized period)
+
+datePeriod :: CalendarRules -> TimeZones -> Day -> Day -> Result Period
+datePeriod rules zones firstDay lastDay = do
+  let following = addDays 1 lastDay
+      beginning = LocalTime firstDay midnight
+      end = LocalTime following midnight
+  first <- localInstant zones (calendarZone rules) beginning
+  lastTime <- localInstant zones (calendarZone rules) end
+  Right (Period first lastTime)
+
+prepareCommand :: CalendarRules -> TimeZones -> Text -> Value -> Result CalendarCommand
+prepareCommand rules zones name arguments = case name of
+  "calendar_agenda" -> ReadAgenda <$> (decoded >>= prepareAgenda rules zones)
+  "calendar_search" -> ReadAgenda <$> (decoded >>= prepareSearch rules zones)
+  "calendar_create" -> CreateEvent <$> (decoded >>= prepareCreate rules zones)
+  _ -> Left (failure "unsupported_calendar_tool")
+  where
+    decoded :: FromJSON a => Result a
+    decoded = decodeValue "invalid_tool_arguments" arguments
 
 calendar :: CalendarRules -> Send -> Durable -> Existing -> TimeZones -> Execute
-calendar rules send durable existing zones name arguments requestId = case name of
-  "calendar_agenda" -> checked "invalid_tool_arguments" single arguments
-  "calendar_search" -> checked "invalid_tool_arguments" search arguments
-  "calendar_create" -> checked "invalid_tool_arguments" create arguments
-  _ -> pure (Left (failure "unsupported_calendar_tool"))
+calendar rules send durable existing zones name arguments requestId = either (pure . Left) execute prepared
   where
-    single args = agenda rules send zones True (SearchArgs (agendaDate args) (agendaDate args) "" "")
-    search args = either (pure . Left) (agenda rules send zones False) (validateSearch rules args)
-    create args = either (pure . Left) createValidated (validateCreate rules zones args)
-    createValidated args = do
-      let normalized = toJSON args
-      previous <- existing requestId "calendar_create" normalized
-      let operation = createEvent rules send durable zones requestId normalized args
-      either (pure . Left) (maybe operation (pure . Right)) previous
-
+    prepared = prepareCommand rules zones name arguments
+    execute :: CalendarCommand -> IO (Result Value)
+    execute (ReadAgenda request) = Right <$> agenda rules send zones request
+    execute (CreateEvent request) = createEvent rules send durable existing zones requestId request
 
 data Incomplete = Incomplete
   { incompleteStatus :: Text, incompleteError :: Text, incompleteRetrySafe :: Bool

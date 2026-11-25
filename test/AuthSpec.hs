@@ -189,7 +189,9 @@ runLoopback rules groups declined client path options = do
   result <- authorize rules groups options client effects
   tasks <- readMVar threads
   mapM_ wait tasks
-  if declined then checkDeclined result calls else checkSaved result calls
+  case declined of
+    True -> checkDeclined result calls
+    False -> checkSaved result calls
   where
     checkDeclined :: Result () -> MVar Int -> Expectation
     checkDeclined result calls = do
@@ -213,7 +215,9 @@ callbackURL declined notice = do
   let query = parseQuery (T.encodeUtf8 (snd (T.breakOn "?" url)))
   Just redirect <- lookup "redirect_uri" query
   Just state <- lookup "state" query
-  let result = if declined then ("error", Just "access_denied") else ("code", Just "mock-code")
+  let result
+        | declined = ("error", Just "access_denied")
+        | otherwise = ("code", Just "mock-code")
       callbackQuery = renderQuery True [("state", Just state), result]
   pure (T.decodeUtf8 (redirect <> callbackQuery))
 

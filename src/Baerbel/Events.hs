@@ -64,7 +64,8 @@ validateEvent rules (schema, ident, ended, privacy, number, reason, answered)
   instant = readMaybe (Text.unpack ended) :: Maybe Integer
   validTime = not (Text.null ended) && Text.all (\char -> isAscii char && isDigit char) ended && maybe False (\value -> value > 0 && value < eventMaximumTimestamp rules) instant
   validReason = not (Text.null reason) && Text.length reason <= eventReasonChars rules && Text.all (\char -> isAscii char && isUpper char || char == '_') reason
-  selected = if reason `elem` eventReasons rules then reason else "UNKNOWN"
+  selected | reason `elem` eventReasons rules = reason
+           | otherwise = "UNKNOWN"
 
 validIdentifier :: EventRules -> Text -> Bool
 validIdentifier rules ident = case Text.splitOn "." ident of
@@ -90,7 +91,9 @@ pollEvents rules output messages source connection = fmap join (databaseResult "
   visit count [] = pure (Right count)
   visit count (path : rest) = do
     exists <- doesFileExist path
-    batch <- if exists then readBatch rules connection path else pure (Right [])
+    let readPresent | exists = readBatch rules connection path
+                    | otherwise = pure (Right [])
+    batch <- readPresent
     either (pure . Left) (consumeBatch count rest) batch
   consumeBatch count remaining rows = do
     result <- consumeRows output messages connection count rows
@@ -104,12 +107,15 @@ readBatch rules connection path = do
   result <- databaseResult "incoming_events_unavailable" (tryIOError opened)
   pure (result >>= either unavailable id)
   where
-  unavailable err = if isDoesNotExistError err then Right [] else Left (failure "incoming_events_unavailable")
+  unavailable err
+    | isDoesNotExistError err = Right []
+    | otherwise = Left (failure "incoming_events_unavailable")
   flags = defaultFileFlags {nofollow = True, nonBlock = True, cloexec = True}
   opened = bracket (openFd path ReadOnly flags) closeFd inspect
-  inspect descriptor = do
-    metadata <- getFdStatus descriptor
-    if isRegularFile metadata then readSource rules connection descriptor metadata else pure (Left (failure "incoming_events_invalid_source"))
+  inspect descriptor = getFdStatus descriptor >>= readRegular descriptor
+  readRegular descriptor metadata
+    | isRegularFile metadata = readSource rules connection descriptor metadata
+    | otherwise = pure (Left (failure "incoming_events_invalid_source"))
 
 readSource :: EventRules -> Connection -> System.Posix.Types.Fd -> System.Posix.Files.FileStatus -> IO (Result [Row])
 readSource rules connection descriptor metadata = do
@@ -119,15 +125,22 @@ readSource rules connection descriptor metadata = do
   where
   key = Text.pack (show (deviceID metadata)) <> ":" <> Text.pack (show (fileID metadata))
   readFrom rows handle = do
-    position <- resumePosition handle (fromIntegral (fileSize metadata)) rows
+    let size = fromIntegral (fileSize metadata)
+    position <- readPosition handle size rows
     hSeek handle AbsoluteSeek position
     readRows rules key handle (eventMaximumBatch rules) []
 
-resumePosition :: Handle -> Integer -> [(Integer, Int, Text)] -> IO Integer
-resumePosition handle size ((position, count, saved) : _) = do
+readPosition :: Handle -> Integer -> [(Integer, Int, Text)] -> IO Integer
+readPosition handle size ((position, count, saved) : _) = do
   prefixBytes <- Bytes.hGet handle count
-  pure (if size >= position && digest prefixBytes == saved then position else 0)
-resumePosition _ _ [] = pure 0
+  let actual = digest prefixBytes
+  pure (resumePosition size position saved actual)
+readPosition _ _ [] = pure 0
+
+resumePosition :: Integer -> Integer -> Text -> Text -> Integer
+resumePosition size position saved actual
+  | size >= position && actual == saved = position
+  | otherwise = 0
 
 digest :: ByteString -> Text
 digest bytes = Text.pack (show (hash bytes :: Digest SHA256))
@@ -139,7 +152,10 @@ readRows rules key handle remaining rows = do
   let maximumRead = eventMaximumLine rules + 1
   bytes <- Bytes.hGet handle maximumRead
   case Bytes.elemIndex 10 bytes of
-    Just offset -> recordRow rules key handle remaining rows start (Bytes.take (offset + 1) bytes)
+    Just offset ->
+      let width = offset + 1
+          raw = Bytes.take width bytes
+      in recordRow rules key handle remaining rows start raw
     Nothing | Bytes.length bytes <= eventMaximumLine rules -> pure (Right (reverse rows))
     _ -> pure (Left (failure "incoming_event_record_too_large"))
 
@@ -158,7 +174,9 @@ consumeRows :: Report -> Messages -> Connection -> Int -> [Row] -> IO (Result (I
 consumeRows _ _ _ count [] = pure (Right (count, True))
 consumeRows output messages connection count (Row event cursor : rows) = do
   receipt <- maybe invalid (fmap Just . deliver) event
-  if maybe False ((== Just True) . receiptRetryable) receipt then pure (Right (count, False)) else advance
+  case receipt >>= receiptRetryable of
+    Just True -> pure (Right (count, False))
+    _ -> advance
   where
   invalid = output "incoming_event_invalid" [] >> pure Nothing
   deliver value = deliverOutcome messages (eventIdentifier value) (eventReason value) (eventCallback value) (eventAnswered value)

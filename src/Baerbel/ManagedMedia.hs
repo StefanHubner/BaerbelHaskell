@@ -56,12 +56,16 @@ register (Registry rules pauseMicros registry) identifier connection = do
     reuse entry = do
       permitted <- join (readTVarIO (entryReattachAllowed entry))
       now <- getMonotonicTimeNSec
-      if permitted then atomically (reattach now entry connection) else pure (Left (failure "call_has_left_assistant"))
+      let attach | permitted = atomically (reattach now entry connection)
+                 | otherwise = pure (Left (failure "call_has_left_assistant"))
+      attach
 
 insertEntry :: SocketRules -> Int -> TVar (M.Map Text Entry) -> Text -> Socket -> STM (Result (Entry, Bool, Int))
 insertEntry rules pauseMicros registry identifier connection = do
   calls <- readTVar registry
-  if M.member identifier calls then pure (Left (failure "call_already_attached")) else create calls
+  let insert | M.member identifier calls = pure (Left (failure "call_already_attached"))
+             | otherwise = create calls
+  insert
   where
     create :: M.Map Text Entry -> STM (Result (Entry, Bool, Int))
     create calls = do
@@ -72,9 +76,20 @@ insertEntry rules pauseMicros registry identifier connection = do
 reattach :: Word64 -> Entry -> Socket -> STM (Result (Entry, Bool, Int))
 reattach now entry connection = do
   state <- readTVar (entryState entry)
-  let serial = attachmentSerial (activeAttachment state) + 1
-  let next = state {activeAttachment = Attachment connection serial, statePaused = False, stateEpoch = stateEpoch state + 1, stateDeadline = Nothing}
-  if maybe False (now <) (stateDeadline state) && statePaused state && not (mediaEnded state) then writeTVar (entryState entry) next >> pure (Right (entry, False, serial)) else pure (Left (failure "call_already_attached"))
+  case reattached now connection state of
+    Left err -> pure (Left err)
+    Right next -> do
+      writeTVar (entryState entry) next
+      pure (Right (entry, False, attachmentSerial (activeAttachment next)))
+
+reattached :: Word64 -> Socket -> MediaState -> Result MediaState
+reattached now connection state
+  | maybe False (now <) (stateDeadline state) && statePaused state && not (mediaEnded state) = Right next
+  | otherwise = Left (failure "call_already_attached")
+  where
+    serial = attachmentSerial (activeAttachment state) + 1
+    next = state {activeAttachment = Attachment connection serial, statePaused = False,
+      stateEpoch = stateEpoch state + 1, stateDeadline = Nothing}
 
 withManaged :: Registry -> Text -> Socket -> (ManagedCall -> IO (Result ())) -> IO (Result ())
 withManaged registry identifier connection action = do
@@ -127,8 +142,14 @@ media entry = Media
 setPaused :: Entry -> Bool -> IO ()
 setPaused entry paused = do
   now <- getMonotonicTimeNSec
-  let deadline = if paused then Just (now + fromIntegral (entryPauseMicros entry) * 1000) else Nothing
-  atomically (modifyTVar' (entryState entry) (\state -> state {statePaused = paused, stateEpoch = stateEpoch state + 1, stateDeadline = deadline}))
+  atomically (modifyTVar' (entryState entry) (pauseState (entryPauseMicros entry) now paused))
+
+pauseState :: Int -> Word64 -> Bool -> MediaState -> MediaState
+pauseState duration now paused state = state
+  {statePaused = paused, stateEpoch = stateEpoch state + 1, stateDeadline = deadline}
+  where
+    deadline | paused = Just (now + fromIntegral duration * 1000)
+             | otherwise = Nothing
 
 watchPause :: Entry -> IO ()
 watchPause entry = do
@@ -139,13 +160,16 @@ awaitPaused :: Entry -> STM (Maybe MediaState)
 awaitPaused entry = do
   state <- readTVar (entryState entry)
   check (mediaEnded state || statePaused state)
-  pure (if mediaEnded state then Nothing else Just state)
+  let active | mediaEnded state = Nothing
+             | otherwise = Just state
+  pure active
 
 watchDeadline :: Entry -> MediaState -> IO ()
 watchDeadline entry state = do
   now <- getMonotonicTimeNSec
   let deadline = fromMaybe now (stateDeadline state)
-      micros = if deadline <= now then 0 else fromIntegral ((deadline - now + 999) `div` 1000)
+      micros | deadline <= now = 0
+             | otherwise = fromIntegral ((deadline - now + 999) `div` 1000)
   changed <- timeout micros (atomically (awaitEpoch entry (stateEpoch state)))
   maybe (expirePause entry state) (const (pure ())) changed
   watchPause entry
@@ -172,16 +196,23 @@ waitResume entry seconds = do
     ready = do
       state <- readTVar (entryState entry)
       check (mediaEnded state || not (statePaused state))
-      pure (maybe (if mediaEnded state then Left (failure "call_ended") else Right ()) Left (stateFailure state))
+      pure (resumeOutcome state)
 
-readyAttachment :: Entry -> STM (Result (Maybe Attachment))
-readyAttachment entry = do
-  state <- readTVar (entryState entry)
-  pure (maybe (Right (if mediaEnded state then Nothing else Just (activeAttachment state))) Left (stateFailure state))
+resumeOutcome :: MediaState -> Result ()
+resumeOutcome state = case attached state of
+  Left err -> Left err
+  Right Nothing -> Left (failure "call_ended")
+  Right (Just _) -> Right ()
+
+attached :: MediaState -> Result (Maybe Attachment)
+attached state
+  | Just err <- stateFailure state = Left err
+  | mediaEnded state = Right Nothing
+  | otherwise = Right (Just (activeAttachment state))
 
 receive :: Entry -> IO (Result (Maybe ByteString))
 receive entry = do
-  attachment <- atomically (readyAttachment entry)
+  attachment <- attached <$> readTVarIO (entryState entry)
   either (pure . Left) (maybe (pure (Right Nothing)) (receiveFrom entry)) attachment
 
 receiveFrom :: Entry -> Attachment -> IO (Result (Maybe ByteString))
@@ -189,8 +220,10 @@ receiveFrom entry attachment = do
   state <- readTVarIO (entryState entry)
   packet <- race (readPacket (attachmentSocket attachment)) (atomically (waitDetached entry (attachmentSerial attachment)))
   latest <- readTVarIO (entryState entry)
-  if mediaEnded latest || attachmentSerial (activeAttachment latest) /= attachmentSerial attachment
-    then receive entry else either (readPaused entry state latest) (const (receive entry)) packet
+  let proceed
+        | mediaEnded latest || attachmentSerial (activeAttachment latest) /= attachmentSerial attachment = receive entry
+        | otherwise = either (readPaused entry state latest) (const (receive entry)) packet
+  proceed
 
 readPaused :: Entry -> MediaState -> MediaState -> Result Packet -> IO (Result (Maybe ByteString))
 readPaused entry previous latest packet
@@ -215,7 +248,9 @@ handlePacket _ (Right _) = pure (Left (failure "audiosocket_unexpected_packet"))
 send :: Entry -> ByteString -> IO (Result AudioDelivery)
 send entry pcm = do
   state <- readTVarIO (entryState entry)
-  if mediaEnded state || statePaused state then pure (Right Suppressed) else sendCurrent entry state pcm
+  let deliver | mediaEnded state || statePaused state = pure (Right Suppressed)
+              | otherwise = sendCurrent entry state pcm
+  deliver
 
 finish :: Entry -> IO (Result ())
 finish entry = do

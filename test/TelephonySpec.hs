@@ -16,7 +16,7 @@ import qualified Baerbel.Telephony as Native
 import Baerbel.Routing
 import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar_, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (withAsync)
-import Control.Monad (forever, void)
+import Control.Monad (forever, unless, void)
 import System.Timeout (timeout)
 import Control.Exception (bracket)
 import Data.Aeson (Value(..), encode, FromJSON(..), eitherDecodeStrict', withObject, (.:), object, (.=))
@@ -253,7 +253,8 @@ phoneSpec = it "matches all 864 original Python fixtures with current native met
 checkPhone :: PhoneCase -> IO ()
 checkPhone (PhoneCase number expected accepted) = do
   actual <- validateNumber number
-  let result = if accepted then Right expected else Left (failure expected)
+  let result | accepted = Right expected
+             | otherwise = Left (failure expected)
   actual `shouldBe` result
 
 nativeSpec :: Spec
@@ -357,9 +358,10 @@ checkNoDial requests media expectedReason = do
     run :: Native.OwnerControl -> IO ()
     run control = do
       result <- Native.executeDirect control "direct_call" (object ["number" .= ("+442079460018" :: Text)]) "request"
-      let expectedResult = if T.null expectedReason then "failed" else "cancelled"
+      let expectedResult | T.null expectedReason = "failed"
+                         | otherwise = "cancelled"
       fmap (objectField "result") result `shouldBe` Right (String expectedResult)
-      if T.null expectedReason then pure () else fmap (objectField "reason") result `shouldBe` Right (String expectedReason)
+      unless (T.null expectedReason) (fmap (objectField "reason") result `shouldBe` Right (String expectedReason))
       actions <- readMVar requests
       filter (\request -> A.field "Action" request == "Redirect") actions `shouldBe` []
 
@@ -467,9 +469,11 @@ readFakeMessage connection = collect B.empty
     collect :: B.ByteString -> IO (Result A.Message)
     collect bytes
       | "\r\n\r\n" `B.isSuffixOf` bytes = pure (Right (preserveVariable bytes))
-      | otherwise = do
-          chunk <- N.recv connection 1
-          if B.null chunk then pure (Left (failure "closed")) else collect (bytes <> chunk)
+      | otherwise = N.recv connection 1 >>= append bytes
+    append :: B.ByteString -> B.ByteString -> IO (Result A.Message)
+    append bytes chunk
+      | B.null chunk = pure (Left (failure "closed"))
+      | otherwise = collect (bytes <> chunk)
     preserveVariable :: B.ByteString -> A.Message
     preserveVariable bytes = foldl add (A.parseMessage bytes) (T.splitOn "\r\n" (decodeUtf8 bytes))
     add :: A.Message -> Text -> A.Message

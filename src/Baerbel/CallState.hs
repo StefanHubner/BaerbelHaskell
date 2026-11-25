@@ -7,6 +7,7 @@ module Baerbel.CallState
 
 import Baerbel.AMI (Channel(..), Message, field)
 import Baerbel.Error (Result, Failure(..), failure)
+import Baerbel.JSON (resultValue)
 import Baerbel.Routing (Permission(..), Route(..), Provider(..), routeValue)
 import Data.Aeson (Value, object, (.=))
 import qualified Data.Map.Strict as M
@@ -46,9 +47,6 @@ proposeRoute now token route label state = (updated, routeValue token route labe
     updated :: CallState
     updated = state { callProposal = Just (Proposal token route label now) }
 
-simpleResult :: Text -> Value
-simpleResult result = object ["status" .= ("ok" :: Text), "result" .= result]
-
 proposalMatches :: DialRequest -> Maybe Proposal -> Bool
 proposalMatches _ Nothing = False
 proposalMatches request (Just proposal) = dialToken request == Just (proposalToken proposal)
@@ -72,8 +70,8 @@ requestDial :: Bool -> DialRequest -> CallState -> Result (CallState, [Effect], 
 requestDial enabled request state
   | callPermission state /= Owner = Left (failure "owner_call_required")
   | Just result <- M.lookup identifier (callResults state) = Right (state, [], Just result)
-  | callPhase state == Ended = Right (state, [], Just (simpleResult "cancelled"))
-  | callPhase state == Connected = Right (state, [], Just (simpleResult "connected"))
+  | callPhase state == Ended = Right (state, [], Just (resultValue "cancelled"))
+  | callPhase state == Connected = Right (state, [], Just (resultValue "connected"))
   | not enabled = Left (failure "direct_calls_disabled")
   | callPhase state /= Conversing = Left (failure "call_already_in_progress")
   | requiresProposal request state = Right (proposed, [], Just proposalResult)
@@ -109,10 +107,10 @@ announcementFinished True True state = case callRequest state of
 nativeEvent :: Message -> CallState -> (CallState, [Effect])
 nativeEvent message state
   | callPhase state == Ended = (state, [])
-  | hangup = (remember (simpleResult "cancelled") state { callPhase = Ended }, [])
+  | hangup = (remember (resultValue "cancelled") state { callPhase = Ended }, [])
   | field "Event" message == "AMIConnectionClosed" = controlLost state
   | not matching = (state, [])
-  | field "UserEvent" message == "PhoneAssistantDialAnswered" = (remember (simpleResult "connected") state { callPhase = Connected }, [ReleaseAssistant])
+  | field "UserEvent" message == "PhoneAssistantDialAnswered" = (remember (resultValue "connected") state { callPhase = Connected }, [ReleaseAssistant])
   | field "UserEvent" message == "PhoneAssistantDialResult" && callPhase state /= Connected = nativeResult message state
   | otherwise = (state, [])
   where
@@ -155,7 +153,9 @@ parseCause text
   | otherwise = readMaybe (T.unpack text) >>= inRange
   where
     inRange :: Int -> Maybe Int
-    inRange value = if value >= 0 && value <= 127 then Just value else Nothing
+    inRange value
+      | value >= 0 && value <= 127 = Just value
+      | otherwise = Nothing
 
 parseSip :: Text -> Maybe Int
 parseSip text = listToMaybe [value | index <- [0 .. T.length text - 3], valid index,

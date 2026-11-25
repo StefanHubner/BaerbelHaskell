@@ -39,8 +39,13 @@ runCase rules fixture = do
   either rejected id result `shouldBe` caseExpected fixture
   readIORef calls `shouldReturn` caseExpectedCallCount fixture
   where
-    rejected issue = toJSON (Rejected (if failureUncertain issue then "unknown" else "error") (failureCode issue))
+    rejected issue = toJSON (Rejected (failureStatus issue) (failureCode issue))
     response request = maybe (Left (failure "unexpected_request")) (Right . replyBody) (find ((== requestUrl request) . replyUrl) (caseResponses fixture))
+
+failureStatus :: Failure -> Text
+failureStatus issue
+  | failureUncertain issue = "unknown"
+  | otherwise = "error"
 
 spec :: Spec
 spec = describe "Gmail tool equivalence" $ do

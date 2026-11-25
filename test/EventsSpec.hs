@@ -106,4 +106,6 @@ retryOnce :: IORef Bool -> IORef [Text] -> Text -> Text -> Maybe Text -> Bool ->
 retryOnce first seen ident _ _ _ = do
   retry <- atomicModifyIORef' first (False,)
   modifyIORef' seen (<> [ident])
-  pure (if retry then Receipt Failed Nothing (Just True) else accepted)
+  let receipt | retry = Receipt Failed Nothing (Just True)
+              | otherwise = accepted
+  pure receipt

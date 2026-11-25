@@ -224,20 +224,24 @@ data Runtime = Runtime
 type Execute = Text -> Value -> Text -> IO (Result Value)
 
 runLiveSession :: LiveConfig -> Execute -> Media -> IO (Result ())
-runLiveSession cfg execute transport = start
-  where
-    start = do
-      startedAt <- getMonotonicTimeNSec
-      input <- newTBQueueIO (fromIntegral (liveQueueFrames cfg))
-      started <- newTVarIO False
-      let connect = withSecureSocket (liveMessageBytes cfg) (liveApiKey cfg) (liveHost cfg) (livePort cfg) (livePath cfg)
-          connected = connect (startSession cfg execute transport startedAt input started)
-          session = raceWorkers [connected, setupWatchdog cfg started]
-      result <- race (pumpAudio cfg transport input started BS.empty) session
-      pure (either id id result)
+runLiveSession cfg execute transport = do
+  startedAt <- getMonotonicTimeNSec
+  input <- newTBQueueIO (fromIntegral (liveQueueFrames cfg))
+  started <- newTVarIO False
+  let connect = withSecureSocket (liveMessageBytes cfg) (liveApiKey cfg) (liveHost cfg) (livePort cfg) (livePath cfg)
+      connected = connect (startSession cfg execute transport startedAt input started)
+      session = raceWorkers [connected, setupWatchdog cfg started]
+  result <- race (pumpAudio cfg transport input started BS.empty) session
+  pure (either id id result)
 
 startSession :: LiveConfig -> Execute -> Media -> Word64 -> TBQueue InputFrame -> TVar Bool -> WS.Connection -> IO (Result ())
 startSession cfg execute transport startedAt input started conn = do
+  runtime <- newRuntime cfg transport startedAt input started conn
+  installControls transport (controls runtime)
+  finally (beginSession runtime execute) (reportClosed runtime)
+
+newRuntime :: LiveConfig -> Media -> Word64 -> TBQueue InputFrame -> TVar Bool -> WS.Connection -> IO Runtime
+newRuntime cfg transport startedAt input started conn = do
   output <- newTBQueueIO (fromIntegral (liveQueueFrames cfg))
   queue <- newTBQueueIO (fromIntegral (maxPendingResponses (liveToolLimits cfg)))
   state <- newTVarIO emptyToolState
@@ -256,9 +260,7 @@ startSession cfg execute transport startedAt input started conn = do
   notice <- newTVarIO Nothing
   final <- newTVarIO (False, Nothing)
   metrics <- newTVarIO (emptyMetrics startedAt)
-  let runtime = Runtime conn cfg transport input output queue state started lock previewing interrupt playingNow epoch stop sequenceNumber clock mutedPreview lastSpeech metrics startedAt final transcriptTime notices notice
-  installControls transport (controls runtime)
-  finally (beginSession runtime execute) (reportClosed runtime)
+  pure (Runtime conn cfg transport input output queue state started lock previewing interrupt playingNow epoch stop sequenceNumber clock mutedPreview lastSpeech metrics startedAt final transcriptTime notices notice)
 
 beginSession :: Runtime -> Execute -> IO (Result ())
 beginSession runtime execute = do
@@ -312,13 +314,20 @@ pumpAudio cfg transport queue started pending = do
     Right (Just bytes) -> do
       stamp <- realToFrac <$> getPOSIXTime
       let combined = pending <> bytes
-          (frames, rest) = splitFrames (liveFrameBytes cfg) combined
-          byteRate = fromIntegral (liveInputRate cfg * 2)
-          firstAt = stamp - fromIntegral (BS.length combined) / byteRate
-          frameTime = fromIntegral (liveFrameMicros cfg) / 1000000
-          timedFrames = zipWith (\index frame -> InputFrame frame (firstAt + fromIntegral index * frameTime)) [0 :: Int ..] frames
-      accepted <- atomically (enqueueInput cfg queue started timedFrames)
-      if accepted then pumpAudio cfg transport queue started rest else pure (Left (failure "live_input_overflow"))
+          (frames, rest) = timedInput cfg stamp combined
+      accepted <- atomically (enqueueInput cfg queue started frames)
+      let continue | accepted = pumpAudio cfg transport queue started rest
+                   | otherwise = pure (Left (failure "live_input_overflow"))
+      continue
+
+timedInput :: LiveConfig -> Double -> BS.ByteString -> ([InputFrame], BS.ByteString)
+timedInput cfg stamp bytes = (zipWith timed [0 :: Int ..] frames, rest)
+  where
+    (frames, rest) = splitFrames (liveFrameBytes cfg) bytes
+    byteRate = fromIntegral (liveInputRate cfg * 2)
+    firstAt = stamp - fromIntegral (BS.length bytes) / byteRate
+    frameTime = fromIntegral (liveFrameMicros cfg) / 1000000
+    timed index frame = InputFrame frame (firstAt + fromIntegral index * frameTime)
 
 enqueueInput :: LiveConfig -> TBQueue InputFrame -> TVar Bool -> [InputFrame] -> STM Bool
 enqueueInput _ _ _ [] = pure True
@@ -327,7 +336,9 @@ enqueueInput cfg queue started (frame : frames) = do
   count <- lengthTBQueue queue
   unless (live || count < fromIntegral (liveStartupFrames cfg)) (void (readTBQueue queue))
   full <- isFullTBQueue queue
-  if full then pure False else writeTBQueue queue frame >> enqueueInput cfg queue started frames
+  let enqueue | full = pure False
+              | otherwise = writeTBQueue queue frame >> enqueueInput cfg queue started frames
+  enqueue
 
 sendInput :: Runtime -> Resampler -> Bool -> (Int, Int) -> IO (Result ())
 sendInput runtime converter greeted epochs = do
@@ -342,10 +353,8 @@ sendInputAt runtime converter greeted before nextEpochs = do
   paused <- mediaPaused (media runtime)
   previewSilence <- readTVarIO (previewMuted runtime)
   stamp <- realToFrac <$> getPOSIXTime
-  let silence = BS.replicate (liveFrameBytes (config runtime)) 0
-      fallbackAt = stamp - fromIntegral (liveFrameMicros (config runtime)) / 1000000
-      InputFrame received recordedAt = fromMaybe (InputFrame silence fallbackAt) next
-      frame = if muted || paused || previewSilence then silence else received
+  let suppressed = muted || paused || previewSilence
+      InputFrame frame recordedAt = selectInput (config runtime) suppressed stamp next
   atomically (modifyTVar' (timeline runtime) (addFrame recordedAt))
   converted <- resample converter frame False
   result <- either (pure . Left) (sendInputFrame runtime greeted) converted
@@ -355,6 +364,15 @@ sendInputAt runtime converter greeted before nextEpochs = do
       atomically (modifyTVar' (audioMetrics runtime) recordInputFrame)
       waitFrame runtime before
       sendInput runtime converter spoken nextEpochs
+
+selectInput :: LiveConfig -> Bool -> Double -> Maybe InputFrame -> InputFrame
+selectInput cfg suppressed stamp next = InputFrame frame recordedAt
+  where
+    silence = BS.replicate (liveFrameBytes cfg) 0
+    fallbackAt = stamp - fromIntegral (liveFrameMicros cfg) / 1000000
+    InputFrame received recordedAt = fromMaybe (InputFrame silence fallbackAt) next
+    frame | suppressed = silence
+          | otherwise = received
 
 sendInputFrame :: Runtime -> Bool -> BS.ByteString -> IO (Result Bool)
 sendInputFrame runtime greeted pcm
@@ -381,9 +399,12 @@ waitFrame runtime before = do
 receiveEvent :: Runtime -> IO (Result Value)
 receiveEvent runtime = do
   bytes <- WS.receiveData (connection runtime) :: IO BS.ByteString
-  pure $ case decodeStrict' bytes of
-    Just event@(Object _) | BS.length bytes <= liveMessageBytes (config runtime) && isJust (textField "type" event) -> Right event
-    _ -> Left (failure "invalid_live_event")
+  pure (decodeEvent (liveMessageBytes (config runtime)) bytes)
+
+decodeEvent :: Int -> BS.ByteString -> Result Value
+decodeEvent limit bytes = case decodeStrict' bytes of
+  Just event@(Object _) | BS.length bytes <= limit && isJust (textField "type" event) -> Right event
+  _ -> Left (failure "invalid_live_event")
 
 receiveOutput :: Runtime -> Resampler -> BS.ByteString -> Int -> IO (Result ())
 receiveOutput runtime converter pending epoch = do
@@ -394,8 +415,11 @@ receiveOutput runtime converter pending epoch = do
       clock <- readTVarIO (timeline runtime)
       observeEvent (media runtime) (annotateTranscript clock event)
       current <- currentGeneration runtime
-      reset <- if current /= epoch then resetResampler converter else pure (Right ())
-      let rest = if current /= epoch then BS.empty else pending
+      let resetOutput | current /= epoch = resetResampler converter
+                      | otherwise = pure (Right ())
+          rest | current /= epoch = BS.empty
+               | otherwise = pending
+      reset <- resetOutput
       trackInterruption runtime event
       trackBackground runtime event
       either (pure . Left) (const (dispatchEvent runtime converter rest current event)) reset
@@ -417,21 +441,26 @@ queueOutput :: Runtime -> Resampler -> BS.ByteString -> Int -> Value -> IO (Resu
 queueOutput runtime converter pending epoch event = do
   suppressed <- readTVarIO (preview runtime)
   paused <- mediaPaused (media runtime)
-  converted <- if suppressed || paused then pure (Right BS.empty) else
-    either (pure . Left) (\bytes -> resample converter bytes False) (decodeAudio event)
+  let convert | suppressed || paused = pure (Right BS.empty)
+              | otherwise = either (pure . Left) (\bytes -> resample converter bytes False) (decodeAudio event)
+  converted <- convert
   case converted of
     Left err -> pure (Left err)
     Right bytes -> do
       let (frames, rest) = splitFrames (liveFrameBytes (config runtime)) (pending <> bytes)
           tagged = map (PlaybackFrame epoch) frames
       accepted <- atomically (enqueuePlayback runtime tagged)
-      if accepted then receiveOutput runtime converter rest epoch else pure (Left (failure "live_output_overflow"))
+      let continue | accepted = receiveOutput runtime converter rest epoch
+                   | otherwise = pure (Left (failure "live_output_overflow"))
+      continue
 
 enqueueOutput :: TBQueue a -> [a] -> STM Bool
 enqueueOutput _ [] = pure True
 enqueueOutput queue (value : values) = do
   full <- isFullTBQueue queue
-  if full then pure False else writeTBQueue queue value >> enqueueOutput queue values
+  let enqueue | full = pure False
+              | otherwise = writeTBQueue queue value >> enqueueOutput queue values
+  enqueue
 
 updateTools :: Runtime -> Value -> STM (Result ())
 updateTools runtime event = do
@@ -441,7 +470,9 @@ updateTools runtime event = do
     Right (updated, work) -> do
       accepted <- enqueueOutput (toolQueue runtime) work
       writeTVar (toolState runtime) updated
-      pure $ if accepted then Right () else Left (failure "live_tool_queue_overflow")
+      let result | accepted = Right ()
+                 | otherwise = Left (failure "live_tool_queue_overflow")
+      pure result
 
 playOutput :: Runtime -> IO (Result ())
 playOutput runtime = do
@@ -452,7 +483,8 @@ playOutput runtime = do
   before <- getMonotonicTimeNSec
   current <- currentGeneration runtime
   paused <- mediaPaused (media runtime)
-  let send = if current /= epoch || paused then pure (Right Suppressed) else sendAudio (media runtime) frame
+  let send | current /= epoch || paused = pure (Right Suppressed)
+           | otherwise = sendAudio (media runtime) frame
   sent <- send `onException` atomically (writeTVar (playing runtime) False)
   case sent of
     Left problem -> atomically (writeTVar (playing runtime) False) >> pure (Left problem)
@@ -501,7 +533,9 @@ runTools runtime execute = do
 continueTools :: Runtime -> Execute -> ToolBatch -> IO (Result ())
 continueTools runtime execute batch = do
   stopped <- readTVarIO (stopping runtime)
-  if stopped then atomically retry else submit
+  let continue | stopped = atomically retry
+               | otherwise = submit
+  continue
   where
     submit :: IO (Result ())
     submit = do
@@ -517,10 +551,16 @@ executeCall runtime execute (Right ()) call = do
   let output = either (failureOutput (config runtime) (toolName call)) id result
   atomically (modifyTVar' (toolState runtime) (rememberOutput (toolCallId call) output))
   stopped <- readTVarIO (stopping runtime)
-  if stopped then atomically retry else do
-    sent <- sendToolEvent runtime (toolOutputCommand (toolCallId call) output)
-    either (const (pure ())) (const (afterTool (media runtime) (toolName call) output)) sent
-    pure sent
+  let submit | stopped = atomically retry
+             | otherwise = submitOutput runtime call output
+  submit
+
+submitOutput :: Runtime -> ToolCall -> Value -> IO (Result ())
+submitOutput runtime call output = do
+  let event = toolOutputCommand (toolCallId call) output
+  sent <- sendToolEvent runtime event
+  either (const (pure ())) (const (afterTool (media runtime) (toolName call) output)) sent
+  pure sent
 
 invokeTool :: Runtime -> Execute -> ToolCall -> IO (Result Value)
 invokeTool runtime execute call = case decodeStrict' (TE.encodeUtf8 (toolArguments call)) of
@@ -551,8 +591,9 @@ boundedTool runtime execute call arguments = do
              | name == "voice_test" = liveVoiceMicros cfg
              | otherwise = liveToolMicros cfg
     timedOut = Left (maybe (failure "tool_failed") (`Failure` True) mutation)
-    validateOutput value = if validOutput (maxToolText (liveToolLimits cfg)) value then Right value
-                           else Left (Failure "invalid_tool_result" (isJust mutation))
+    validateOutput value
+      | validOutput (maxToolText (liveToolLimits cfg)) value = Right value
+      | otherwise = Left (Failure "invalid_tool_result" (isJust mutation))
 
 validOutput :: Int -> Value -> Bool
 validOutput limit value@(Object fields) = KM.lookup "status" fields `elem` map (Just . String) ["ok", "error", "unknown"]
@@ -567,7 +608,8 @@ advertisedNames session = case field "delegation" session >>= field "responses" 
 failureOutput :: LiveConfig -> Text -> Failure -> Value
 failureOutput cfg name err = object (base ++ fields)
   where
-    status = if failureUncertain err then ("unknown" :: Text) else "error"
+    status | failureUncertain err = "unknown" :: Text
+           | otherwise = "error"
     base = ["status" .= status, "error" .= failureCode err]
     applicable = Map.elems (Map.filterWithKey (\prefix _ -> prefix `T.isPrefixOf` name) (liveErrorFields cfg))
     fields = [(Key.fromText key, value) | values <- applicable, (key, value) <- Map.toList values]
@@ -587,8 +629,11 @@ controls runtime = LiveControls (runPreview runtime) (pendingTools runtime) stop
 pendingTools :: Runtime -> Text -> IO Bool
 pendingTools runtime ownId = do
   state <- readTVarIO (toolState runtime)
-  let pending ident = ident /= ownId && Map.notMember ident (outputs state)
-  pure (not (Map.null (batches state)) || any pending (Map.keys (knownCalls state)))
+  pure (toolsPending ownId state)
+
+toolsPending :: Text -> ToolState -> Bool
+toolsPending ownId state = not (Map.null (batches state)) || any pending (Map.keys (knownCalls state))
+  where pending ident = ident /= ownId && Map.notMember ident (outputs state)
 
 waitStopped :: Runtime -> IO (Result ())
 waitStopped runtime = atomically $ do
@@ -656,7 +701,9 @@ previewAudio runtime bytes = do
   epoch <- currentGeneration runtime
   let frame = PlaybackFrame epoch bytes
   accepted <- atomically (enqueuePlayback runtime [frame])
-  pure $ if accepted then Right Deferred else Left (failure "live_output_overflow")
+  let result | accepted = Right Deferred
+             | otherwise = Left (failure "live_output_overflow")
+  pure result
 
 previewTranscript :: TVar Text -> Value -> IO ()
 previewTranscript transcript event = case (textField "type" event, textField "delta" event) of
@@ -667,10 +714,12 @@ previewComplete :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int ->
 previewComplete runtime transcript lastAudio ending quietMicros interruptible = do
   cancelled <- readTVarIO (interrupted runtime)
   readyToEnd <- previewDrained runtime transcript lastAudio ending quietMicros interruptible
-  if cancelled && interruptible then pure (Right False) else
-    if readyToEnd then pure (Right True) else do
-      threadDelay (liveFrameMicros (config runtime))
-      previewComplete runtime transcript lastAudio ending quietMicros interruptible
+  let finish
+        | cancelled && interruptible = pure (Right False)
+        | readyToEnd = pure (Right True)
+        | otherwise = threadDelay (liveFrameMicros (config runtime)) >>
+            previewComplete runtime transcript lastAudio ending quietMicros interruptible
+  finish
 
 previewDrained :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int -> Bool -> IO Bool
 previewDrained runtime transcript lastAudio ending quietMicros marker = do
@@ -691,11 +740,12 @@ nextToolCommand runtime event = do
   index <- atomically $ do
     modifyTVar' (commandSequence runtime) (+ 1)
     readTVar (commandSequence runtime)
-  let ident = "phone_tool_" <> T.pack (show index)
-      command = case event of
-        Object fields -> Object (KM.insert "event_id" (String ident) fields)
-        value -> value
-  pure command
+  pure (numberedCommand index event)
+
+numberedCommand :: Int -> Value -> Value
+numberedCommand index (Object fields) = Object (KM.insert "event_id" (String ident) fields)
+  where ident = "phone_tool_" <> T.pack (show index)
+numberedCommand _ value = value
 
 setupWatchdog :: LiveConfig -> TVar Bool -> IO (Result ())
 setupWatchdog cfg = awaitReady "live_setup_timeout" (liveSetupMicros cfg)
@@ -727,10 +777,16 @@ resetInputEpoch runtime converter previous = do
   native <- mediaEpoch (media runtime)
   previewEpoch <- readTVarIO (generation runtime)
   let current = (native, previewEpoch)
-  if current == previous then pure (Right current) else do
-    reset <- resetResampler converter
-    atomically (resetInputState runtime (native /= fst previous))
-    pure (current <$ reset)
+  resetChangedInput runtime converter previous current
+
+resetChangedInput :: Runtime -> Resampler -> (Int, Int) -> (Int, Int) -> IO (Result (Int, Int))
+resetChangedInput runtime converter previous current
+  | current == previous = pure (Right current)
+  | otherwise = do
+      result <- resetResampler converter
+      let changed = fst current /= fst previous
+      atomically (resetInputState runtime changed)
+      pure (current <$ result)
 
 resetInputState :: Runtime -> Bool -> STM ()
 resetInputState runtime clearInput = do
@@ -776,11 +832,16 @@ reportProgress runtime previous = do
 recoverHandoff :: Runtime -> Value -> IO (Result ())
 recoverHandoff runtime event = do
   notices <- readTVarIO (noticeIds runtime)
-  if not (recoverable notices event) then pure (Left (failure "live_provider_error")) else do
-    pending <- atomically $ do
-      modifyTVar' (toolState runtime) (abandonUncommitted (maxToolCalls (liveToolLimits (config runtime))))
-      readTVar (noticePending runtime)
-    maybe (notifyRecovery runtime) (const (pure (Right ()))) pending
+  let recover | recoverable notices event = recoverPending runtime
+              | otherwise = pure (Left (failure "live_provider_error"))
+  recover
+
+recoverPending :: Runtime -> IO (Result ())
+recoverPending runtime = do
+  pending <- atomically $ do
+    modifyTVar' (toolState runtime) (abandonUncommitted (maxToolCalls (liveToolLimits (config runtime))))
+    readTVar (noticePending runtime)
+  maybe (notifyRecovery runtime) (const (pure (Right ()))) pending
 
 recoverable :: Set.Set Text -> Value -> Bool
 recoverable notices event = case field "error" event of
@@ -802,8 +863,9 @@ abandonCalls calls state = foldr abandon state calls
   where
     protected = Set.fromList (map toolCallId (concatMap batchCalls (Map.elems (committed state))))
     output = object ["status" .= ("error" :: Text), "error" .= ("delegation_incomplete_not_executed" :: Text)]
-    abandon call current = if Set.member ident protected || Map.member ident (outputs current)
-      then current else rememberOutput ident output current
+    abandon call current
+      | Set.member ident protected || Map.member ident (outputs current) = current
+      | otherwise = rememberOutput ident output current
       where ident = toolCallId call
 
 notifyRecovery :: Runtime -> IO (Result ())

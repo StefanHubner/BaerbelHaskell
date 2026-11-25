@@ -32,6 +32,8 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import GHC.Generics (Generic)
 import Text.Read (readMaybe)
 
+type LocalZone = Text -> UTCTime -> Result ZonedTime
+
 newtype Numeric = Numeric {numericValue :: Double} deriving (Eq, Show)
 instance FromJSON Numeric where
   parseJSON (Number value) = pure (Numeric (toRealFloat value))
@@ -75,7 +77,9 @@ parseForecast payload = do
   hours <- payload .: "hours"
   name <- payload .:? "model_name" .!= ""
   longName <- payload .:? "model_longname" .!= ""
-  let title = if Text.null name then longName else name
+  let title
+        | Text.null name = longName
+        | otherwise = name
       arrays = Map.fromList [(Key.toText key, value) | (key, value) <- KeyMap.toList payload]
   pure (ForecastData stamp hours title arrays)
 
@@ -163,16 +167,27 @@ clockValue value = value >>= valid
 iso :: UTCTime -> Text
 iso = isoUtc
 
-startTime :: WindguruRules -> UTCTime -> Maybe Text -> Result UTCTime
-startTime _ now Nothing = Right now
-startTime rules _ (Just value)
+data Window = Window {windowStart :: Maybe UTCTime, windowHours :: Int}
+data ForecastQuery = ForecastQuery {querySpot :: Int, queryModel :: Int, queryWindow :: Window}
+
+parseStart :: WindguruRules -> Text -> Result UTCTime
+parseStart rules value
   | Text.length value > windguruStartChars rules = Left (failure "windguru_invalid_arguments")
   | otherwise = maybe (Left (failure "windguru_invalid_arguments")) (Right . zonedTimeToUTC) parsed
   where
-    normalized = if "Z" `Text.isSuffixOf` value then Text.dropEnd 1 value <> "+00:00" else value
+    normalized
+      | "Z" `Text.isSuffixOf` value = Text.dropEnd 1 value <> "+00:00"
+      | otherwise = value
     parsed = parseTimeM True defaultTimeLocale "%FT%T%Q%Ez" (Text.unpack normalized)
 
-forecast :: WindguruRules -> (Text -> UTCTime -> Result ZonedTime) -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> RawForecast -> Result Forecast
+parseWindow :: WindguruRules -> Int -> Maybe Text -> Result Window
+parseWindow rules hours supplied
+  | hours < 1 || hours > windguruMaximumPoints rules = Left (failure "windguru_invalid_arguments")
+  | otherwise = do
+    start <- traverse (parseStart rules) supplied
+    Right (Window start hours)
+
+forecast :: WindguruRules -> LocalZone -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> RawForecast -> Result Forecast
 forecast rules local now raw model start hours response = do
   dataValue <- case rawForecastFcst response of
     Just value@(Object _) -> decodeValue "windguru_invalid_response" value
@@ -182,30 +197,37 @@ forecast rules local now raw model start hours response = do
   arrays <- traverse (decodeValue "windguru_invalid_response") selectedFields
   normalizeForecast rules local now raw model start hours response dataValue arrays
 
-normalizeForecast :: WindguruRules -> (Text -> UTCTime -> Result ZonedTime) -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> RawForecast -> ForecastData -> Map Text [Value] -> Result Forecast
-normalizeForecast rules local now raw model start hours response dataValue arrays
+validateForecastData :: WindguruRules -> UTCTime -> Int -> Int -> RawForecast -> ForecastData -> Map Text [Value] -> Result ()
+validateForecastData rules now expectedSpot model response dataValue arrays
   | not (validNumericId (windguruSpotLimit rules) (rawForecastIdSpot response)) || not (validNumericId (windguruModelLimit rules) (rawForecastIdModel response)) = invalid
   | stamp < windguruMinimumTimestamp rules || stamp > windguruMaximumTimestamp rules || any (\hour -> hour < 0 || hour > windguruMaximumSourceHours rules) sourceHours = invalid
   | not (any (`Map.member` arrays) (windguruRequiredFields rules)) = Left (failure "windguru_forecast_unavailable")
-  | round (numericValue (rawForecastIdSpot response)) /= spotSpotId identity || round (numericValue (rawForecastIdModel response)) /= model = Left (failure "windguru_invalid_response")
+  | round (numericValue (rawForecastIdSpot response)) /= expectedSpot || round (numericValue (rawForecastIdModel response)) /= model = Left (failure "windguru_invalid_response")
   | null sourceHours || length sourceHours > windguruMaximumSourcePoints rules || not (and (zipWith (<) sourceHours (drop 1 sourceHours))) = Left (failure "windguru_invalid_response")
   | any ((/= length sourceHours) . length) (Map.elems arrays) = Left (failure "windguru_invalid_response")
   | initialized > addUTCTime (realToFrac (windguruFutureToleranceSeconds rules)) now = Left (failure "windguru_invalid_response")
-  | otherwise = do
-      points <- traverse render selected
-      let age :: Double
-          age = max 0 (realToFrac (diffUTCTime now initialized) / 3600)
-          availableFirst = at (firstOr 0 sourceHours)
-          availableLast = at (foldl (\_ value -> value) 0 sourceHours)
-          tide = Tide False Nothing (windguruTideReason rules)
-      Right (Forecast "ok" "windguru_public_forecast" identity model (clean (windguruModelChars rules) (forecastModelName dataValue)) (iso now) (iso initialized)
-        (fromIntegral (round (age * 100) :: Int) / 100) (age > 24) (iso start) (iso finish) (iso availableFirst) (iso availableLast) points (length points) truncated
-        (if null points then "no_points_in_requested_window" else "available") units conventions (sun rules raw) tide True)
+  | otherwise = Right ()
   where
-    identity = spot rules raw
     invalid = Left (failure "windguru_invalid_response")
     stamp = forecastInitstamp dataValue
     initialized = posixSecondsToUTCTime (realToFrac stamp)
+    sourceHours = forecastHours dataValue
+
+normalizeForecast :: WindguruRules -> LocalZone -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> RawForecast -> ForecastData -> Map Text [Value] -> Result Forecast
+normalizeForecast rules local now raw model start hours response dataValue arrays = do
+  validateForecastData rules now (spotSpotId identity) model response dataValue arrays
+  points <- traverse (forecastPoint rules local (spotTimezone identity) initialized arrays) selected
+  let age :: Double
+      age = max 0 (realToFrac (diffUTCTime now initialized) / 3600)
+      availableFirst = at (firstOr 0 sourceHours)
+      availableLast = at (foldl (\_ value -> value) 0 sourceHours)
+      tide = Tide False Nothing (windguruTideReason rules)
+  Right (Forecast "ok" "windguru_public_forecast" identity model (clean (windguruModelChars rules) (forecastModelName dataValue)) (iso now) (iso initialized)
+    (fromIntegral (round (age * 100) :: Int) / 100) (age > 24) (iso start) (iso finish) (iso availableFirst) (iso availableLast) points (length points) truncated
+    (availability points) units conventions (sun rules raw) tide True)
+  where
+    identity = spot rules raw
+    initialized = posixSecondsToUTCTime (realToFrac (forecastInitstamp dataValue))
     sourceHours = forecastHours dataValue
     at hour = addUTCTime (realToFrac (hour * 3600)) initialized
     finish = addUTCTime (fromIntegral hours * 3600) start
@@ -214,18 +236,25 @@ normalizeForecast rules local now raw model start hours response dataValue array
     truncated = length available > windguruMaximumPoints rules
     units = windguruUnits rules
     conventions = Map.fromList [("wind", windguruWindDirectionConvention rules), ("waves", windguruWaveDirectionConvention rules)]
-    render (index, hour) = do
-      values <- traverse (fieldValue index) (windguruFields rules)
-      let numeric = Map.fromListWith prefer (catMaybes values)
-          instant = at hour
-          localTime = spotTimezone identity >>= either (const Nothing) (Just . isoZoned) . (`local` instant)
-          timestamp = TimePoint (iso instant) localTime
-      Right (ForecastPoint timestamp numeric)
+
+forecastPoint :: WindguruRules -> LocalZone -> Maybe Text -> UTCTime -> Map Text [Value] -> (Int, Double) -> Result ForecastPoint
+forecastPoint rules local zone initialized arrays (index, hour) = do
+  values <- traverse (fieldValue index) (windguruFields rules)
+  let numeric = Map.fromListWith prefer (catMaybes values)
+      instant = addUTCTime (realToFrac (hour * 3600)) initialized
+      localTime = zone >>= either (const Nothing) (Just . isoZoned) . (`local` instant)
+      timestamp = TimePoint (iso instant) localTime
+  Right (ForecastPoint timestamp numeric)
+  where
     prefer later Nothing = later
     prefer _ earlier = earlier
-    fieldValue index (source, target, lower, upper) = case Map.lookup source arrays of
+    fieldValue offset (source, target, lower, upper) = case Map.lookup source arrays of
       Nothing -> Right Nothing
-      Just values -> Just . (target,) <$> readingNumber lower upper (firstOr Null (drop index values))
+      Just values -> Just . (target,) <$> readingNumber lower upper (firstOr Null (drop offset values))
+
+availability :: [ForecastPoint] -> Text
+availability [] = "no_points_in_requested_window"
+availability _ = "available"
 
 readingNumber :: Double -> Double -> Value -> Result (Maybe Double)
 readingNumber lower upper raw = do
@@ -238,100 +267,122 @@ readingNumber lower upper raw = do
 data Received a = Received {receivedValue :: a, receivedAt :: UTCTime}
 type TimedSend = Request -> IO (Result (Received Value))
 
-fetch :: FromJSON a => Text -> IO (Result (Received Value)) -> IO (Result (Received a))
-fetch code = fmap (>>= decodeReceived)
-  where decodeReceived value = (`Received` receivedAt value) <$> decodeValue code (receivedValue value)
+decodeReceived :: FromJSON a => Text -> Received Value -> Result (Received a)
+decodeReceived code value = (`Received` receivedAt value) <$> decodeValue code (receivedValue value)
 
-request :: WindguruRules -> TimedSend -> Text -> [(Text, Text)] -> IO (Result (Received Value))
-request rules send query params = send wire
+fetch :: FromJSON a => Text -> IO (Result (Received Value)) -> IO (Result (Received a))
+fetch code = fmap (>>= decodeReceived code)
+
+request :: WindguruRules -> Text -> [(Text, Text)] -> Request
+request rules query params = Request "GET" (windguruApiUrl rules) headers queryParams EmptyBody (windguruHttpBytes rules) (windguruHttpTimeout rules)
   where
     queryParams = textParam "q" query : map (\(key, value) -> textParam (Text.encodeUtf8 key) value) params
-    suffix = if query == "forecast_set" then ("?set=" <>) <$> lookup "set" params else lookup "id_spot" params
+    suffix = case query of
+      "forecast_set" -> ("?set=" <>) <$> lookup "set" params
+      _ -> lookup "id_spot" params
     referer = windguruBaseUrl rules <> fromMaybe "" suffix
     headers = [("Accept", "application/json"), ("Referer", Text.encodeUtf8 referer), ("User-Agent", Text.encodeUtf8 (windguruUserAgent rules))]
-    wire = Request "GET" (windguruApiUrl rules) headers queryParams EmptyBody (windguruHttpBytes rules) (windguruHttpTimeout rules)
 
-getSpot :: WindguruRules -> TimedSend -> (Text -> UTCTime -> Result ZonedTime) -> Int -> IO (Result (Received RawSpot))
-getSpot rules send local ident = do
-  response <- fetch "windguru_invalid_response" operation
-  pure (response >>= select)
+getSpot :: WindguruRules -> TimedSend -> Int -> IO (Result (Received RawSpot))
+getSpot rules send ident = fmap (>>= selectSpot rules ident) response
   where
-    text = Text.pack (show ident)
-    operation = request rules send "forecast_spot" [("id_spot", text)]
-    select value = do
-      payload <- maybe (Left (failure "windguru_spot_not_found")) Right (Map.lookup text (metaSpots (receivedValue value)))
-      raw <- decodeValue "windguru_invalid_response" payload
-      validatedSpot <- validateSpot rules ident raw
-      Right (Received (withZone local (receivedAt value) validatedSpot) (receivedAt value))
+    wire = request rules "forecast_spot" [("id_spot", Text.pack (show ident))]
+    response = fetch "windguru_invalid_response" (send wire)
+
+selectSpot :: WindguruRules -> Int -> Received Metadata -> Result (Received RawSpot)
+selectSpot rules ident received = do
+  let key = Text.pack (show ident)
+  payload <- maybe (Left (failure "windguru_spot_not_found")) Right (Map.lookup key (metaSpots (receivedValue received)))
+  raw <- decodeValue "windguru_invalid_response" payload
+  value <- validateSpot rules ident raw
+  Right (Received value (receivedAt received))
 
 search :: WindguruRules -> TimedSend -> SearchArgs -> IO (Result Value)
-search rules send args = do
-  response <- fetch "windguru_invalid_response" operation
-  pure (response >>= fmap toJSON . normalize)
+search rules send args = fmap (>>= fmap toJSON . searchResult rules args) response
   where
-    query = Text.strip (argQuery args)
-    operation = request rules send "search_spots" [("search", query)]
-    normalize received
-      | searchCount value < length rows || not (all (validNumericId (windguruSpotLimit rules) . rowIdSpot) rows) = Left (failure "windguru_invalid_response")
-      | otherwise = Right (SearchResult "ok" "windguru_public_search" query (argCountry args) (take (windguruCountryLimit rules) countries)
-      (length countries > windguruCountryLimit rules) unknown candidates (length candidates) (length matched) providerCut
-      (length matched > argLimit args || providerCut) (iso now) scope True)
-      where
-        value = receivedValue received
-        now = receivedAt received
-        rows = map normalizeRow (searchSpots value)
-        countries = nubBy (\first second -> Text.toCaseFold first == Text.toCaseFold second) (filter (not . Text.null) (mapMaybe rowCountry rows))
-        unknown = length (filter (maybe True Text.null . rowCountry) rows)
-        normalizeRow item = item {rowCountry = clean (windguruCountryChars rules) <$> rowCountry item}
-        matches row = maybe True (\country -> fmap Text.toCaseFold (rowCountry row) == Just (Text.toCaseFold country)) (argCountry args)
-        matched = filter matches rows
-        candidates = map candidate (take (argLimit args) matched)
-        providerCut = searchCount value > length rows
-        scope = windguruSearchScope rules
-    candidate row = Candidate ident (clean (windguruNameChars rules) (fromMaybe "" (rowSpotname row))) (rowCountry row) url
-      where ident = round (numericValue (rowIdSpot row))
-            url = windguruBaseUrl rules <> Text.pack (show ident)
+    wire = request rules "search_spots" [("search", argQuery args)]
+    response = fetch "windguru_invalid_response" (send wire)
 
-metadata :: WindguruRules -> TimedSend -> (Text -> UTCTime -> Result ZonedTime) -> SpotArgs -> IO (Result Value)
-metadata rules send local args = do
-  value <- getSpot rules send local (argSpotId args)
+searchResult :: WindguruRules -> SearchArgs -> Received SearchResponse -> Result SearchResult
+searchResult rules args received
+  | searchCount value < length rows || not (all (validNumericId (windguruSpotLimit rules) . rowIdSpot) rows) = Left (failure "windguru_invalid_response")
+  | otherwise = Right (SearchResult "ok" "windguru_public_search" (argQuery args) (argCountry args) (take (windguruCountryLimit rules) countries)
+    (length countries > windguruCountryLimit rules) unknown candidates (length candidates) (length matched) providerCut
+    (length matched > argLimit args || providerCut) (iso (receivedAt received)) (windguruSearchScope rules) True)
+  where
+    value = receivedValue received
+    rows = map normalizeRow (searchSpots value)
+    countries = nubBy (\first second -> Text.toCaseFold first == Text.toCaseFold second) (filter (not . Text.null) (mapMaybe rowCountry rows))
+    unknown = length (filter (maybe True Text.null . rowCountry) rows)
+    normalizeRow item = item {rowCountry = clean (windguruCountryChars rules) <$> rowCountry item}
+    matches row = maybe True (\country -> fmap Text.toCaseFold (rowCountry row) == Just (Text.toCaseFold country)) (argCountry args)
+    matched = filter matches rows
+    candidates = map (searchCandidate rules) (take (argLimit args) matched)
+    providerCut = searchCount value > length rows
+
+searchCandidate :: WindguruRules -> SearchRow -> Candidate
+searchCandidate rules row = Candidate ident name (rowCountry row) url
+  where
+    ident = round (numericValue (rowIdSpot row))
+    name = clean (windguruNameChars rules) (fromMaybe "" (rowSpotname row))
+    url = windguruBaseUrl rules <> Text.pack (show ident)
+
+metadata :: WindguruRules -> TimedSend -> LocalZone -> Int -> IO (Result Value)
+metadata rules send local ident = do
+  value <- getSpot rules send ident
   either (pure . Left) withCatalog value
   where
     withCatalog value = do
-      catalog <- fetch "windguru_invalid_response" (request rules send "model_info_full" [])
-      pure (Right (toJSON (finish catalog value)))
-    finish catalog received = SpotResult "ok" "windguru_public_spot" (spot rules value) (iso now) models problem (sun rules value) tide True
-      where
-        value = receivedValue received
-        now = receivedAt received
-        models = map (modelInfo catalog . round . numericValue) (rawModels value)
-        problem = either (Just . failureCode) (const Nothing) catalog
-        tide = Tide False (Just (fromMaybe False (rawTide value >>= parseMaybe (withObject "tide" (pure . not . KeyMap.null))))) (windguruMetadataTideReason rules)
-    modelInfo catalog ident = Model ident name kind virtual resolution
-      where
-        item = either (const Nothing) (Map.lookup (Text.pack (show ident)) . receivedValue) catalog
-        name = clean (windguruModelChars rules) (fromMaybe "" (item >>= modelModelName))
-        wave = flagValue <$> (item >>= modelWave)
-        kind = case wave of
-          Nothing -> "unknown"
-          Just True -> "wave"
-          Just False -> "weather"
-        virtual = flagValue <$> (item >>= modelVirtual)
-        resolution = item >>= modelResolution >>= \value -> if value >= 0 && value <= windguruResolutionLimit rules then Just value else Nothing
+      let wire = request rules "model_info_full" []
+      catalog <- fetch "windguru_invalid_response" (send wire)
+      pure (Right (toJSON (spotResult rules local catalog value)))
 
-getForecast :: WindguruRules -> TimedSend -> IO UTCTime -> (Text -> UTCTime -> Result ZonedTime) -> ForecastArgs -> IO (Result Value)
-getForecast rules send clock local args = do
-  value <- getSpot rules send local (argSpotIdForecast args)
-  either (pure . Left) (finish . receivedValue) value
+spotResult :: WindguruRules -> LocalZone -> Result (Received (Map Text RawModel)) -> Received RawSpot -> SpotResult
+spotResult rules local catalog received = SpotResult "ok" "windguru_public_spot" (spot rules value) (iso now) models problem (sun rules value) tide True
   where
-    finish raw
-      | argModelIdForecast args `notElem` map (round . numericValue) (rawModels raw) = pure (Left (failure "windguru_model_unavailable_for_spot"))
-      | otherwise = do
-          response <- fetch "windguru_invalid_response" operation
-          now <- clock
-          let result = startTime rules now (argStart args) >>= \start -> response >>= normalizeReceived rules local now raw (argModelIdForecast args) start (argHours args)
-          pure (fmap toJSON result)
-    operation = request rules send "forecast" [("id_spot", Text.pack (show (argSpotIdForecast args))), ("id_model", Text.pack (show (argModelIdForecast args)))]
+    now = receivedAt received
+    value = withZone local now (receivedValue received)
+    models = map (modelInfo rules catalog . round . numericValue) (rawModels value)
+    problem = either (Just . failureCode) (const Nothing) catalog
+    tide = Tide False (Just (fromMaybe False (rawTide value >>= parseMaybe (withObject "tide" (pure . not . KeyMap.null))))) (windguruMetadataTideReason rules)
+
+modelInfo :: WindguruRules -> Result (Received (Map Text RawModel)) -> Int -> Model
+modelInfo rules catalog ident = Model ident name kind virtual resolution
+  where
+    item = either (const Nothing) (Map.lookup (Text.pack (show ident)) . receivedValue) catalog
+    name = clean (windguruModelChars rules) (fromMaybe "" (item >>= modelModelName))
+    kind = case flagValue <$> (item >>= modelWave) of
+      Nothing -> "unknown"
+      Just True -> "wave"
+      Just False -> "weather"
+    virtual = flagValue <$> (item >>= modelVirtual)
+    resolution = case item >>= modelResolution of
+      Just value | value >= 0 && value <= windguruResolutionLimit rules -> Just value
+      _ -> Nothing
+
+forecastRequest :: WindguruRules -> Int -> Int -> Request
+forecastRequest rules spotId modelId = request rules "forecast" params
+  where params = [("id_spot", Text.pack (show spotId)), ("id_model", Text.pack (show modelId))]
+
+availableModel :: Int -> RawSpot -> Result RawSpot
+availableModel model value
+  | model `elem` map (round . numericValue) (rawModels value) = Right value
+  | otherwise = Left (failure "windguru_model_unavailable_for_spot")
+
+getForecast :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> ForecastQuery -> IO (Result Value)
+getForecast rules send clock local query = do
+  spotResponse <- getSpot rules send (querySpot query)
+  let selected = spotResponse >>= availableModel (queryModel query) . receivedValue
+  either (pure . Left) retrieve selected
+  where
+    retrieve raw = do
+      let wire = forecastRequest rules (querySpot query) (queryModel query)
+      response <- fetch "windguru_invalid_response" (send wire)
+      now <- clock
+      let window = queryWindow query
+          start = fromMaybe now (windowStart window)
+          normalized = response >>= normalizeReceived rules local now raw (queryModel query) start (windowHours window)
+      pure (fmap toJSON normalized)
 
 newtype SetModel
   = SetModel {selectedIdModel :: Numeric}
@@ -383,14 +434,16 @@ data FailedForecast = FailedForecast
   { failedStatus :: Text, failedError :: Text, failedModelId :: Int, failedSpotId :: Int, failedSpot :: Spot } deriving (Generic)
 instance ToJSON FailedForecast where toJSON = genericToJSON (jsonOptions 6)
 
-type SelectedPair = (Int, Int, Bool)
+type SelectedPair = (RawSpot, Int, Bool)
 
 setEntries :: WindguruRules -> ForecastSet -> ([SelectedPair], Selection)
 setEntries rules value = (selected, selection)
   where
     tabs = setDataTabs value
-    pairs = [(round (numericValue (tabIdSpot tab)), round (numericValue (selectedIdModel model)), maybe False (not . Text.null) (tabProOnlyMessage tab)) | tab <- tabs, model <- tabIdModelArr tab]
-    same (spotA, modelA, _) (spotB, modelB, _) = spotA == spotB && modelA == modelB
+    pairs = [(raw, round (numericValue (selectedIdModel model)), maybe False (not . Text.null) (tabProOnlyMessage tab))
+      | tab <- tabs, let key = Text.pack (show (round (numericValue (tabIdSpot tab)) :: Int))
+      , Just raw <- [Map.lookup key (setDataSpots value)], model <- tabIdModelArr tab]
+    same (spotA, modelA, _) (spotB, modelB, _) = rawIdSpot spotA == rawIdSpot spotB && modelA == modelB
     unique = nubBy same pairs
     selected = take (windguruMaximumSetPairs rules) unique
     tables = map table (take (windguruMaximumSetPairs rules) (zip [0..] tabs))
@@ -407,20 +460,26 @@ columnar :: WindguruRules -> Int -> Forecast -> Columns
 columnar rules count value = Columns "ok" (outSpot value) (outModelIdForecast value) (outModelName value)
   (outRetrievedAt value) (outInitializedAt value) (outInitializationAgeHours value) (outOlderThan24Hours value)
   (outAvailableStart value) (outAvailableEnd value) (outAvailability value) (outSun value) columns available returned
-  (outTruncated value) (outTruncated value || returned < available) (if null omitted then Nothing else Just omitted)
+  (outTruncated value) (outTruncated value || returned < available) omittedColumns
   where
     points = outPoints value
     available = length points
     returned = min available count
     selected = take count points
     localTimes = not (null points) && all (isJust . timeTimeLocal . pointTime) points
-    timeKey = if localTimes then "time_local" else "time_utc"
-    timestamp pointValue = if localTimes then toJSON (timeTimeLocal (pointTime pointValue)) else toJSON (timeTimeUtc (pointTime pointValue))
+    timeKey
+      | localTimes = "time_local"
+      | otherwise = "time_utc"
+    timestamp pointValue
+      | localTimes = toJSON (timeTimeLocal (pointTime pointValue))
+      | otherwise = toJSON (timeTimeUtc (pointTime pointValue))
     present key = any (Map.member key . pointNumbers) points
     keys = filter present (windguruComparisonColumns rules)
     numeric key pointValue = toJSON (fromMaybe Nothing (Map.lookup key (pointNumbers pointValue)))
     columns = Map.fromList ((timeKey, map timestamp selected) : [(key, map (numeric key) selected) | key <- keys])
-    omitted = filter present (windguruOmittedColumns rules)
+    omittedColumns = case filter present (windguruOmittedColumns rules) of
+      [] -> Nothing
+      names -> Just names
 
 compactForecasts :: WindguruRules -> [Either FailedForecast Forecast] -> Result Comparison
 compactForecasts rules results
@@ -449,7 +508,7 @@ compactForecasts rules results
         middle = (low + high + 1) `div` 2
         candidate = render middle
 
-normalizeReceived :: WindguruRules -> (Text -> UTCTime -> Result ZonedTime) -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> Received RawForecast -> Result Forecast
+normalizeReceived :: WindguruRules -> LocalZone -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> Received RawForecast -> Result Forecast
 normalizeReceived rules local now raw model start hours received = do
   value <- forecast rules local now (withZone local now raw) model start hours (receivedValue received)
   Right value {outRetrievedAt = iso (receivedAt received)}
@@ -469,46 +528,63 @@ beforeDeadline (Deadline end) action = do
       micros = floor (remaining * 1000000)
   timeout micros action
 
-forecastSet :: WindguruRules -> TimedSend -> IO UTCTime -> (Text -> UTCTime -> Result ZonedTime) -> IO (Result Text) -> SetArgs -> IO (Result Value)
-forecastSet rules send clock local readSet args = do
+parseSetId :: WindguruRules -> Text -> Result Int
+parseSetId rules value = case readMaybe (Text.unpack (Text.strip value)) of
+  Just ident | ident >= 1 && ident <= windguruSpotLimit rules -> Right ident
+  _ -> Left (failure "windguru_invalid_forecast_set_id")
+
+forecastSet :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> IO (Result Text) -> Window -> IO (Result Value)
+forecastSet rules send clock local readSet window = do
   deadline <- newDeadline (windguruHttpTimeout rules)
   saved <- beforeDeadline deadline readSet
-  either (pure . Left) (load deadline) (fromMaybe timedOut saved)
+  let selected = fromMaybe (Left (failure "windguru_timeout")) saved >>= parseSetId rules
+  either (pure . Left) (loadSet rules send clock local deadline window) selected
+
+loadSet :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline -> Window -> Int -> IO (Result Value)
+loadSet rules send clock local deadline window ident = do
+  let wire = request rules "forecast_set" [("set", Text.pack (show ident))]
+  response <- beforeDeadline deadline (fmap (>>= decodeSet rules) (send wire))
+  let decoded = fromMaybe (Left (failure "windguru_timeout")) response
+  either (pure . Left) retrieve decoded
   where
-    timedOut = Left (failure "windguru_timeout")
-    load deadline text = case readMaybe (Text.unpack (Text.strip text)) of
-      Nothing -> pure (Left (failure "windguru_invalid_forecast_set_id"))
-      Just ident | ident < 1 || ident > windguruSpotLimit rules -> pure (Left (failure "windguru_invalid_forecast_set_id"))
-      Just ident -> do
-        let parameter = Text.pack (show (ident :: Int))
-        response <- beforeDeadline deadline (fetchSet rules (request rules send "forecast_set" [("set", parameter)]))
-        either (pure . Left) (retrieve deadline ident) (fromMaybe (Left (failure "windguru_timeout")) response)
-    retrieve deadline ident received = do
+    retrieve received = do
       now <- clock
-      let value = receivedValue received
-          prepared = (,) <$> validateSet rules value <*> startTime rules now (setStart args)
-      either (pure . Left) (members deadline ident received) prepared
-    members deadline ident received (value, start) = do
-      let (selected, selection) = setEntries rules value
-      results <- boundedMap (windguruSetConcurrency rules) (member deadline value start) selected
-      let ended = any fst results
-          values = map snd results
-      pure (finishSet rules ident value (receivedAt received) start (setHours args) selection ended values)
-    member deadline value start (spotId, modelId, restricted) = case Map.lookup (Text.pack (show spotId)) (setDataSpots value) of
-      Nothing -> pure (False, Left (FailedForecast "error" "windguru_spot_not_found" modelId spotId (Spot spotId "" Nothing 0 0 Nothing "")))
-      Just raw -> fetchMember deadline raw start modelId restricted
-    fetchMember deadline raw start modelId restricted
-      | restricted = pure (False, Left (failed raw modelId "windguru_forecast_requires_login_or_pro"))
-      | modelId `notElem` map (round . numericValue) (rawModels raw) = pure (False, Left (failed raw modelId "windguru_model_unavailable_for_spot"))
-      | otherwise = do
-          let spotId = round (numericValue (rawIdSpot raw)) :: Int
-              params = [("id_spot", Text.pack (show spotId)), ("id_model", Text.pack (show modelId))]
-          response <- beforeDeadline deadline (fetch "windguru_invalid_response" (request rules send "forecast" params))
-          now <- clock
-          let decoded = fromMaybe (Left (failure "windguru_timeout")) response
-              result = decoded >>= normalizeReceived rules local now raw modelId start (setHours args)
-          pure (isNothing response, either (Left . failed raw modelId . failureCode) Right result)
-    failed raw modelId code = FailedForecast "error" code modelId (spotSpotId (spot rules raw)) (spot rules raw)
+      let prepared = validateSet rules (receivedValue received)
+          start = fromMaybe now (windowStart window)
+      either (pure . Left) (setMembers rules send clock local deadline ident (receivedAt received) start (windowHours window)) prepared
+
+setMembers :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline -> Int -> UTCTime -> UTCTime -> Int -> ForecastSet -> IO (Result Value)
+setMembers rules send clock local deadline ident retrieved start hours value = do
+  let (selected, selection) = setEntries rules value
+  results <- boundedMap (windguruSetConcurrency rules) (fetchMember rules send clock local deadline start hours) selected
+  let ended = any fst results
+      values = map snd results
+  pure (finishSet rules ident value retrieved start hours selection ended values)
+
+planMember :: WindguruRules -> SelectedPair -> Either FailedForecast Request
+planMember rules (raw, model, restricted)
+  | restricted = Left (failedForecast rules raw model "windguru_forecast_requires_login_or_pro")
+  | otherwise = either (Left . failedForecast rules raw model . failureCode) (const (Right wire)) (availableModel model raw)
+  where wire = forecastRequest rules (round (numericValue (rawIdSpot raw))) model
+
+fetchMember :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline -> UTCTime -> Int -> SelectedPair -> IO (Bool, Either FailedForecast Forecast)
+fetchMember rules send clock local deadline start hours selected@(raw, model, _) = case planMember rules selected of
+  Left issue -> pure (False, Left issue)
+  Right wire -> do
+    response <- beforeDeadline deadline (fetch "windguru_invalid_response" (send wire))
+    now <- clock
+    pure (memberResult rules local now raw model start hours response)
+
+memberResult :: WindguruRules -> LocalZone -> UTCTime -> RawSpot -> Int -> UTCTime -> Int -> Maybe (Result (Received RawForecast)) -> (Bool, Either FailedForecast Forecast)
+memberResult rules local now raw model start hours response = (isNothing response, either failed Right normalized)
+  where
+    decoded = fromMaybe (Left (failure "windguru_timeout")) response
+    normalized = decoded >>= normalizeReceived rules local now raw model start hours
+    failed = Left . failedForecast rules raw model . failureCode
+
+failedForecast :: WindguruRules -> RawSpot -> Int -> Text -> FailedForecast
+failedForecast rules raw model code = FailedForecast "error" code model (spotSpotId identity) identity
+  where identity = spot rules raw
 
 finishSet :: WindguruRules -> Int -> ForecastSet -> UTCTime -> UTCTime -> Int -> Selection -> Bool -> [Either FailedForecast Forecast] -> Result Value
 finishSet rules ident value now start hours selection ended results = do
@@ -521,9 +597,14 @@ finishSet rules ident value now start hours selection ended results = do
       updated = compact {compareSource = "windguru_public_forecast_set", compareRequestedStart = Just (iso start), compareRequestedEndExclusive = Just (iso finish), compareTruncated = cut}
       extra = SetExtra identity selection (iso now) successes failures (failures > 0 || cut) ended
       output = combine [toJSON updated, toJSON extra]
-  if referenceByteSize output > windguruResultBytes rules then Left (failure "windguru_forecast_set_result_too_large") else Right output
+  setBudget rules output
 
-windguru :: WindguruRules -> Send -> IO UTCTime -> (Text -> UTCTime -> Result ZonedTime) -> IO (Result Text) -> IO Execute
+setBudget :: WindguruRules -> Value -> Result Value
+setBudget rules output
+  | referenceByteSize output > windguruResultBytes rules = Left (failure "windguru_forecast_set_result_too_large")
+  | otherwise = Right output
+
+windguru :: WindguruRules -> Send -> IO UTCTime -> LocalZone -> IO (Result Text) -> IO Execute
 windguru rules send clock local readSet = do
   cached <- memoize (windguruCacheEntries rules) (windguruCacheSeconds rules) key retrieve
   pure (execute rules cached clock local readSet)
@@ -550,37 +631,39 @@ validSearch rules args
     invalid = Left (failure "windguru_invalid_arguments")
     validText cap value = let count = Text.length (Text.strip value) in count >= 2 && count <= cap && Text.all (\char -> char >= ' ' && char /= '\DEL') value
 
-validForecast :: WindguruRules -> ForecastArgs -> Result ForecastArgs
+validForecast :: WindguruRules -> ForecastArgs -> Result ForecastQuery
 validForecast rules args
   | argSpotIdForecast args < 1 || argSpotIdForecast args > windguruSpotLimit rules = invalid
   | argModelIdForecast args < 1 || argModelIdForecast args > windguruModelLimit rules = invalid
-  | argHours args < 1 || argHours args > windguruMaximumPoints rules = invalid
-  | otherwise = args <$ startTime rules epoch (argStart args)
-  where
-    invalid = Left (failure "windguru_invalid_arguments")
-    epoch = posixSecondsToUTCTime 0
+  | otherwise = ForecastQuery (argSpotIdForecast args) (argModelIdForecast args) <$> parseWindow rules (argHours args) (argStart args)
+  where invalid = Left (failure "windguru_invalid_arguments")
 
-execute :: WindguruRules -> TimedSend -> IO UTCTime -> (Text -> UTCTime -> Result ZonedTime) -> IO (Result Text) -> Execute
-execute rules send clock local readSet name arguments _ = case name of
-  "windguru_search_spots" -> parsed (validSearch rules) (search rules send)
-  "windguru_spot" -> parsed validSpot (metadata rules send local)
-  "windguru_forecast" -> parsed (validForecast rules) (getForecast rules send clock local)
-  "windguru_forecast_set" -> parsed validSet (forecastSet rules send clock local readSet)
-  _ -> pure (Left (failure "windguru_unknown_tool"))
+data WindguruRequest = SearchSpots SearchArgs | SpotMetadata Int | SpotForecast ForecastQuery | SavedForecasts Window
+
+parseRequest :: WindguruRules -> Text -> Value -> Result WindguruRequest
+parseRequest rules name arguments = case name of
+  "windguru_search_spots" -> SearchSpots <$> (decodeValue "windguru_invalid_arguments" arguments >>= validSearch rules)
+  "windguru_spot" -> SpotMetadata <$> (decodeValue "windguru_invalid_arguments" arguments >>= validSpot)
+  "windguru_forecast" -> SpotForecast <$> (decodeValue "windguru_invalid_arguments" arguments >>= validForecast rules)
+  "windguru_forecast_set" -> SavedForecasts <$> (decodeValue "windguru_invalid_arguments" arguments >>= validSet)
+  _ -> Left (failure "windguru_unknown_tool")
   where
     validSpot args
-      | argSpotId args >= 1 && argSpotId args <= windguruSpotLimit rules = Right args
+      | argSpotId args >= 1 && argSpotId args <= windguruSpotLimit rules = Right (argSpotId args)
       | otherwise = Left (failure "windguru_invalid_arguments")
-    validSet args
-      | setHours args >= 1 && setHours args <= windguruMaximumPoints rules = args <$ startTime rules (posixSecondsToUTCTime 0) (setStart args)
-      | otherwise = Left (failure "windguru_invalid_arguments")
-    parsed :: FromJSON a => (a -> Result a) -> (a -> IO (Result Value)) -> IO (Result Value)
-    parsed validate operation = either (pure . Left) bounded (decodeValue "windguru_invalid_arguments" arguments >>= validate)
-      where
-        bounded args
-          | name == "windguru_forecast_set" = operation args
-          | otherwise = fmap (fromMaybe (Left (failure "windguru_timeout"))) (timeout (windguruHttpTimeout rules * 1000000) (operation args))
+    validSet args = parseWindow rules (setHours args) (setStart args)
 
+execute :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> IO (Result Text) -> Execute
+execute rules send clock local readSet name arguments _ = either (pure . Left) run (parseRequest rules name arguments)
+  where
+    run (SearchSpots args) = bounded (search rules send args)
+    run (SpotMetadata ident) = bounded (metadata rules send local ident)
+    run (SpotForecast query) = bounded (getForecast rules send clock local query)
+    run (SavedForecasts window) = forecastSet rules send clock local readSet window
+    bounded operation = do
+      let micros = windguruHttpTimeout rules * 1000000
+      result <- timeout micros operation
+      pure (fromMaybe (Left (failure "windguru_timeout")) result)
 
 validNumericId :: Int -> Numeric -> Bool
 validNumericId cap value = number >= 1 && number <= fromIntegral cap && number == fromInteger (round number)
@@ -597,21 +680,21 @@ validateSpot rules ident value
 validateSet :: WindguruRules -> ForecastSet -> Result ForecastSet
 validateSet rules value
   | length tabs > windguruProviderRows rules = Left (failure "windguru_forecast_set_too_large")
-  | otherwise = value <$ traverse validateTab (zip [0 :: Int ..] tabs)
+  | otherwise = value <$ traverse (validateTab rules) (zip [0..] tabs)
+  where tabs = setDataTabs value
+
+validateTab :: WindguruRules -> (Int, SetTab) -> Result ()
+validateTab rules (index, tab)
+  | index < windguruMaximumSetPairs rules && not (all (maybe True validModel) optionalModels) = invalid
+  | null models || length models > windguruProviderRows rules || not (all validModel models) = invalid
+  | otherwise = Right ()
   where
-    tabs = setDataTabs value
-    validateTab (index, tab) = do
-      let spotId = tabIdSpot tab
-          models = map selectedIdModel (tabIdModelArr tab)
-          invalid = Left (failure "windguru_invalid_response")
-          optionalModels = [tabIdModel tab, tabIdModelWave tab]
-      if index < windguruMaximumSetPairs rules && not (all (maybe True (validNumericId (windguruModelLimit rules))) optionalModels) then invalid else Right ()
-      if validNumericId (windguruSpotLimit rules) spotId && not (null models) && length models <= windguruProviderRows rules && all (validNumericId (windguruModelLimit rules)) models then Right () else invalid
-      raw <- maybe (Left (failure "windguru_spot_not_found")) Right (Map.lookup (Text.pack (show (round (numericValue spotId) :: Int))) (setDataSpots value))
-      validateSpot rules (round (numericValue spotId)) raw
+    models = map selectedIdModel (tabIdModelArr tab)
+    optionalModels = [tabIdModel tab, tabIdModelWave tab]
+    validModel = validNumericId (windguruModelLimit rules)
+    invalid = Left (failure "windguru_invalid_response")
 
-
-withZone :: (Text -> UTCTime -> Result ZonedTime) -> UTCTime -> RawSpot -> RawSpot
+withZone :: LocalZone -> UTCTime -> RawSpot -> RawSpot
 withZone local now value = value {rawTzid = selected, rawTz = Nothing}
   where
     candidate = case rawTzid value of
@@ -620,19 +703,20 @@ withZone local now value = value {rawTzid = selected, rawTz = Nothing}
     selected = candidate >>= \zone -> either (const Nothing) (const (Just zone)) (local zone now)
 
 
-fetchSet :: WindguruRules -> IO (Result (Received Value)) -> IO (Result (Received ForecastSet))
-fetchSet rules = fmap (>>= decodeSet rules)
-
 decodeSet :: WindguruRules -> Received Value -> Result (Received ForecastSet)
 decodeSet rules received = do
   frame <- decodeValue "windguru_forecast_set_unavailable" (receivedValue received)
   tabs <- traverse (decodeValue "windguru_invalid_response") (frameTabs frame)
-  if all (validNumericId (windguruSpotLimit rules) . tabIdSpot) tabs then Right () else Left (failure "windguru_invalid_response")
-  let ids = nub (map (round . numericValue . tabIdSpot) tabs)
-  spots <- traverse (decodeSetSpot rules (frameSpots frame)) ids
+  ids <- traverse (setSpotId rules) tabs
+  spots <- traverse (decodeSetSpot rules (frameSpots frame)) (nub ids)
   let title = frameSet frame >>= parseMaybe parseJSON
       value = ForecastSet title (Map.fromList spots) tabs
   Right (Received value (receivedAt received))
+
+setSpotId :: WindguruRules -> SetTab -> Result Int
+setSpotId rules tab
+  | validNumericId (windguruSpotLimit rules) (tabIdSpot tab) = Right (round (numericValue (tabIdSpot tab)))
+  | otherwise = Left (failure "windguru_invalid_response")
 
 decodeSetSpot :: WindguruRules -> Map Text Value -> Int -> Result (Text, RawSpot)
 decodeSetSpot rules spots ident = do

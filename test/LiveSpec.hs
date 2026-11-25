@@ -139,26 +139,26 @@ spec = do
     let ready = End.EndContext True False False False False
         reason value = object ["reason" .= (value :: Text)]
     it "requires an explicit supported reason" $ do
-      End.checkEndRequest ready "end_call" (object []) `shouldSatisfy` isLeft
-      End.checkEndRequest ready "end_call" (reason "owner_requested") `shouldBe` Right End.OwnerRequested
+      End.parseEndReason (object []) `shouldSatisfy` isLeft
+      (End.parseEndReason (reason "owner_requested") >>= End.checkEndRequest ready) `shouldBe` Right End.OwnerRequested
     it "blocks inferred endings while notes or other tools are pending" $ do
       let busy = ready {End.endNotesPending = True}
-      End.checkEndRequest busy "end_call" (reason "conversation_complete") `shouldSatisfy` isLeft
-      End.checkEndRequest busy "end_call" (reason "owner_requested") `shouldBe` Right End.OwnerRequested
+      End.checkEndRequest busy End.ConversationComplete `shouldSatisfy` isLeft
+      End.checkEndRequest busy End.OwnerRequested `shouldBe` Right End.OwnerRequested
     it "does not end a public or natively bridged call" $ do
-      End.checkEndRequest (ready {End.endOwner = False}) "end_call" (reason "owner_requested") `shouldSatisfy` isLeft
-      End.checkEndRequest (ready {End.endPaused = True}) "end_call" (reason "owner_requested") `shouldSatisfy` isLeft
+      End.checkEndRequest (ready {End.endOwner = False}) End.OwnerRequested `shouldSatisfy` isLeft
+      End.checkEndRequest (ready {End.endPaused = True}) End.OwnerRequested `shouldSatisfy` isLeft
     it "preserves the call if the owner interrupts the farewell" $ do
       ended <- newIORef False
       let effects = End.EndEffects (\_ _ -> pure (Right False)) (writeIORef ended True >> pure (Right ())) (pure ())
           config = End.EndConfig "Goodbye" "Goodbye" 100000
-      _ <- End.executeEndCall config (pure ready) effects "end_call" (reason "owner_requested") "c1"
+      _ <- End.executeEndCall config (pure ready) effects End.OwnerRequested
       readIORef ended `shouldReturn` False
     it "still hangs up when the bounded farewell fails" $ do
       ended <- newIORef False
       let effects = End.EndEffects (\_ _ -> pure (Left (failure "provider_failed"))) (writeIORef ended True >> pure (Right ())) (pure ())
           config = End.EndConfig "Goodbye" "Goodbye" 100000
-      _ <- End.executeEndCall config (pure ready) effects "end_call" (reason "owner_requested") "c1"
+      _ <- End.executeEndCall config (pure ready) effects End.OwnerRequested
       readIORef ended `shouldReturn` True
   describe "streaming chat sentences" $ do
     let rules = Chat.ChunkRules 220 ["dr", "mr", "e.g", "i.e"]
@@ -300,9 +300,9 @@ exercisePin gate = do
   prompted <- newEmptyMVar
   retrying <- newEmptyMVar
   blocked <- newEmptyMVar
-  let send command = do
-        if command == String "prompt" then putMVar prompted () else putMVar retrying () >> takeMVar blocked
-        pure (Right ())
+  let send command = notify command >> pure (Right ())
+      notify (String "prompt") = putMVar prompted ()
+      notify _ = putMVar retrying () >> takeMVar blocked
   withAsync (Pin.prepareTool gate send "gmail_search") $ \worker -> do
     takeMVar prompted
     Pin.feedDigit gate "#"

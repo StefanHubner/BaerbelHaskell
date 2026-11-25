@@ -12,7 +12,7 @@ import Baerbel.Error (Failure(..), Result, failure, ioResult)
 import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newEmptyMVar, newMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Exception (bracketOnError, finally, onException)
-import Control.Monad (join, void)
+import Control.Monad (join, void, unless)
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, isNothing, fromMaybe)
@@ -117,25 +117,18 @@ encodeAction rules action identifier fields
     body = T.intercalate "\r\n" (map (\(key, value) -> key <> ": " <> value) pairs) <> "\r\n\r\n"
 
 readDelimited :: Socket -> ByteString -> Int -> IO (Result ByteString)
-readDelimited connection delimiter limit = go [] B.empty 0
-  where
-    go :: [ByteString] -> ByteString -> Int -> IO (Result ByteString)
-    go chunks ending size
-      | ending == delimiter = pure (Right (B.concat (reverse chunks)))
-      | size >= limit = pure (Left (failure "ami_event_limit"))
-      | otherwise = readNext connection delimiter limit chunks ending size
+readDelimited connection delimiter limit = readNext connection delimiter limit [] B.empty 0
 
 readNext :: Socket -> ByteString -> Int -> [ByteString] -> ByteString -> Int -> IO (Result ByteString)
-readNext connection delimiter limit chunks ending size = do
-  byte <- N.recv connection 1
-  let next = B.takeEnd (B.length delimiter) (ending <> byte)
-  if B.null byte then pure (Left (failure "ami_disconnected")) else continue byte next
-  where
-    continue :: ByteString -> ByteString -> IO (Result ByteString)
-    continue byte next
-      | next == delimiter = pure (Right (B.concat (reverse (byte : chunks))))
-      | size + 1 >= limit = pure (Left (failure "ami_event_limit"))
-      | otherwise = readNext connection delimiter limit (byte : chunks) next (size + 1)
+readNext connection delimiter limit chunks ending size
+  | ending == delimiter = pure (Right (B.concat (reverse chunks)))
+  | size >= limit = pure (Left (failure "ami_event_limit"))
+  | otherwise = do
+    byte <- N.recv connection 1
+    let next = B.takeEnd (B.length delimiter) (ending <> byte)
+    case B.uncons byte of
+      Nothing -> pure (Left (failure "ami_disconnected"))
+      Just _ -> readNext connection delimiter limit (byte : chunks) next (size + 1)
 
 readMessage :: AMIRules -> Socket -> IO (Result Message)
 readMessage rules connection = do
@@ -151,21 +144,21 @@ actionResponse rules complete previous message
   | isNothing complete && not (T.null (field "Response" message)) = Right (Just [message])
   | otherwise = Right Nothing
 
-advance :: AMIRules -> Message -> Pending -> IO (Maybe Pending)
+data ActionProgress = ActionPending Pending | ActionFinished (Result [Message])
+
+advance :: AMIRules -> Message -> Pending -> ActionProgress
 advance rules message pending = case actionResponse rules (pendingComplete pending) (pendingEvents pending) message of
-  Left problem -> finish pending (Left problem)
-  Right (Just result) -> finish pending (Right result)
-  Right Nothing -> pure (Just (appendEvent message pending))
+  Left problem -> ActionFinished (Left problem)
+  Right (Just result) -> ActionFinished (Right result)
+  Right Nothing -> ActionPending (appendEvent message pending)
 
 appendEvent :: Message -> Pending -> Pending
 appendEvent message pending
   | isNothing (pendingComplete pending) || T.null (field "Event" message) = pending
   | otherwise = pending { pendingEvents = message : pendingEvents pending }
 
-finish :: Pending -> Result [Message] -> IO (Maybe Pending)
-finish pending result = do
-  void (tryPutMVar (pendingResult pending) result)
-  pure Nothing
+finish :: Pending -> Result [Message] -> IO ()
+finish pending result = void (tryPutMVar (pendingResult pending) result)
 
 notify :: AMIRules -> Requests -> Message -> IO ()
 notify rules requests message = modifyMVar_ requests update
@@ -175,9 +168,9 @@ notify rules requests message = modifyMVar_ requests update
     update :: Map Text Pending -> IO (Map Text Pending)
     update pending = maybe (pure pending) (advancePending pending) (M.lookup identifier pending)
     advancePending :: Map Text Pending -> Pending -> IO (Map Text Pending)
-    advancePending pending pendingRequest = do
-      result <- advance rules message pendingRequest
-      pure (maybe (M.delete identifier pending) (\value -> M.insert identifier value pending) result)
+    advancePending pending pendingRequest = case advance rules message pendingRequest of
+      ActionPending value -> pure (M.insert identifier value pending)
+      ActionFinished result -> finish pendingRequest result >> pure (M.delete identifier pending)
 
 disconnect :: Requests -> IO ()
 disconnect requests = modifyMVar_ requests clear
@@ -185,7 +178,7 @@ disconnect requests = modifyMVar_ requests clear
     clear :: Map Text Pending -> IO (Map Text Pending)
     clear pending = mapM_ failRequest (M.elems pending) >> pure M.empty
     failRequest :: Pending -> IO ()
-    failRequest pending = void (finish pending (Left (failure "ami_disconnected")))
+    failRequest pending = finish pending (Left (failure "ami_disconnected"))
 
 readEvents :: AMIRules -> Socket -> Requests -> (Message -> IO ()) -> IO ()
 readEvents rules connection requests observe = loop `finally` closed
@@ -196,20 +189,20 @@ readEvents rules connection requests observe = loop `finally` closed
     receive (Left _) = pure ()
     receive (Right message) = do
       notify rules requests message
-      if T.null (field "Event" message) then pure () else observe message
+      unless (T.null (field "Event" message)) (observe message)
       loop
     closed :: IO ()
     closed = disconnect requests >> observe (Message (M.singleton "Event" "AMIConnectionClosed") M.empty)
 
 request :: AMIRules -> Socket -> Requests -> MVar Int -> Text -> [(Text, Text)] -> Maybe Text -> IO (Result [Message])
 request rules connection requests sequenceId action fields complete = do
-  identifier <- modifyMVar sequenceId nextId
+  identifier <- modifyMVar sequenceId (pure . nextId)
   case encodeAction rules action identifier fields of
     Left problem -> pure (Left problem)
     Right payload -> submit rules connection requests identifier complete payload
   where
-    nextId :: Int -> IO (Int, Text)
-    nextId current = pure (current + 1, T.pack (show current))
+    nextId :: Int -> (Int, Text)
+    nextId current = (current + 1, T.pack (show current))
 
 submit :: AMIRules -> Socket -> Requests -> Text -> Maybe Text -> ByteString -> IO (Result [Message])
 submit rules connection requests identifier complete payload = do
@@ -270,13 +263,11 @@ connectAMI rules username password observe = do
     verify connection = do
       let bound = amiMessageBytes rules + 1
       banner <- timeout (amiBannerMicros rules) (ioResult "ami_disconnected" (readDelimited connection "\n" bound))
-      if validBanner banner then startAMI rules connection username password observe else reject connection
+      case banner of
+        Just (Right (Right bytes)) | B.isPrefixOf "Asterisk Call Manager/" bytes -> startAMI rules connection username password observe
+        _ -> reject connection
     reject :: Socket -> IO (Result AMI)
     reject connection = close connection >> pure (Left (failure "ami_invalid_banner"))
-
-validBanner :: Maybe (Result (Result ByteString)) -> Bool
-validBanner (Just (Right (Right bytes))) = B.isPrefixOf "Asterisk Call Manager/" bytes
-validBanner _ = False
 
 ownerChannel :: AMIRules -> Text -> [Message] -> Result Channel
 ownerChannel rules identifier messages = selectChannel "ami_call_not_found" "ami_invalid_channel" validName matches

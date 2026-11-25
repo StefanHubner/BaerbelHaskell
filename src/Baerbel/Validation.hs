@@ -47,7 +47,9 @@ invalid :: Text -> Result a
 invalid key = Left (failure ("invalid_setting:" <> key))
 
 require :: Text -> Bool -> Result ()
-require key valid = if valid then Right () else invalid key
+require key valid
+  | valid = Right ()
+  | otherwise = invalid key
 
 within :: Bounds -> Double -> Bool
 within bounds value = not (isNaN value || isInfinite value) && value >= boundsMinimum bounds && maybe True (value <=) (boundsMaximum bounds)
@@ -88,6 +90,7 @@ dependency settings rules
       >> traverse_ flag (dependencyFlags rules) >> traverse_ equal (Map.toList (dependencyValues rules))
   where
   key = dependencyKey rules
-  enabled = if dependencyBoolean rules then booleanSetting settings key == Right True else not (Text.null (setting settings key))
+  enabled | dependencyBoolean rules = booleanSetting settings key == Right True
+          | otherwise = not (Text.null (setting settings key))
   flag name = require name (booleanSetting settings name == Right True)
   equal (name, value) = require name (setting settings name == value)

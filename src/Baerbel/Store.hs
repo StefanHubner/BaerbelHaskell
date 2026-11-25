@@ -5,12 +5,12 @@ import Control.Monad (join)
 import Baerbel.Storage (atomicWrite)
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
 import Baerbel.JSON (argumentOptions, decodeUniqueIntegers, encodeBytes, jsonOptions)
-import Baerbel.Profile (ProfileState(..), ProfileStore, emptyProfile, validKey, validValue)
+import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile, validKey, validValue)
 import Baerbel.ProviderConfig (ProfileRules(..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (newMVar, withMVar)
 import Control.Exception (IOException, bracket, try)
-import Data.Aeson (FromJSON(..), Value, genericParseJSON)
+import Data.Aeson (FromJSON(..), genericParseJSON)
 import qualified Data.ByteString as Bytes
 import Data.Bits ((.&.))
 import Data.Char (isPrint, isAscii, isDigit)
@@ -43,8 +43,14 @@ profileStore :: ProfileRules -> StoreRules -> FilePath -> IO (Result ProfileStor
 profileStore profileRules rules path = do
   checked <- validateProfileFile profileRules rules path
   gate <- newMVar ()
-  let operation transition = withMVar gate (const (locked profileRules rules path transition))
-  pure (operation <$ checked)
+  let operation step = withMVar gate (const (locked profileRules rules path step))
+      store = ProfileStore (readCurrentProfile profileRules rules path) operation
+  pure (store <$ checked)
+
+readCurrentProfile :: ProfileRules -> StoreRules -> FilePath -> IO (Result ProfileState)
+readCurrentProfile profileRules rules path = do
+  owner <- inspectOwner path
+  either (pure . Left) (readProfile profileRules rules path) owner
 
 validateProfileFile :: ProfileRules -> StoreRules -> FilePath -> IO (Result ())
 validateProfileFile profileRules rules path = do
@@ -54,19 +60,29 @@ validateProfileFile profileRules rules path = do
 validatePath :: FilePath -> IO (Result UserID)
 validatePath path
   | not (isAbsolute path) || ".." `elem` splitDirectories path || not (all isPrint path) = pure (Left (failure "profile_invalid_path"))
-  | otherwise = fmap join (ioResult "profile_storage_unavailable" inspect)
+  | otherwise = inspectOwner path
+
+inspectOwner :: FilePath -> IO (Result UserID)
+inspectOwner path = fmap join (ioResult "profile_storage_unavailable" inspect)
   where
-  parent = takeDirectory path
-  inspect = do
-    ancestors <- traverse getSymbolicLinkStatus (parents parent)
-    metadata <- getFileStatus parent
-    effective <- getEffectiveUserID
-    let safe = not (any isSymbolicLink ancestors) && isDirectory metadata && permissions metadata == 0o700
-          && (effective == 0 || effective == fileOwner metadata)
-    pure (if safe then Right (fileOwner metadata) else Left (failure "profile_unsafe_storage"))
+    parent = takeDirectory path
+    inspect = do
+      ancestors <- traverse getSymbolicLinkStatus (parents parent)
+      metadata <- getFileStatus parent
+      profileOwner ancestors metadata <$> getEffectiveUserID
+
+profileOwner :: [FileStatus] -> FileStatus -> UserID -> Result UserID
+profileOwner ancestors metadata effective
+  | safe = Right (fileOwner metadata)
+  | otherwise = Left (failure "profile_unsafe_storage")
+  where
+    safe = not (any isSymbolicLink ancestors) && isDirectory metadata && permissions metadata == 0o700
+      && (effective == 0 || effective == fileOwner metadata)
 
 parents :: FilePath -> [FilePath]
-parents path = path : if parent == path then [] else parents parent
+parents path
+  | parent == path = [path]
+  | otherwise = path : parents parent
   where parent = takeDirectory path
 
 permissions :: FileStatus -> System.Posix.Types.FileMode
@@ -76,26 +92,32 @@ privateRegular :: UserID -> Bool -> FileStatus -> Bool
 privateRegular owner unlinked metadata = isRegularFile metadata && fileOwner metadata == owner
   && permissions metadata == 0o600 && (linkCount metadata == 1 || unlinked && linkCount metadata == 0)
 
-locked :: ProfileRules -> StoreRules -> FilePath -> (ProfileState -> Result (ProfileState, Value)) -> IO (Result Value)
+locked :: ProfileRules -> StoreRules -> FilePath -> (ProfileState -> Result (ProfileState, a)) -> IO (Result a)
 locked profileRules rules path operation = do
-  owner <- validatePath path
+  owner <- inspectOwner path
   either (pure . Left) protect owner
   where
   flags = defaultFileFlags {creat = Just 0o600, nofollow = True, nonBlock = True, cloexec = True}
   protect uid = fmap join (ioResult "profile_storage_unavailable" (bracket (openFd (path ++ ".lock") ReadWrite flags) closeFd (run uid)))
-  run uid descriptor = do
-    metadata <- getFdStatus descriptor
-    if privateRegular uid False metadata then acquire uid descriptor else pure (Left (failure "profile_unsafe_storage"))
+  run uid descriptor = withPrivateDescriptor uid False descriptor (acquire uid descriptor)
   acquire uid descriptor = do
     obtained <- timeout (storeLockMicros rules) (awaitLock rules descriptor)
     maybe (pure (Left (failure "profile_busy_try_again"))) (const (update profileRules rules path uid operation)) obtained
 
-awaitLock :: StoreRules -> Fd -> IO ()
-awaitLock rules descriptor@(Fd raw) = do
-  status <- fileLock raw 6
-  if status == 0 then pure () else threadDelay (storePollMicros rules) >> awaitLock rules descriptor
+withPrivateDescriptor :: UserID -> Bool -> Fd -> IO (Result a) -> IO (Result a)
+withPrivateDescriptor owner unlinked descriptor action = getFdStatus descriptor >>= use
+  where
+    use metadata
+      | privateRegular owner unlinked metadata = action
+      | otherwise = pure (Left (failure "profile_unsafe_storage"))
 
-update :: ProfileRules -> StoreRules -> FilePath -> UserID -> (ProfileState -> Result (ProfileState, Value)) -> IO (Result Value)
+awaitLock :: StoreRules -> Fd -> IO ()
+awaitLock rules descriptor@(Fd raw) = fileLock raw 6 >>= continue
+  where
+    continue 0 = pure ()
+    continue _ = threadDelay (storePollMicros rules) >> awaitLock rules descriptor
+
+update :: ProfileRules -> StoreRules -> FilePath -> UserID -> (ProfileState -> Result (ProfileState, a)) -> IO (Result a)
 update profileRules rules path uid operation = do
   previous <- readProfile profileRules rules path uid
   either (pure . Left) (persist rules path) (previous >>= apply)
@@ -112,15 +134,23 @@ readProfile profileRules rules path owner = fmap join (ioResult "profile_storage
     either missing (\descriptor -> bracket (pure descriptor) closeFd readOwned) opened
   flags = defaultFileFlags {nofollow = True, nonBlock = True, cloexec = True}
   missing :: IOException -> IO (Result ProfileState)
-  missing issue = pure (if isDoesNotExistError issue then Right emptyProfile else Left (failure "profile_storage_unavailable"))
-  readOwned descriptor = do
-    metadata <- getFdStatus descriptor
-    if privateRegular owner True metadata then readBytes descriptor else pure (Left (failure "profile_unsafe_storage"))
+  missing issue = pure (missingProfile issue)
+  readOwned descriptor = withPrivateDescriptor owner True descriptor (readBytes descriptor)
   readBytes descriptor = do
     copy <- dup descriptor
     let bound = storeMaximumBytes rules + 1
     raw <- bracket (fdToHandle copy) hClose (`Bytes.hGet` bound)
-    pure (if Bytes.length raw > storeMaximumBytes rules then Left (failure "profile_invalid_state") else decodeState profileRules raw)
+    pure (boundedState profileRules rules raw)
+
+missingProfile :: IOException -> Result ProfileState
+missingProfile issue
+  | isDoesNotExistError issue = Right emptyProfile
+  | otherwise = Left (failure "profile_storage_unavailable")
+
+boundedState :: ProfileRules -> StoreRules -> Bytes.ByteString -> Result ProfileState
+boundedState profileRules rules raw
+  | Bytes.length raw > storeMaximumBytes rules = Left (failure "profile_invalid_state")
+  | otherwise = decodeState profileRules raw
 
 decodeState :: ProfileRules -> Bytes.ByteString -> Result ProfileState
 decodeState rules raw = decodeUniqueIntegers "profile_invalid_state" raw >>= validateState rules
@@ -152,11 +182,16 @@ validTimestamp value = shaped && seconds < "60" && maybe False positiveYear pars
     positiveYear :: UTCTime -> Bool
     positiveYear time = let (year, _, _) = toGregorian (utctDay time) in year > 0
 
-persist :: StoreRules -> FilePath -> (ProfileState, ProfileState, Value) -> IO (Result Value)
+persist :: StoreRules -> FilePath -> (ProfileState, ProfileState, a) -> IO (Result a)
 persist rules path (previous, next, result)
   | previous == next = pure (Right result)
   | Bytes.length bytes > storeMaximumBytes rules = pure (Left (failure "profile_storage_limit_reached"))
   | otherwise = fmap (either rejected (const (Right result))) (atomicWrite path bytes)
   where
   bytes = encodeBytes next <> "\n"
-  rejected issue = Left issue {failureCode = if failureUncertain issue then "profile_update_outcome_unknown_check_profile_before_retry" else "profile_storage_unavailable"}
+  rejected issue = Left issue {failureCode = storageFailure issue}
+
+storageFailure :: Failure -> Text
+storageFailure issue
+  | failureUncertain issue = "profile_update_outcome_unknown_check_profile_before_retry"
+  | otherwise = "profile_storage_unavailable"

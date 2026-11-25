@@ -72,11 +72,13 @@ runStep :: IORef [Transcript] -> IORef [(Text, Text)] -> IORef [Value]
 runStep snapshots deliveries logs execute busy close step = do
   let initial = transcript (stepSnapshot step)
       later = maybe initial transcript (stepLater step)
-      final = if stepSettled step then later else later {transcriptNow = transcriptLastDelta later}
+      final | stepSettled step = later
+            | otherwise = later {transcriptNow = transcriptLastDelta later}
   writeIORef snapshots [initial, final]
   writeIORef logs []
-  if stepTool step == "__close" then close else
-    execute (stepTool step) (stepArguments step) "same-request" `shouldReturn` Right (stepExpected step)
+  let run | stepTool step == "__close" = close
+          | otherwise = execute (stepTool step) (stepArguments step) "same-request" `shouldReturn` Right (stepExpected step)
+  run
   busy `shouldReturn` stepPending step
   readIORef deliveries `shouldReturn` stepDeliveries step
   readIORef logs `shouldReturn` stepLogs step

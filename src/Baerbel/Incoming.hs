@@ -49,18 +49,23 @@ reasons :: [Text]
 reasons = ["personal", "business", "delivery", "urgent", "uncertain", "marketing", "suspected_scam", "wrong_number", "caller_declined"]
 
 screenDecision :: Bool -> KM.KeyMap Value -> Result Decision
-screenDecision messageOnly fields = do
-  choice <- textField "decision" fields
-  reason <- textField "reason" fields
-  name <- optionalText "caller_name" 40 fields
-  summary <- optionalText "summary" 160 fields
-  let allowedFields = keys fields `elem` [sort ["decision", "reason"], sort ["decision", "reason", "caller_name", "summary"]]
-  if allowedFields && reason `elem` reasons then choose messageOnly choice reason name summary else Left (failure "invalid_screening_decision")
+screenDecision messageOnly fields
+  | keys fields `notElem` allowed = Left (failure "invalid_screening_decision")
+  | otherwise = do
+      choice <- textField "decision" fields
+      reason <- textField "reason" fields
+      name <- optionalText "caller_name" 40 fields
+      summary <- optionalText "summary" 160 fields
+      choose messageOnly choice reason name summary
+  where allowed = [sort ["decision", "reason"], sort ["decision", "reason", "caller_name", "summary"]]
 
 choose :: Bool -> Text -> Text -> Text -> Text -> Result Decision
-choose _ "decline" reason name summary = Right (Decline reason name summary)
-choose False "forward" reason name summary = Right (Forward reason name summary)
-choose _ _ _ _ _ = Left (failure "invalid_screening_decision")
+choose messageOnly choice reason name summary
+  | reason `notElem` reasons = Left (failure "invalid_screening_decision")
+  | otherwise = case choice of
+      "decline" -> Right (Decline reason name summary)
+      "forward" | not messageOnly -> Right (Forward reason name summary)
+      _ -> Left (failure "invalid_screening_decision")
 
 keys :: KM.KeyMap Value -> [Text]
 keys = sort . map K.toText . KM.keys
@@ -151,7 +156,8 @@ handoffLine rules name summary known = introduction <> detail
     cleaned :: Text
     cleaned = cleanHandoff 40 name
     named :: Text
-    named = if T.toCaseFold cleaned `elem` handoffUnknownNames rules then "" else cleaned
+    named | T.toCaseFold cleaned `elem` handoffUnknownNames rules = ""
+          | otherwise = cleaned
     who :: Text
     who
       | T.null named = handoffUnknown rules
@@ -162,7 +168,10 @@ handoffLine rules name summary known = introduction <> detail
     summaryText :: Text
     summaryText = cleanHandoff 160 summary
     detail :: Text
-    detail = if T.null summaryText || known then "" else T.replace "{detail}" (T.dropWhileEnd (`elem` (".!?…" :: String)) summaryText) (handoffDetail rules)
+    detail | T.null summaryText || known = ""
+           | otherwise = T.replace "{detail}" sentence (handoffDetail rules)
+    sentence :: Text
+    sentence = T.dropWhileEnd (`elem` (".!?…" :: String)) summaryText
 
 callerDisplayName :: Bool -> Text -> Maybe Text
 callerDisplayName firstOnly input
@@ -172,12 +181,15 @@ callerDisplayName firstOnly input
     cleaned :: Text
     cleaned = T.unwords (T.words input)
     name :: Text
-    name = if firstOnly then T.takeWhile (/= ' ') cleaned else cleaned
+    name | firstOnly = T.takeWhile (/= ' ') cleaned
+         | otherwise = cleaned
     allowed :: Char -> Bool
     allowed char = isAlpha char || char `elem` (" '-’" :: String)
 
 updateField :: K.Key -> (Value -> Value) -> KM.KeyMap Value -> KM.KeyMap Value
-updateField key transform = KM.fromList . map update . KM.toList
+updateField key transform = KM.mapWithKey update
   where
-    update :: (K.Key, Value) -> (K.Key, Value)
-    update (name, value) = (name, if name == key then transform value else value)
+    update :: K.Key -> Value -> Value
+    update name value
+      | name == key = transform value
+      | otherwise = value

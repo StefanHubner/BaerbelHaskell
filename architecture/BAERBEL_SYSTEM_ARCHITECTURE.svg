@@ -164,7 +164,7 @@
 <title>pure</title>
 <path fill="#ffffff" stroke="#527fa5" stroke-width="2" d="M969.5,-638.5C969.5,-638.5 604.5,-638.5 604.5,-638.5 598.5,-638.5 592.5,-632.5 592.5,-626.5 592.5,-626.5 592.5,-553.5 592.5,-553.5 592.5,-547.5 598.5,-541.5 604.5,-541.5 604.5,-541.5 969.5,-541.5 969.5,-541.5 975.5,-541.5 981.5,-547.5 981.5,-553.5 981.5,-553.5 981.5,-626.5 981.5,-626.5 981.5,-632.5 975.5,-638.5 969.5,-638.5"/>
 <text text-anchor="middle" x="787" y="-612" font-family="DejaVu Sans" font-size="15.00">Pure decisions and typed data</text>
-<text text-anchor="middle" x="787" y="-595" font-family="DejaVu Sans" font-size="15.00">Routing · call transitions · tool validation</text>
+<text text-anchor="middle" x="787" y="-595" font-family="DejaVu Sans" font-size="15.00">Typed commands · call transitions · routing</text>
 <text text-anchor="middle" x="787" y="-578" font-family="DejaVu Sans" font-size="15.00">Transcript selection · protocol reduction</text>
 <text text-anchor="middle" x="787" y="-561" font-family="DejaVu Sans" font-size="15.00">JSON codecs · provider normalization</text>
 </g>
@@ -182,7 +182,7 @@
 <path fill="#eef4fa" stroke="#728397" stroke-width="1.4" d="M555,-456.5C555,-456.5 219,-456.5 219,-456.5 213,-456.5 207,-450.5 207,-444.5 207,-444.5 207,-395.5 207,-395.5 207,-389.5 213,-383.5 219,-383.5 219,-383.5 555,-383.5 555,-383.5 561,-383.5 567,-389.5 567,-395.5 567,-395.5 567,-444.5 567,-444.5 567,-450.5 561,-456.5 555,-456.5"/>
 <text text-anchor="middle" x="387" y="-433.5" font-family="DejaVu Sans" font-size="15.00">Shared provider capabilities</text>
 <text text-anchor="middle" x="387" y="-416.5" font-family="DejaVu Sans" font-size="15.00">Gmail · Calendar · Contacts</text>
-<text text-anchor="middle" x="387" y="-399.5" font-family="DejaVu Sans" font-size="15.00">Maps · Windguru · local profile</text>
+<text text-anchor="middle" x="387" y="-399.5" font-family="DejaVu Sans" font-size="15.00">Maps · Windguru · shared profile store</text>
 </g>
 <!-- notifications -->
 <g id="node11" class="node">

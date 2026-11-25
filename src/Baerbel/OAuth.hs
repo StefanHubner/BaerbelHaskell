@@ -70,12 +70,18 @@ loadCredentials rules required allowed path = do
     readBounded :: Handle -> IO (Result BS.ByteString)
     readBounded handle = do
       size <- hFileSize handle
-      if size > fromIntegral (oauthCredentialBytes rules) then pure (Left (failure "invalid_credentials")) else readBytes handle
+      either (pure . Left) (const (readBytes handle)) (credentialSize rules size)
     readBytes :: Handle -> IO (Result BS.ByteString)
     readBytes handle = do
       let limit = oauthCredentialBytes rules + 1
       bytes <- BS.hGet handle limit
-      pure (if BS.length bytes > oauthCredentialBytes rules then Left (failure "invalid_credentials") else Right bytes)
+      let size = fromIntegral (BS.length bytes)
+      pure (bytes <$ credentialSize rules size)
+
+credentialSize :: OAuthRules -> Integer -> Result ()
+credentialSize rules size
+  | size > fromIntegral (oauthCredentialBytes rules) = Left (failure "invalid_credentials")
+  | otherwise = Right ()
 
 validateCredentials :: OAuthRules -> Set Text -> Set Text -> Value -> Result Credentials
 validateCredentials rules required allowed value = decodeValue "invalid_credentials" value >>= validate
@@ -113,14 +119,15 @@ cachedToken _ _ = Nothing
 
 refresh :: Send -> OAuthRules -> Set Text -> Set Text -> Credentials -> IO Double -> Cached -> IO (Cached, Result Text)
 refresh sender rules required allowed credentials clock cached = do
-  response <- sender (refreshRequest rules credentials)
+  let request = refreshRequest rules credentials
+  response <- sender request
   now <- clock
   let result = response >>= validateTokenValue rules required allowed
-  pure (store now cached result)
-  where
-    store :: Double -> Cached -> Result (Text, Int) -> (Cached, Result Text)
-    store _ previous (Left problem) = (previous, Left problem {failureUncertain = False})
-    store now _ (Right (value, lifetime)) = (Just (value, now + fromIntegral lifetime), Right value)
+  pure (storeToken now cached result)
+
+storeToken :: Double -> Cached -> Result (Text, Int) -> (Cached, Result Text)
+storeToken _ previous (Left problem) = (previous, Left problem {failureUncertain = False})
+storeToken now _ (Right (value, lifetime)) = (Just (value, now + fromIntegral lifetime), Right value)
 
 refreshRequest :: OAuthRules -> Credentials -> Request
 refreshRequest rules credentials = Request "POST" (oauthEndpoint rules) [] [] body (oauthResponseBytes rules) (oauthTimeoutSeconds rules)
@@ -157,9 +164,10 @@ checkAccess _ _ = Left (failure "invalid_access_token")
 
 tokenLifetime :: Int -> Maybe Value -> Result Int
 tokenLifetime fallback Nothing = Right fallback
-tokenLifetime _ (Just (Number value)) = boundedInteger (truncate value)
-tokenLifetime _ (Just (Bool value)) = Right (if value then 1 else 0)
-tokenLifetime _ (Just (String value)) = maybe invalid boundedInteger parsed
+tokenLifetime _ (Just (Number value)) = Right (boundedInteger (truncate value))
+tokenLifetime _ (Just (Bool True)) = Right 1
+tokenLifetime _ (Just (Bool False)) = Right 0
+tokenLifetime _ (Just (String value)) = maybe invalid (Right . boundedInteger) parsed
   where
     raw :: Text
     raw = Text.strip value
@@ -172,5 +180,5 @@ tokenLifetime _ _ = Left (failure "invalid_token_expiry")
 fromMaybePlus :: Text -> Text
 fromMaybePlus value = fromMaybe value (Text.stripPrefix "+" value)
 
-boundedInteger :: Integer -> Result Int
-boundedInteger value = Right (fromInteger (min (toInteger (maxBound :: Int)) (max (toInteger (minBound :: Int)) value)))
+boundedInteger :: Integer -> Int
+boundedInteger value = fromInteger (min (toInteger (maxBound :: Int)) (max (toInteger (minBound :: Int)) value))

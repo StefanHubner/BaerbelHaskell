@@ -318,11 +318,9 @@ readMessage rules send ident format = fetch "gmail_invalid_response" request
     request = get (gmailHttp rules) send url params
 
 search :: GmailRules -> Send -> SearchArgs -> IO (Result Value)
-search rules send args
-  | searchLimit args < 1 || searchLimit args > gmailSearchLimit rules = pure (Left (failure "invalid_search_limit"))
-  | otherwise = do
-      page <- fetch "gmail_invalid_response" request
-      either (pure . Left) complete page
+search rules send args = do
+  page <- fetch "gmail_invalid_response" request
+  either (pure . Left) complete page
   where
     url = gmailBase rules <> "/messages"
     count = Text.pack (show (searchLimit args))
@@ -368,13 +366,21 @@ readThread rules send args = runExceptT $ do
     params = [textParam "format" "full"]
     finish thread = do
       let messages = fromMaybe [] (threadMessages thread)
-      dated <- except (traverse (\message -> (,) <$> internalDate message <*> pure message) messages)
-      let ordered = map snd (sortOn (Down . fst) dated)
-      limited <- collectMessages rules (gmailThreadBytes rules) (take (gmailThreadMessages rules) ordered)
-      let more = length limited < length messages
-          truncated = more || any snd limited
-          output = ThreadResult "ok" ident (reverse (map fst limited)) more truncated (gmailThreadScope rules) True
-      pure (toJSON output)
+      ordered <- except (orderMessages messages)
+      let selected = take (gmailThreadMessages rules) ordered
+      limited <- collectMessages rules (gmailThreadBytes rules) selected
+      pure (threadResult rules ident (length messages) limited)
+
+orderMessages :: [Message] -> Result [Message]
+orderMessages messages = map snd . sortOn (Down . fst) <$> traverse dated messages
+  where dated message = (, message) <$> internalDate message
+
+threadResult :: GmailRules -> Text -> Int -> [(Value, Bool)] -> Value
+threadResult rules ident total limited = toJSON output
+  where
+    more = length limited < total
+    truncated = more || any snd limited
+    output = ThreadResult "ok" ident (reverse (map fst limited)) more truncated (gmailThreadScope rules) True
 
 collectMessages :: GmailRules -> Int -> [Message] -> Decode [(Value, Bool)]
 collectMessages _ _ [] = pure []
@@ -452,9 +458,8 @@ sendMail :: GmailRules -> Send -> IO UTCTime -> Text -> SendArgs -> IO (Result V
 sendMail rules send clock requestId args = do
   sender <- account rules send
   now <- clock
-  let recipients = traverse address (nub (sendTo args))
-      operation origin dests = mail rules send origin dests (sendSubject args) (sendBody args) now requestId Nothing
-  either (pure . Left) id (operation <$> sender <*> recipients)
+  let operation origin = mail rules send origin (sendTo args) (sendSubject args) (sendBody args) now requestId Nothing
+  either (pure . Left) operation sender
 
 replyMail :: GmailRules -> Send -> IO UTCTime -> Text -> ReplyArgs -> IO (Result Value)
 replyMail rules send clock requestId args = runExceptT $ do

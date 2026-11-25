@@ -21,13 +21,13 @@ Owner and public listeners use separate managed-media registries. An incoming so
 
 Owner ingress retains the original loopback/Asterisk trust boundary. It is not new independent caller authentication. The existing keypad PIN applies to the configured protected email tools. Keep this limitation explicit when describing deployments.
 
-Each call owns provider reference caches and conversation state. Account credentials and refresh caches are shared within the service scope. Accepted profile operations drain their scoped worker. Accepted note/message sends have independent bounded lifetimes and drain before their underlying sender and ledger close. Async cancellation is never translated into a retry. Unknown provider outcomes remain durable and non-retryable.
+Each call owns provider reference caches and conversation state. Account credentials, refresh caches and one prepared profile store are shared within the service scope. Pure shared service descriptions are distinct from factories that allocate call-local resources. Accepted profile operations drain their scoped worker. Accepted note/message sends have independent bounded lifetimes and drain before their underlying sender and ledger close. Async cancellation is never translated into a retry. Unknown provider outcomes remain durable and non-retryable.
 
 ## Persistence
 
 SQLite is used for receipts and positions, not as a conversational database: Gmail sends, Calendar creates, SMS notifications and the PBX event-feed cursor. The schemas and request fingerprints preserve compatibility with the Python version. A reservation is written before a side effect. A duplicate can return the existing receipt without repeating the side effect. Calendar checks an existing receipt before scanning conflicts.
 
-The saved profile remains a private JSON document with atomic replacement. Its existing directory/file ownership, mode and link restrictions are preserved. Saved values are reference facts, never permissions. Note audio comes from the existing Asterisk mixed-call WAV. Notes select an excerpt rather than starting a second recorder; only the VAD remainder and bounded transcript history are retained in memory.
+The saved profile remains a private JSON document with atomic replacement. Typed read and update capabilities share one prepared store; reads obtain a coherent descriptor snapshot without creating a mutation lock or reading the clock. Context and Windguru consume typed profile state directly. Its existing directory/file ownership, mode and link restrictions are preserved. Saved values are reference facts, never permissions. Note audio comes from the existing Asterisk mixed-call WAV. Notes select an excerpt rather than starting a second recorder; only the VAD remainder and bounded transcript history are retained in memory.
 
 ## Deployment boundary
 
@@ -44,6 +44,10 @@ The shared HTTP manager disables automatic request replay and environment proxie
 - `Cache` supplies successful-once and bounded memoization functions. Credentials are cached at account scope; provider references and owner addresses are cached at call scope.
 - `Storage` owns private-file and atomic-write mechanics. `Ledger` is reused by Gmail, Calendar and owner notes; `SMS` retains its distinct existing receipt schema.
 - `MIME`, `MailContent` and `Encoder` share message construction, standard charset conversion, HTML extraction and MP3 encoding between ordinary mail and owner notes.
+
+Tool payloads are decoded at their input boundary into typed commands and prepared requests. Calendar dates, Maps requests, Windguru windows and recording intervals are prepared once and reused by the effectful steps. Help is a pure value computed when the call's available tools are assembled; it has no internal tool-name or unused-argument checks. Internal direct-call modes, hangup reasons and end-call reasons are algebraic data types.
+
+Pure functions now handle audio framing, stream preparation, transcript reduction, PIN state transitions, message admission, cursor positions and reconnect outcomes. The surrounding I/O functions read the required state, execute the selected operation and commit the result. Generic codecs and shared result constructors handle routine JSON envelopes.
 
 Functional state transitions return new values and decisions. Their small I/O callers commit the state or execute the selected operation. Library exceptions are converted to typed failures at operational boundaries; asynchronous cancellation retains its resource-cleanup meaning.
 

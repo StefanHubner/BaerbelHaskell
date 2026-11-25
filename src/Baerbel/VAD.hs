@@ -31,8 +31,9 @@ openVAD mode = alloca createAt
   where
   createAt location = do
     status <- create location
-    if status /= 0 then pure unavailable else peek location >>= configure mode
-  unavailable = Left (failure "vad_unavailable")
+    created location status
+  created location 0 = peek location >>= configure mode
+  created _ _ = pure (Left (failure "vad_unavailable"))
 
 configure :: Int -> Ptr () -> IO (Result VAD)
 configure mode pointer = do
@@ -43,10 +44,12 @@ resetVAD :: VAD -> Int -> IO (Result ())
 resetVAD (VAD pointer) mode = do
   initialized <- initialize pointer
   selected <- setMode pointer selectedMode
-  pure (if initialized == 0 && selected == 0 then Right () else failed)
-  where
-  selectedMode = fromIntegral mode
-  failed = Left (failure "vad_initialization_failed")
+  pure (initializedVAD initialized selected)
+  where selectedMode = fromIntegral mode
+
+initializedVAD :: CInt -> CInt -> Result ()
+initializedVAD 0 0 = Right ()
+initializedVAD _ _ = Left (failure "vad_initialization_failed")
 
 isSpeech :: VAD -> Int -> ByteString -> IO (Result Bool)
 isSpeech (VAD pointer) rate audio = BS.useAsCStringLen audio classify

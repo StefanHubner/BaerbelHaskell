@@ -39,7 +39,9 @@ checkNative settings = case pinValid of
   Right () -> withVAD 2 (\vad -> isSpeech vad 8000 silence >>= checkResampling)
   where
   pin = setting settings "PHONE_ASSISTANT_PRIVATE_PIN_HASH"
-  pinValid = if Text.null pin then Right () else void (parsePinHash pin)
+  pinValid
+    | Text.null pin = Right ()
+    | otherwise = void (parsePinHash pin)
   silence = Bytes.replicate 320 0
   checkResampling = either (pure . Left) (const (withResampler 8000 24000 converted))
   converted resampler = do
@@ -57,7 +59,9 @@ runApplication :: Settings -> IO (Result ())
 runApplication settings = withLogging logPath (withShutdown . start)
   where
   configuredPath = setting settings "PHONE_ASSISTANT_LOG_FILE"
-  logPath = if Text.null configuredPath then Nothing else Just (Text.unpack configuredPath)
+  logPath
+    | Text.null configuredPath = Nothing
+    | otherwise = Just (Text.unpack configuredPath)
   start output = do
     checked <- checkNative settings
     either (pure . Left) (const (withServices settings (serveConfigured output))) checked
@@ -121,7 +125,9 @@ serverConfiguration settings output incoming owner = do
   where
   enabledPort flag key = do
     enabled <- booleanSetting settings flag
-    if enabled then Just <$> rule settings "runtime" key else Right Nothing
+    optionalPort enabled key
+  optionalPort False _ = Right Nothing
+  optionalPort True key = Just <$> rule settings "runtime" key
 
 withShutdown :: IO (Result ()) -> IO (Result ())
 withShutdown action = do

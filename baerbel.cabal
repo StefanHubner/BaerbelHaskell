@@ -306,6 +306,8 @@ test-suite baerbel-test
       AuthSpec
       BoundarySpec
       CalendarSpec
+      ConfigPathsSpec
+      ContactsSpec
       CoreSpec
       EventsSpec
       GmailSpec

@@ -215,10 +215,11 @@ awaitSettled rules effects = timeout duration loop
       | otherwise = threadDelay (notePollMicros rules) >> loop
 
 readState :: MVar Cell -> Transcript -> IO NoteState
-readState cell transcript = modifyMVar cell update
-  where
-    update current = let state = synchronize transcript (cellState current)
-                     in pure (current {cellState = state}, state)
+readState cell transcript = modifyMVar cell (pure . synchronizeCell transcript)
+
+synchronizeCell :: Transcript -> Cell -> (Cell, NoteState)
+synchronizeCell transcript current = (current {cellState = state}, state)
+  where state = synchronize transcript (cellState current)
 
 start :: NoteRules -> NoteEffects -> MVar Cell -> Text -> IO Reply
 start rules effects cell phrase = do
@@ -310,12 +311,13 @@ deliver rules effects prepared = do
 
 close :: NoteEffects -> MVar Cell -> IO ()
 close effects cell = do
-  worker <- modifyMVar cell stop
+  worker <- modifyMVar cell (pure . closeCell)
   noteReset effects
   traverse_ (void . wait) worker
-  where
-    stop current = let updated = (cellState current) {noteClosed = True, noteSelection = Nothing}
-                   in pure (current {cellState = updated}, cellTask current)
+
+closeCell :: Cell -> (Cell, Maybe (Async Value))
+closeCell current = (current {cellState = updated}, cellTask current)
+  where updated = (cellState current) {noteClosed = True, noteSelection = Nothing}
 
 notes :: NoteRules -> NoteEffects -> IO (Execute, IO Bool, IO ())
 notes rules effects = do

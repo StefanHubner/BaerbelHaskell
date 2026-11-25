@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Baerbel.Maps (maps, placeDetails) where
 
 import Baerbel.TimeFormat (isoUtc)
@@ -11,7 +12,7 @@ import Baerbel.OpeningHours (Hours, openingHours, hoursAvailable)
 import Baerbel.MapTypes
 import Baerbel.MapsRoute (route)
 import Baerbel.Provider
-import Baerbel.ProviderConfig (MapsRules(..), RouteRules, HttpPolicy(..))
+import Baerbel.ProviderConfig (MapsRules(..), RouteRules)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar, readMVar)
 import Crypto.Random (getRandomBytes)
 import Data.Aeson hiding (Result)
@@ -105,33 +106,44 @@ data NeedsContext = NeedsContext
   { contextStatus :: Text, contextError :: Text, contextMessage :: Text, contextAreaCandidates :: Maybe [AreaCandidate] } deriving (Generic)
 instance ToJSON NeedsContext where toJSON = genericToJSON ((jsonOptions 7) {omitNothingFields = True})
 
-geocode :: MapsRules -> Send -> Text -> IO (Result [Geocode])
-geocode rules send query = fmap (fmap (fromMaybe [] . geoResults)) operation
+geocodeRequest :: MapsRules -> Text -> Request
+geocodeRequest rules query = Request "GET" (mapsGeocodeUrl rules) [] params EmptyBody (mapsHttpBytes rules) (mapsHttpTimeout rules)
   where
     params = [textParam "address" query, textParam "language" (mapsLanguage rules), textParam "region" (mapsGeocodeRegion rules)]
-    policy = HttpPolicy (mapsHttpBytes rules) (mapsHttpTimeout rules)
-    operation = fetch "maps_invalid_place_response" (get policy send (mapsGeocodeUrl rules) params)
+
+geocode :: MapsRules -> Send -> Text -> IO (Result [Geocode])
+geocode rules send query = fmap (fmap (fromMaybe [] . geoResults)) response
+  where
+    request = geocodeRequest rules query
+    response = fetch "maps_invalid_place_response" (send request)
 
 areaBias :: MapsRules -> Geocode -> Bias
 areaBias rules geo = case geometryViewport geometry of
-  Nothing -> circle
-  Just viewport -> let low = point (viewSouthwest viewport); high = point (viewNortheast viewport)
-                       width = if longitude high >= longitude low then longitude high - longitude low else longitude high + 360 - longitude low
-                   in if latitude low <= latitude high && width <= 180 then Bias Nothing (Just (Rectangle low high)) else circle
+  Just viewport | latitude low <= latitude high && width <= 180 -> Bias Nothing (Just (Rectangle low high))
+    where
+      low = point (viewSouthwest viewport)
+      high = point (viewNortheast viewport)
+      width
+        | longitude high >= longitude low = longitude high - longitude low
+        | otherwise = longitude high + 360 - longitude low
+  _ -> Bias (Just (Circle center (mapsBiasRadius rules))) Nothing
   where
     geometry = geoGeometry geo
     center = point (geometryLocation geometry)
-    circle = Bias (Just (Circle center (mapsBiasRadius rules))) Nothing
 
 placeCandidate :: MapsRules -> (Text -> Text) -> GooglePlace -> Result (Place, Candidate)
 placeCandidate rules redact value = validateCandidate rules place candidate
   where
     label = fromMaybe (googleFormattedAddress value) (googleDisplayName value >>= labelText)
-    name = if Text.null label then address else Text.take (mapsNameChars rules) (redact label)
+    name
+      | Text.null label = address
+      | otherwise = Text.take (mapsNameChars rules) (redact label)
     address = Text.take (mapsAddressChars rules) (redact (googleFormattedAddress value))
     place = Place (googleId value) name address (googleLocation value)
     approximate = any (`elem` mapsApproximateTypes rules) (fromMaybe [] (googleTypes value))
-    precision = if approximate then "STREET_OR_AREA_LOCATION" else "PLACE_LOCATION"
+    precision
+      | approximate = "STREET_OR_AREA_LOCATION"
+      | otherwise = "PLACE_LOCATION"
     candidate = Candidate "" name address "google_places" precision (Nullable Nothing) approximate (warning rules approximate)
 
 geoCandidate :: MapsRules -> (Text -> Text) -> Geocode -> Result (Place, Candidate)
@@ -169,99 +181,158 @@ saveCandidate rules places (place, candidate) = do
   bytes <- getRandomBytes (mapsReferenceBytes rules) :: IO ByteString
   let ident = "place_" <> Text.decodeUtf8 (Base64.encode bytes)
       result = candidate {candidateRef = ident}
-      save current = pure (current {storedPlaces = insertBounded (mapsReferenceLimit rules) ident place (storedPlaces current)}, result)
-  modifyMVar places save
+      save current = (current {storedPlaces = insertBounded (mapsReferenceLimit rules) ident place (storedPlaces current)}, result)
+  modifyMVar places (pure . save)
 
-lookupArea :: MapsRules -> (Text -> Text) -> Send -> Places -> Text -> IO (Result [Geocode])
+data AreaResolution = ResolvedArea Geocode | AreaChoices [AreaCandidate]
+
+resolveArea :: MapsRules -> (Text -> Text) -> [Geocode] -> Result AreaResolution
+resolveArea rules redact values = case values of
+  [value] | geoPartialMatch value /= Just True -> do
+    valid <- validateAreaViewport value
+    _ <- geoCandidate rules redact valid
+    Right (ResolvedArea valid)
+  _ -> AreaChoices . map areaCandidate <$> traverse (geoCandidate rules redact) selected
+  where
+    selected = take (mapsCandidateLimit rules) values
+    areaCandidate (_, candidate) = AreaCandidate (candidateAddress candidate) (candidatePartialMatch candidate) (candidatePrecision candidate)
+
+validateAreaViewport :: Geocode -> Result Geocode
+validateAreaViewport value
+  | validViewport value = Right value
+  | otherwise = Left (failure "maps_invalid_place_response")
+
+lookupArea :: MapsRules -> (Text -> Text) -> Send -> Places -> Text -> IO (Result AreaResolution)
 lookupArea rules redact send state text = do
   current <- readMVar state
-  let key = Text.toCaseFold text
-  maybe fetchArea (pure . Right . pure) (Map.lookup key (fst (storedAreas current)))
-  where
-    fetchArea = do
+  case Map.lookup key (fst (storedAreas current)) of
+    Just value -> pure (Right (ResolvedArea value))
+    Nothing -> do
       response <- geocode rules send text
-      either (pure . Left) validate response
-    validate [value] | geoPartialMatch value /= Just True && not (validViewport value) = pure (Left (failure "maps_invalid_place_response"))
-    validate values = either (pure . Left) (const (remember values)) (traverse (geoCandidate rules redact) (take (mapsCandidateLimit rules) values))
-    remember values@[value] | geoPartialMatch value /= Just True = do
-      let key = Text.toCaseFold text
-          save current = pure (current {storedAreas = insertBounded (mapsAreaLimit rules) key value (storedAreas current)}, Right values)
-      modifyMVar state save
-    remember values = pure (Right values)
+      either (pure . Left) remember (response >>= resolveArea rules redact)
+  where
+    key = Text.toCaseFold text
+    remember result@(ResolvedArea value) = modifyMVar state (pure . save)
+      where save current = (current {storedAreas = insertBounded (mapsAreaLimit rules) key value (storedAreas current)}, Right result)
+    remember result = pure (Right result)
 
-findPlace :: MapsRules -> (Text -> Text) -> Send -> Places -> FindArgs -> IO (Result Value)
-findPlace rules redact send places args
-  | Text.toCaseFold area `elem` mapsAmbiguousAreas rules = pure (Right (toJSON (NeedsContext "error" "needs_context" (mapsLocationPrompt rules) Nothing)))
-  | invalid (findQuery args) (mapsQueryChars rules) || invalid (findArea args) (mapsAreaChars rules) = pure (Left (failure "maps_invalid_arguments"))
-  | otherwise = do
-      found <- lookupArea rules redact send places area
-      either (pure . Left) search found
+data FindPlan = FindContext NeedsContext | FindQuery Text Text
+
+planFind :: MapsRules -> FindArgs -> Result FindPlan
+planFind rules args
+  | Text.toCaseFold area `elem` mapsAmbiguousAreas rules = Right (FindContext (NeedsContext "error" "needs_context" (mapsLocationPrompt rules) Nothing))
+  | invalid (findQuery args) (mapsQueryChars rules) || invalid (findArea args) (mapsAreaChars rules) = Left (failure "maps_invalid_arguments")
+  | otherwise = Right (FindQuery area (Text.strip (findQuery args) <> ", " <> area))
   where
     area = Text.strip (findArea args)
-    query = Text.strip (findQuery args)
-    textQuery = query <> ", " <> area
     invalid text cap = Text.null (Text.strip text) || Text.length text > cap || Text.any (\char -> char < ' ' || char == '\DEL') text
-    search values = either (pure . Left) (searchValidated values) (traverse (geoCandidate rules redact) (take (mapsCandidateLimit rules) values))
-    searchValidated [value] _ | geoPartialMatch value /= Just True = searchArea value
-    searchValidated _ candidates = pure (Right (toJSON (NeedsContext "error" "needs_context" (mapsAreaPrompt rules) (Just (map areaCandidate candidates)))))
-    areaCandidate (_, candidate) = AreaCandidate (candidateAddress candidate) (candidatePartialMatch candidate) (candidatePrecision candidate)
-    searchArea value
-      | not (validViewport value) = pure (Left (failure "maps_invalid_place_response"))
-      | otherwise = do
-          let resource = SearchRequest textQuery (mapsLanguage rules) (mapsPlacesRegion rules) (mapsCandidateLimit rules) (areaBias rules value)
-              fields = Text.encodeUtf8 (mapsSearchFields rules)
-              request = Request "POST" (mapsPlacesUrl rules) [("X-Goog-FieldMask", fields)] [] (JsonBody (toJSON resource)) (mapsHttpBytes rules) (mapsHttpTimeout rules)
-          response <- fetch "maps_invalid_place_response" (send request)
-          either (pure . Left) (resolve value) response
-    resolve value response = case fromMaybe [] (pagePlaces response) of
-      [] -> do
-        fallback <- geocode rules send textQuery
-        either (pure . Left) (finishGeocodes value) fallback
-      items -> finish value (maybe False (not . Text.null) (pageNextPageToken response) || length items > mapsCandidateLimit rules) (traverse (placeCandidate rules redact) (take (mapsCandidateLimit rules) items))
-    finishGeocodes value items = finish value (length items > mapsCandidateLimit rules) (traverse (geoCandidate rules redact) (take (mapsCandidateLimit rules) items))
-    finish value more = either (pure . Left) (saveAll value more)
-    saveAll value more candidates = do
-      saved <- traverse (saveCandidate rules places) candidates
-      let count = length saved
-          result = FindResult "ok" saved count more (count > 0) (Text.take (mapsAddressChars rules) (redact (geoFormattedAddress value))) "Google Maps" True
-      pure (Right (toJSON result))
+
+findPlace :: MapsRules -> (Text -> Text) -> Send -> Places -> FindArgs -> IO (Result Value)
+findPlace rules redact send places args = case planFind rules args of
+  Left issue -> pure (Left issue)
+  Right (FindContext result) -> pure (Right (toJSON result))
+  Right (FindQuery area query) -> do
+    found <- lookupArea rules redact send places area
+    either (pure . Left) (searchArea rules redact send places query) found
+
+searchRequest :: MapsRules -> Text -> Geocode -> Request
+searchRequest rules query area = Request "POST" (mapsPlacesUrl rules) [("X-Goog-FieldMask", fields)] [] body (mapsHttpBytes rules) (mapsHttpTimeout rules)
+  where
+    resource = SearchRequest query (mapsLanguage rules) (mapsPlacesRegion rules) (mapsCandidateLimit rules) (areaBias rules area)
+    body = JsonBody (toJSON resource)
+    fields = Text.encodeUtf8 (mapsSearchFields rules)
+
+searchArea :: MapsRules -> (Text -> Text) -> Send -> Places -> Text -> AreaResolution -> IO (Result Value)
+searchArea rules _ _ _ _ (AreaChoices candidates) = pure (Right (toJSON result))
+  where result = NeedsContext "error" "needs_context" (mapsAreaPrompt rules) (Just candidates)
+searchArea rules redact send places query (ResolvedArea area) = do
+  let request = searchRequest rules query area
+  response <- fetch "maps_invalid_place_response" (send request)
+  either (pure . Left) resolve (response >>= placeCandidates rules redact)
+  where
+    resolve Nothing = do
+      fallback <- geocode rules send query
+      either (pure . Left) save (fallback >>= geocodeCandidates rules redact)
+    resolve (Just candidates) = save candidates
+    save = savePlaces rules redact places area
+
+placeCandidates :: MapsRules -> (Text -> Text) -> PlacePage -> Result (Maybe (Bool, [(Place, Candidate)]))
+placeCandidates rules redact response = case fromMaybe [] (pagePlaces response) of
+  [] -> Right Nothing
+  items -> Just . (more,) <$> traverse (placeCandidate rules redact) selected
+    where
+      selected = take (mapsCandidateLimit rules) items
+      more = maybe False (not . Text.null) (pageNextPageToken response) || length items > mapsCandidateLimit rules
+
+geocodeCandidates :: MapsRules -> (Text -> Text) -> [Geocode] -> Result (Bool, [(Place, Candidate)])
+geocodeCandidates rules redact items = (more,) <$> traverse (geoCandidate rules redact) selected
+  where
+    selected = take (mapsCandidateLimit rules) items
+    more = length items > mapsCandidateLimit rules
+
+savePlaces :: MapsRules -> (Text -> Text) -> Places -> Geocode -> (Bool, [(Place, Candidate)]) -> IO (Result Value)
+savePlaces rules redact places area (more, candidates) = do
+  saved <- traverse (saveCandidate rules places) candidates
+  pure (Right (toJSON (findResult rules redact area more saved)))
+
+findResult :: MapsRules -> (Text -> Text) -> Geocode -> Bool -> [Candidate] -> FindResult
+findResult rules redact area more candidates = FindResult "ok" candidates count more (count > 0) address "Google Maps" True
+  where
+    count = length candidates
+    address = Text.take (mapsAddressChars rules) (redact (geoFormattedAddress area))
 
 placeDetails :: MapsRules -> (Text -> Text) -> Send -> IO UTCTime -> Text -> Place -> IO (Result Value)
 placeDetails rules redact send clock reference place = do
+  let request = detailsRequest rules place
   response <- fetch "maps_invalid_place_response" (send request)
   now <- clock
-  pure (response >>= finish now)
+  pure (response >>= normalizeDetails rules redact now reference place)
+
+detailsRequest :: MapsRules -> Place -> Request
+detailsRequest rules place = Request "GET" url [("X-Goog-FieldMask", fields)] params EmptyBody (mapsHttpBytes rules) (mapsHttpTimeout rules)
   where
     encoded = Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 (placeId place)))
     url = mapsDetailsUrl rules <> encoded
     fields = Text.encodeUtf8 (mapsDetailsFields rules)
     params = [textParam "languageCode" (mapsLanguage rules), textParam "regionCode" (mapsPlacesRegion rules)]
-    request = Request "GET" url [("X-Goog-FieldMask", fields)] params EmptyBody (mapsHttpBytes rules) (mapsHttpTimeout rules)
-    finish now value
-      | detailId value /= placeId place = Left (failure "maps_place_details_mismatch")
-      | otherwise = do
-          offset <- traverse (decodeValue "maps_invalid_hours_response") (detailUtcOffsetMinutes value)
-          if maybe False (\minutes -> abs minutes >= mapsOffsetLimit rules) offset then Left (failure "maps_invalid_hours_response") else Right ()
-          rawCurrent <- traverse (decodeValue "maps_invalid_hours_response") (detailCurrentOpeningHours value)
-          rawRegular <- traverse (decodeValue "maps_invalid_hours_response") (detailRegularOpeningHours value)
-          current <- openingHours rules redact rawCurrent
-          regular <- openingHours rules redact rawRegular
-          let schedules = [current, regular]
-              available = any (maybe False hoursAvailable) schedules
-              reason = if available then Nothing else Just "opening_hours_not_provided"
-              status = if available then "available" else "unavailable"
-              output = Details "ok" reference name address "Google Maps Places API" fetched status (Nullable current) (Nullable regular)
-                (Nullable business) (Nullable zone) (Nullable offset) (Nullable phone) (Nullable number) True reason
-          Right (toJSON output)
-      where
-        label = fromMaybe "" (detailDisplayName value >>= labelText)
-        name = if Text.null label then placeLabel place else Text.take (mapsNameChars rules) (redact label)
-        address = maybe (placeAddress place) (Text.take (mapsAddressChars rules) . redact) (detailFormattedAddress value)
-        fetched = isoUtc now
-        phone = Text.take (mapsPhoneChars rules) . redact <$> detailInternationalPhoneNumber value
-        number = phone >>= canonical
-        business = detailBusinessStatus value >>= parseMaybe parseJSON >>= \status -> if status `elem` mapsBusinessStatuses rules then Just status else Nothing
-        zone = Text.take (mapsZoneChars rules) . redact . zoneId <$> (detailTimeZone value >>= parseMaybe parseJSON)
+
+normalizeDetails :: MapsRules -> (Text -> Text) -> UTCTime -> Text -> Place -> DetailResponse -> Result Value
+normalizeDetails rules redact now reference place value
+  | detailId value /= placeId place = Left (failure "maps_place_details_mismatch")
+  | otherwise = do
+    offset <- traverse (decodeOffset rules) (detailUtcOffsetMinutes value)
+    rawCurrent <- traverse (decodeValue "maps_invalid_hours_response") (detailCurrentOpeningHours value)
+    rawRegular <- traverse (decodeValue "maps_invalid_hours_response") (detailRegularOpeningHours value)
+    current <- openingHours rules redact rawCurrent
+    regular <- openingHours rules redact rawRegular
+    let (status, reason) = hoursStatus [current, regular]
+        output = Details "ok" reference name address "Google Maps Places API" (isoUtc now) status (Nullable current) (Nullable regular)
+          (Nullable business) (Nullable zone) (Nullable offset) (Nullable phone) (Nullable number) True reason
+    Right (toJSON output)
+  where
+    label = fromMaybe "" (detailDisplayName value >>= labelText)
+    name
+      | Text.null label = placeLabel place
+      | otherwise = Text.take (mapsNameChars rules) (redact label)
+    address = maybe (placeAddress place) (Text.take (mapsAddressChars rules) . redact) (detailFormattedAddress value)
+    phone = Text.take (mapsPhoneChars rules) . redact <$> detailInternationalPhoneNumber value
+    number = phone >>= canonical
+    business = case detailBusinessStatus value >>= parseMaybe parseJSON of
+      Just status | status `elem` mapsBusinessStatuses rules -> Just status
+      _ -> Nothing
+    zone = Text.take (mapsZoneChars rules) . redact . zoneId <$> (detailTimeZone value >>= parseMaybe parseJSON)
+
+decodeOffset :: MapsRules -> Value -> Result Int
+decodeOffset rules value = decodeValue "maps_invalid_hours_response" value >>= valid
+  where
+    valid minutes
+      | abs minutes >= mapsOffsetLimit rules = Left (failure "maps_invalid_hours_response")
+      | otherwise = Right minutes
+
+hoursStatus :: [Maybe Hours] -> (Text, Maybe Text)
+hoursStatus schedules
+  | any (maybe False hoursAvailable) schedules = ("available", Nothing)
+  | otherwise = ("unavailable", Just "opening_hours_not_provided")
 
 canonical :: Text -> Maybe Text
 canonical supplied = case Text.uncons value of
@@ -301,7 +372,9 @@ apiSend rules send request = fmap (>>= apiResponse rules) (send request)
 apiResponse :: MapsRules -> Value -> Result Value
 apiResponse rules value = do
   envelope <- decodeValue "maps_invalid_response" value
-  if maybe False truthy (apiError envelope) then Left (failure "maps_api_error") else check (apiStatus envelope)
+  case apiError envelope of
+    Just issue | truthy issue -> Left (failure "maps_api_error")
+    _ -> check (apiStatus envelope)
   where
     check Nothing = Right value
     check (Just (String status)) | status `elem` ["OK", "ZERO_RESULTS"] = Right value

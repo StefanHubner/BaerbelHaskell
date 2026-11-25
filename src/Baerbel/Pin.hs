@@ -9,6 +9,7 @@ import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar_)
 import Control.Concurrent.STM
 import Control.Exception (evaluate, mask, finally)
+import Control.Monad (when, unless)
 import Crypto.Hash (SHA256(..))
 import Crypto.KDF.PBKDF2 (Parameters(..), generate, prfHMAC)
 import Data.Aeson (Value)
@@ -48,10 +49,8 @@ parsePinHash :: Text -> Result PinHash
 parsePinHash encoded = case T.splitOn ":" encoded of
   ["pbkdf2_sha256", "600000", saltText, expectedText]
     | T.length saltText == 32 && T.length expectedText == 64
-      && T.all lowerHex (saltText <> expectedText) -> do
-        salt <- decodeHex saltText
-        expected <- decodeHex expectedText
-        pure (PinHash 600000 salt expected)
+      && T.all lowerHex (saltText <> expectedText) ->
+      PinHash 600000 <$> decodeHex saltText <*> decodeHex expectedText
   _ -> Left (failure "invalid_private_pin_hash")
   where
     lowerHex char = char `elem` ("0123456789abcdef" :: String)
@@ -71,10 +70,13 @@ keypadStep :: Int -> BS.ByteString -> PinState -> (PinState, Maybe BS.ByteString
 keypadStep limit digit state
   | pinUnlocked state = (state, Nothing)
   | digit == "*" = (emptyPinState, Nothing)
-  | digit == "#" = (emptyPinState, if pinOverflow state then Just BS.empty else Just (pinDigits state))
+  | digit == "#" = (emptyPinState, Just submitted)
   | BS.length digit /= 1 || digit < "0" || digit > "9" = (state, Nothing)
   | BS.length (pinDigits state) >= limit = (state { pinOverflow = True }, Nothing)
   | otherwise = (state { pinDigits = pinDigits state <> digit }, Nothing)
+  where
+    submitted | pinOverflow state = BS.empty
+              | otherwise = pinDigits state
 
 newPinGate :: PinConfig -> IO (Result PinGate)
 newPinGate cfg
@@ -119,10 +121,12 @@ handleDigit :: PinConfig -> PinHash -> TVar PinState -> TVar Integer -> TVar Boo
 handleDigit cfg encoded state deadline closed notifier checking task digit = do
   active <- isCollecting state deadline closed
   busy <- readTVarIO checking
-  if not active || busy then pure () else do
-    submission <- atomically (applyDigit (pinMaximumDigits cfg) state digit)
-    let verify digits = launchCheck closed checking task (checkSubmission cfg encoded state deadline closed notifier digits)
-    maybe (pure ()) verify submission
+  when (active && not busy) submit
+  where
+    submit = do
+      submission <- atomically (applyDigit (pinMaximumDigits cfg) state digit)
+      let verify digits = launchCheck closed checking task (checkSubmission cfg encoded state deadline closed notifier digits)
+      maybe (pure ()) verify submission
 
 launchCheck :: TVar Bool -> TVar Bool -> PinTask -> IO () -> IO ()
 launchCheck closed checking task action = mask $ \restore ->
@@ -131,22 +135,24 @@ launchCheck closed checking task action = mask $ \restore ->
 startCheck :: TVar Bool -> TVar Bool -> IO () -> Maybe (Async ()) -> IO (Maybe (Async ()))
 startCheck closed checking action previous = do
   allowed <- atomically (claimCheck closed checking)
-  if not allowed then pure previous else do
-    let cleanup = atomically (writeTVar checking False)
-    Just <$> async (finally action cleanup)
+  let start | allowed = Just <$> async (finally action cleanup)
+            | otherwise = pure previous
+      cleanup = atomically (writeTVar checking False)
+  start
 
 claimCheck :: TVar Bool -> TVar Bool -> STM Bool
 claimCheck closed checking = do
   stopped <- readTVar closed
   busy <- readTVar checking
-  if stopped || busy then pure False else writeTVar checking True >> pure True
+  let allowed = not (stopped || busy)
+  when allowed (writeTVar checking True)
+  pure allowed
 
 applyDigit :: Int -> TVar PinState -> BS.ByteString -> STM (Maybe BS.ByteString)
-applyDigit limit state digit = do
-  current <- readTVar state
-  let (updated, submission) = keypadStep limit digit current
-  writeTVar state updated
-  pure submission
+applyDigit limit state digit = stateTVar state apply
+  where
+    apply current = let (updated, submission) = keypadStep limit digit current
+                    in (submission, updated)
 
 checkSubmission :: PinConfig -> PinHash -> TVar PinState -> TVar Integer -> TVar Bool -> TVar (Maybe (Value -> IO (Result ()))) -> BS.ByteString -> IO ()
 checkSubmission cfg encoded state deadline closed notifier digits = do
@@ -157,15 +163,24 @@ checkSubmission cfg encoded state deadline closed notifier digits = do
   verified <- evaluate checked
   atomically $ do
     stopped <- readTVar closed
-    writeTVar state (emptyPinState { pinUnlocked = verified && not stopped })
-    writeTVar deadline (if verified || stopped then 0 else renewed)
-  if verified then pure () else notifyIncorrect cfg state deadline closed notifier
+    let (updated, expires) = verifiedState renewed verified stopped
+    writeTVar state updated
+    writeTVar deadline expires
+  unless verified (notifyIncorrect cfg state deadline closed notifier)
+
+verifiedState :: Integer -> Bool -> Bool -> (PinState, Integer)
+verifiedState renewed verified stopped = (emptyPinState {pinUnlocked = verified && not stopped}, expires)
+  where
+    expires | verified || stopped = 0
+            | otherwise = renewed
 
 notifyIncorrect :: PinConfig -> TVar PinState -> TVar Integer -> TVar Bool -> TVar (Maybe (Value -> IO (Result ()))) -> IO ()
 notifyIncorrect cfg state deadline closed notifier = do
   send <- readTVarIO notifier
   stopped <- readTVarIO closed
-  result <- if stopped then pure (Right ()) else maybe (pure (Left (failure "pin_unavailable"))) (\notify -> notify (pinIncorrect cfg)) send
+  let notify | stopped = pure (Right ())
+             | otherwise = maybe (pure (Left (failure "pin_unavailable"))) ($ pinIncorrect cfg) send
+  result <- notify
   case result of
     Right () -> pure ()
     Left _ -> atomically (writeTVar state emptyPinState >> writeTVar deadline 0)
@@ -174,9 +189,11 @@ protectTool :: PinConfig -> TVar PinState -> TVar Integer -> TVar Bool -> (Value
 protectTool cfg state deadline closed send name = do
   current <- readTVarIO state
   stopped <- readTVarIO closed
-  if stopped then pure (Left (failure "pin_unavailable")) else
-    if pinUnlocked current || not (any (`T.isPrefixOf` name) (pinPrefixes cfg))
-      then pure (Right ()) else requestPin cfg state deadline closed send
+  let protect
+        | stopped = pure (Left (failure "pin_unavailable"))
+        | pinUnlocked current || not (any (`T.isPrefixOf` name) (pinPrefixes cfg)) = pure (Right ())
+        | otherwise = requestPin cfg state deadline closed send
+  protect
 
 requestPin :: PinConfig -> TVar PinState -> TVar Integer -> TVar Bool -> (Value -> IO (Result ())) -> IO (Result ())
 requestPin cfg state deadline closed send = do
@@ -198,12 +215,19 @@ awaitPin :: TVar PinState -> TVar Bool -> STM (Result ())
 awaitPin state closed = do
   stopped <- readTVar closed
   current <- readTVar state
-  if stopped then pure (Left (failure "pin_unavailable")) else
-    if pinUnlocked current then pure (Right ()) else retry
+  let await
+        | stopped = pure (Left (failure "pin_unavailable"))
+        | pinUnlocked current = pure (Right ())
+        | otherwise = retry
+  await
 
 pinExpired :: TVar PinState -> TVar Integer -> TVar Bool -> IO (Result ())
 pinExpired state deadline closed = do
   active <- isCollecting state deadline closed
-  if active then waitVerified state deadline closed else do
-    atomically (modifyTVar' state (\current -> current { pinDigits = BS.empty }))
-    pure (Left (failure "pin_entry_expired"))
+  let finish | active = waitVerified state deadline closed
+             | otherwise = expire
+  finish
+  where
+    expire = do
+      atomically (modifyTVar' state (\current -> current {pinDigits = BS.empty}))
+      pure (Left (failure "pin_entry_expired"))

@@ -64,7 +64,9 @@ indexPerson rules page previous (offset, person) = foldl' insert previous number
   numbers = mapMaybe canonicalNumber (take (directoryPhoneCount rules) (fromMaybe [] (personPhoneNumbers person)))
   insert index number = Map.alter choose number index
   choose Nothing = Just (identity, label)
-  choose (Just (owner, name)) = Just (owner, if owner == identity then name else Nothing)
+  choose (Just (owner, name))
+    | owner == identity = Just (owner, name)
+    | otherwise = Just (owner, Nothing)
 
 chooseName :: DirectoryRules -> Name -> Maybe Text
 chooseName rules name = case nameGivenName name >>= greetingName rules of
@@ -72,28 +74,37 @@ chooseName rules name = case nameGivenName name >>= greetingName rules of
   Nothing -> greetingName rules fallback
   where fallback = firstOr "" (Text.words (fromMaybe "" (nameDisplayName name)))
 
-loadDirectory :: DirectoryRules -> Send -> IO (Result Index)
-loadDirectory rules sender = page 0 Nothing Set.empty Map.empty
+directoryRequest :: DirectoryRules -> Maybe Text -> Request
+directoryRequest rules token = Request "GET" (directoryEndpoint rules) [] parameters EmptyBody (directoryResponseBytes rules) (directoryRequestSeconds rules)
   where
-  page number token seen index
-    | number >= directoryPages rules = pure (Left (failure "incoming_contacts_directory_limit"))
-    | otherwise = loadPage number token seen index
-  loadPage number token seen index = do
-    result <- fetch "incoming_contacts_invalid_response" (sender (request token))
-    either (pure . Left) (advance number seen index) result
-  advance number seen index response
-    | length people > directoryPageSize rules = pure (Left (failure "incoming_contacts_invalid_response"))
-    | otherwise = continue (number + 1) seen updated (pageNextPageToken response)
-    where
+    parameters = [textParam "personFields" "names,phoneNumbers", textParam "pageSize" (Text.pack (show (directoryPageSize rules))), textParam "sources" "READ_SOURCE_TYPE_CONTACT"]
+      ++ maybe [] (pure . textParam "pageToken") token
+
+advanceDirectory :: DirectoryRules -> Int -> Set.Set Text -> Index -> Page -> Result (Index, Maybe Text)
+advanceDirectory rules number seen index response
+  | length people > directoryPageSize rules = Left (failure "incoming_contacts_invalid_response")
+  | otherwise = case pageNextPageToken response of
+    Nothing -> Right (updated, Nothing)
+    Just "" -> Right (updated, Nothing)
+    Just token | Text.length token > directoryTokenChars rules || Set.member token seen -> Left (failure "incoming_contacts_invalid_pagination")
+    Just token -> Right (updated, Just token)
+  where
     people = fromMaybe [] (pageConnections response)
     updated = foldl' (indexPerson rules number) index (zip [0..] people)
-  continue _ _ index Nothing = pure (Right index)
-  continue _ _ index (Just "") = pure (Right index)
-  continue number seen index (Just token)
-    | Text.length token > directoryTokenChars rules || Set.member token seen = pure (Left (failure "incoming_contacts_invalid_pagination"))
-    | otherwise = page number (Just token) (Set.insert token seen) index
-  request token = Request "GET" (directoryEndpoint rules) [] parameters EmptyBody (directoryResponseBytes rules) (directoryRequestSeconds rules)
-    where parameters = [textParam "personFields" "names,phoneNumbers", textParam "pageSize" (Text.pack (show (directoryPageSize rules))), textParam "sources" "READ_SOURCE_TYPE_CONTACT"] ++ maybe [] (\value -> [textParam "pageToken" value]) token
+
+loadDirectory :: DirectoryRules -> Send -> IO (Result Index)
+loadDirectory rules sender = loadPage rules sender 0 Nothing Set.empty Map.empty
+
+loadPage :: DirectoryRules -> Send -> Int -> Maybe Text -> Set.Set Text -> Index -> IO (Result Index)
+loadPage rules sender number token seen index
+  | number >= directoryPages rules = pure (Left (failure "incoming_contacts_directory_limit"))
+  | otherwise = do
+    let request = directoryRequest rules token
+    response <- fetch "incoming_contacts_invalid_response" (sender request)
+    case response >>= advanceDirectory rules number seen index of
+      Left issue -> pure (Left issue)
+      Right (updated, Nothing) -> pure (Right updated)
+      Right (updated, Just next) -> loadPage rules sender (number + 1) (Just next) (Set.insert next seen) updated
 
 seconds :: IO Double
 seconds = fmap ((/ 1000000000) . fromIntegral) getMonotonicTimeNSec
@@ -118,8 +129,11 @@ lookupCaller rules state number = do
   void (timeout (directoryReadyMicros rules) (atomically (readTVar state >>= check . snapshotReady)))
   now <- seconds
   current <- readTVarIO state
-  pure (snapshotUpdated current >>= recent now current)
+  pure (snapshotName rules now number current)
+
+snapshotName :: DirectoryRules -> Double -> Text -> Snapshot -> Maybe Text
+snapshotName rules now number current = snapshotUpdated current >>= recent
   where
-  recent now current updated
-    | now - updated > directoryMaximumAge rules = Nothing
-    | otherwise = Map.lookup number (snapshotIndex current) >>= snd
+    recent updated
+      | now - updated > directoryMaximumAge rules = Nothing
+      | otherwise = Map.lookup number (snapshotIndex current) >>= snd

@@ -74,8 +74,11 @@ snapshot :: TVar Observation -> IO Transcript
 snapshot state = do
   current <- readTVarIO state
   now <- nowSeconds
-  pure (Transcript (toList (observedFragments current)) (observedLastDelta current)
-          (observedVoiceStart current) now (observedBound current) (observedSequence current) (observedDroppedThrough current))
+  pure (observedTranscript now current)
+
+observedTranscript :: Double -> Observation -> Transcript
+observedTranscript now current = Transcript (toList (observedFragments current)) (observedLastDelta current)
+  (observedVoiceStart current) now (observedBound current) (observedSequence current) (observedDroppedThrough current)
 
 observeAudio :: NoteObserverConfig -> Resampler -> VAD -> TVar Observation -> BS.ByteString -> IO ()
 observeAudio cfg converter vad state pcm = do
@@ -88,16 +91,14 @@ processAudio cfg converter vad state pcm = do
   case converted of
     Left _ -> atomically (modifyTVar' state (\current -> current { observedBound = False }))
     Right bytes -> do
-      frames <- atomically (audioFrames cfg state bytes)
+      frames <- atomically (stateTVar state (audioFrames cfg bytes))
       mapM_ (observeFrame cfg vad state) frames
 
-audioFrames :: NoteObserverConfig -> TVar Observation -> BS.ByteString -> STM [BS.ByteString]
-audioFrames cfg state bytes = do
-  current <- readTVar state
-  let complete = observedPending current <> bytes
-      (frames, pending) = splitFrames (observerFrameBytes cfg) complete
-  writeTVar state current { observedPending = pending }
-  pure frames
+audioFrames :: NoteObserverConfig -> BS.ByteString -> Observation -> ([BS.ByteString], Observation)
+audioFrames cfg bytes current = (frames, current {observedPending = pending})
+  where
+    complete = observedPending current <> bytes
+    (frames, pending) = splitFrames (observerFrameBytes cfg) complete
 
 observeFrame :: NoteObserverConfig -> VAD -> TVar Observation -> BS.ByteString -> IO ()
 observeFrame cfg vad state frame = do

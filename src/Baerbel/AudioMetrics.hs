@@ -34,11 +34,13 @@ recordDelivery :: Word64 -> AudioDelivery -> Bool -> AudioMetrics -> (AudioMetri
 recordDelivery now Delivered audible metrics = (updated, audioNotice ++ speechNotice)
   where
     elapsed :: Double
-    elapsed = if now < metricsStart metrics then 0 else fromIntegral (now - metricsStart metrics) / 1000000
+    elapsed | now < metricsStart metrics = 0
+            | otherwise = fromIntegral (now - metricsStart metrics) / 1000000
     millis :: Double
     millis = fromIntegral (round (elapsed * 100) :: Integer) / 100
     firstSpeech :: Maybe Double
-    firstSpeech = if audible then metricsFirstSpeechMS metrics <|> Just millis else metricsFirstSpeechMS metrics
+    firstSpeech | audible = metricsFirstSpeechMS metrics <|> Just millis
+                | otherwise = metricsFirstSpeechMS metrics
     updated :: AudioMetrics
     updated = metrics {metricsOutputFrames = metricsOutputFrames metrics + 1,
       metricsFirstAudioMS = metricsFirstAudioMS metrics <|> Just millis, metricsFirstSpeechMS = firstSpeech}

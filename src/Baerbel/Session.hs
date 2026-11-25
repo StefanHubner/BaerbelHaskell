@@ -8,7 +8,7 @@ import Baerbel.JSON (jsonOptions)
 import GHC.Generics (Generic)
 import Baerbel.Concurrent (hasElapsed)
 import Baerbel.Config (Settings, setting, rule, booleanSetting, integerSetting, numericSetting, toolDefinitions)
-import Baerbel.EndCall (EndConfig(..), EndContext(..), EndEffects(..), executeEndCall)
+import Baerbel.EndCall (EndConfig(..), EndContext(..), EndEffects(..), executeEndCall, parseEndReason)
 import Baerbel.ManagedMedia (Registry, ManagedCall(..), withManaged)
 import Baerbel.Telephony (TelephonyConfig(..), TelephonyMedia(..), OwnerControl(..), Handoffs, claimHandoff, openOwner)
 import Baerbel.Routing (RouteSettings(..), announcement)
@@ -33,9 +33,9 @@ import Baerbel.Speech (audiblePCM)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
 import Control.Concurrent.STM
+import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=))
 import qualified Data.ByteString as BS
-import qualified Data.Aeson.KeyMap as KM
 import Data.Text (Text)
 import Data.Map.Strict (Map)
 import Data.List (sortOn, elemIndex)
@@ -125,8 +125,10 @@ awaitAnnouncement transcript lastAudio completion quietMicros = do
   lastSpeech <- readTVarIO lastAudio
   let complete = announcementComplete False completion heard
       quiet = maybe False (hasElapsed quietMicros now) lastSpeech
-  if complete && quiet then pure (Right ()) else
-    threadDelay 20000 >> awaitAnnouncement transcript lastAudio completion quietMicros
+  continue (complete && quiet)
+  where
+    continue True = pure (Right ())
+    continue False = threadDelay 20000 >> awaitAnnouncement transcript lastAudio completion quietMicros
 
 ownerSession :: Settings -> Services -> Report -> Registry -> Handoffs -> Text -> Socket -> IO (Result ())
 ownerSession settings factories report registry handoffs identifier connection =
@@ -207,11 +209,13 @@ openOwnerSession settings factories native identifier managed = case pinConfigur
 bindOwner :: Settings -> Services -> TelephonyConfig -> Text -> ManagedCall -> Pin.PinGate -> IO (Result ())
 bindOwner settings factories native identifier managed pin = do
   setKeypad managed (Pin.feedDigit pin)
-  if not (directEnabled native) then runOwner settings factories managed pin Nothing else do
-    let hooks = nativeMedia settings managed pin
-    opened <- openOwner native validateNumber hooks identifier
-    either (pure . Left) runBound opened
+  bind (directEnabled native)
   where
+    bind False = runOwner settings factories managed pin Nothing
+    bind True = do
+      let hooks = nativeMedia settings managed pin
+      opened <- openOwner native validateNumber hooks identifier
+      either (pure . Left) runBound opened
     runBound owner = do
       setReattachAllowed managed (ownerCanResume owner)
       finally (runOwner settings factories managed pin (Just owner)) (closeOwner owner)
@@ -248,7 +252,7 @@ announceManaged settings managed line completion interruptible = case configurat
 
 runOwner :: Settings -> Services -> ManagedCall -> Pin.PinGate -> Maybe OwnerControl -> IO (Result ())
 runOwner settings factories managed pin owner = withCallServices factories $ \services -> do
-  context <- ownerProfileContext factories
+  context <- fromMaybe (pure (Right "")) (ownerProfileContext factories)
   archive <- openArchive settings owner
   let run text = withNotes settings factories archive (observeEvent (managedMedia managed)) (continueOwner settings services managed pin owner text)
   finally (either (pure . Left) run context) (maybe (pure ()) closeRecording archive)
@@ -287,36 +291,41 @@ ownerConfiguration settings services managed pin owner profile notesRuntime now 
   ending <- endConfiguration settings
   descriptions <- rule settings "providers" "help"
   order <- rule settings "protocol" "integrationOrder"
-  let handlers = ownerServices settings services managed pin owner notesRuntime ending descriptions order
-      schemas = hostedTools settings ++ concatMap serviceTools handlers
+  handlers <- ownerServices settings services managed pin owner notesRuntime ending descriptions order
+  let schemas = hostedTools settings ++ concatMap serviceTools handlers
   session <- buildSessionWithProfile settings now profile schemas
   cfg <- liveConfiguration settings session (setting settings "PHONE_ASSISTANT_GREETING")
   pure (cfg, handlers)
 
-ownerServices :: Settings -> [Service] -> ManagedCall -> Pin.PinGate -> Maybe OwnerControl -> Maybe NoteRuntime -> EndConfig -> Map Text Text -> [Text] -> [Service]
-ownerServices settings services managed pin owner notesRuntime ending descriptions order = advertised
+ownerServices :: Settings -> [Service] -> ManagedCall -> Pin.PinGate -> Maybe OwnerControl -> Maybe NoteRuntime -> EndConfig -> Map Text Text -> [Text] -> Result [Service]
+ownerServices settings services managed pin owner notesRuntime ending descriptions order = do
+  value <- Tools.help descriptions schemas
+  let helpService = Service "assistant" helpSchemas (\_ _ _ -> pure (Right value))
+  Right (available ++ [helpService])
   where
     calling = maybe [] (\control -> [Service "direct" (toolDefinitions settings "DIRECT_CALL_TOOLS") (executeDirect control)]) owner
     notesService = maybe [] (\notes -> [Service "owner_note" (toolDefinitions settings "OWNER_NOTE_TOOLS") (noteExecute notes)]) notesRuntime
     end = Service "end" (toolDefinitions settings "END_CALL_TOOLS") (executeOwnerEnd managed pin notesRuntime ending settings)
-    voice = [Service "voice" (toolDefinitions settings "VOICE_TEST_TOOLS") (voiceTest settings managed notesRuntime) | isJust owner]
+    voice = [Service "voice" (toolDefinitions settings "VOICE_TEST_TOOLS") (\_ _ _ -> voiceTest settings managed notesRuntime) | isJust owner]
     rank service = fromMaybe (length order) (elemIndex (servicePrefix service) order)
     integrated = sortOn rank (services ++ notesService)
     available = integrated ++ calling ++ voice ++ [end]
-    schemas = hostedTools settings ++ concatMap serviceTools available ++ toolDefinitions settings "HELP_TOOLS"
-    helpService = Service "assistant" (toolDefinitions settings "HELP_TOOLS") (Tools.help descriptions schemas)
-    advertised = available ++ [helpService]
+    helpSchemas = toolDefinitions settings "HELP_TOOLS"
+    schemas = hostedTools settings ++ concatMap serviceTools available ++ helpSchemas
 
 hostedTools :: Settings -> [Value]
-hostedTools settings = if booleanSetting settings "PHONE_ASSISTANT_WEB_SEARCH" == Right True
-  then toolDefinitions settings "WEB_SEARCH_TOOLS" else []
+hostedTools settings
+  | booleanSetting settings "PHONE_ASSISTANT_WEB_SEARCH" == Right True = toolDefinitions settings "WEB_SEARCH_TOOLS"
+  | otherwise = []
 
 executeOwnerEnd :: ManagedCall -> Pin.PinGate -> Maybe NoteRuntime -> EndConfig -> Settings -> Text -> Value -> Text -> IO (Result Value)
-executeOwnerEnd managed pin notesRuntime cfg settings name args requestId = do
+executeOwnerEnd managed pin notesRuntime cfg settings _ args requestId = do
   controls <- managedControls managed
   case controls of
     Nothing -> pure (Left (failure "end_call_unavailable"))
-    Just current -> executeEndCall cfg (endSnapshot managed pin notesRuntime current requestId) (endEffects managed current settings) name args requestId
+    Just current -> either (pure . Left) (run current) (parseEndReason args)
+  where
+    run current = executeEndCall cfg (endSnapshot managed pin notesRuntime current requestId) (endEffects managed current settings)
 
 endSnapshot :: ManagedCall -> Pin.PinGate -> Maybe NoteRuntime -> LiveControls -> Text -> IO EndContext
 endSnapshot managed pin notesRuntime controls requestId = EndContext True
@@ -341,7 +350,10 @@ runOwnerMedia cfg services managed pin owner notesRuntime = do
         }
   result <- runLiveSession cfg (dispatch services) transport
   answered <- maybe (pure False) ownerAnswered owner
-  if answered then maybe (pure result) waitOwnerFinished owner else pure result
+  finish answered result
+  where
+    finish True result = maybe (pure result) waitOwnerFinished owner
+    finish False result = pure result
 
 afterOwnerTool :: ManagedCall -> Maybe OwnerControl -> Text -> Value -> IO ()
 afterOwnerTool managed owner name _
@@ -358,24 +370,24 @@ data VoiceSample = VoiceSample
   } deriving (Eq, Show, Generic)
 instance FromJSON VoiceSample where parseJSON = genericParseJSON (jsonOptions 6)
 
-voiceTest :: Settings -> ManagedCall -> Maybe NoteRuntime -> Text -> Value -> Text -> IO (Result Value)
-voiceTest settings managed notesRuntime name args _
-  | name /= "voice_test" || args /= Object KM.empty = pure (Left (failure "invalid_arguments"))
-  | otherwise = do
-      paused <- managedPaused managed
-      pending <- maybe (pure False) notePending notesRuntime
-      case (paused, pending, voiceSamples settings) of
-        (True, _, _) -> pure (Left (failure "voice_test_unavailable"))
-        (_, True, _) -> pure (Left (failure "finish_or_cancel_note_before_voice_test"))
-        (_, _, Left err) -> pure (Left err)
-        (_, _, Right samples) -> playSamples settings managed samples
+voiceTest :: Settings -> ManagedCall -> Maybe NoteRuntime -> IO (Result Value)
+voiceTest settings managed notesRuntime = do
+  paused <- managedPaused managed
+  pending <- maybe (pure False) notePending notesRuntime
+  case (paused, pending, voiceSamples settings) of
+    (True, _, _) -> pure (Left (failure "voice_test_unavailable"))
+    (_, True, _) -> pure (Left (failure "finish_or_cancel_note_before_voice_test"))
+    (_, _, Left err) -> pure (Left err)
+    (_, _, Right samples) -> playSamples settings managed samples
 
 voiceSamples :: Settings -> Result [VoiceSample]
 voiceSamples settings = do
   model <- rule settings "voice_audition" "MODEL"
-  if setting settings "OPENAI_LIVE_MODEL" == model
-    then rule settings "voice_audition" "samples"
-    else Left (failure "voice_test_requires_current_live_model")
+  samples model
+  where
+    samples model
+      | setting settings "OPENAI_LIVE_MODEL" == model = rule settings "voice_audition" "samples"
+      | otherwise = Left (failure "voice_test_requires_current_live_model")
 
 playSamples :: Settings -> ManagedCall -> [VoiceSample] -> IO (Result Value)
 playSamples settings managed samples = do

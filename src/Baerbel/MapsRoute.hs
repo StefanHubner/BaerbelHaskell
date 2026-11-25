@@ -109,7 +109,9 @@ heading rules basis first second
     y = sin dlon * cos lat2
     x = cos lat1 * sin lat2 - sin lat1 * cos lat2 * cos dlon
     angle = atan2 y x * 180 / pi
-    bearing = if angle < 0 then angle + 360 else angle
+    bearing
+      | angle < 0 = angle + 360
+      | otherwise = angle
     index = floor ((bearing + 22.5) / 45) `mod` 8
     labels = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
     direction = firstOr "north" (drop index labels)
@@ -124,7 +126,9 @@ initialHeading rules (first : rest) = heading rules basis first chosen
   where
     candidates = filter ((>= routeHeadingMinimumM rules) . distance first) rest
     chosen = firstOr (lastOr first rest) candidates
-    basis = if null candidates then "step_start_to_end" else "initial_step_path"
+    basis = case candidates of
+      [] -> "step_start_to_end"
+      _ -> "initial_step_path"
 
 geometry :: RouteRules -> RawStep -> Result [Point]
 geometry rules step
@@ -229,10 +233,7 @@ summarizeRoute :: RouteRules -> Place -> Place -> RawRoute -> Leg -> Path -> Res
 summarizeRoute rules origin destination value leg path = do
   first <- validPoint (locationLatLng (legStartLocation leg))
   final <- validPoint (locationLatLng (legEndLocation leg))
-  if distance first (firstOr first (pathPoints path)) > routeGeometryToleranceM rules || distance final (lastOr final (pathPoints path)) > routeGeometryToleranceM rules
-    then Left (failure "maps_invalid_route_geometry") else Right ()
-  if pathLength path >= routeHeadingMinimumM rules && (isNothing (rawDistanceMeters value) || isNothing (rawDuration value))
-    then Left (failure "maps_incomplete_directions") else Right ()
+  validateRoutePath rules value path first final
   seconds <- duration rules (fromMaybe "0s" (rawDuration value))
   metres <- number 0 (routeDistanceLimitM rules) (fromMaybe 0 (rawDistanceMeters value))
   warnings <- traverse (routeText (routeInstructionChars rules)) (fromMaybe [] (rawWarnings value))
@@ -241,7 +242,24 @@ summarizeRoute rules origin destination value leg path = do
   let direction = heading rules "route_start_to_destination_not_initial_heading" first final
       result = RouteResult "ok" "WALK" "Google Maps Routes API" "Google Maps" originName destinationName (round metres) seconds direction
         (routeCompassNote rules) (pathSteps path) (length (pathSteps path)) True warnings True Nothing
-  if referenceByteSize result > routeOutputBytes rules then Left (failure "maps_route_too_large") else Right (result, path)
+  bounded <- routeBudget rules result
+  Right (bounded, path)
+
+validateRoutePath :: RouteRules -> RawRoute -> Path -> Point -> Point -> Result ()
+validateRoutePath rules value path first final
+  | distance first beginning > tolerance || distance final ending > tolerance = Left (failure "maps_invalid_route_geometry")
+  | pathLength path >= routeHeadingMinimumM rules && missingTotals = Left (failure "maps_incomplete_directions")
+  | otherwise = Right ()
+  where
+    beginning = firstOr first (pathPoints path)
+    ending = lastOr final (pathPoints path)
+    tolerance = routeGeometryToleranceM rules
+    missingTotals = isNothing (rawDistanceMeters value) || isNothing (rawDuration value)
+
+routeBudget :: ToJSON a => RouteRules -> a -> Result a
+routeBudget rules value
+  | referenceByteSize value > routeOutputBytes rules = Left (failure "maps_route_too_large")
+  | otherwise = Right value
 
 placeName :: Text -> Place -> Text
 placeName fallback place
@@ -263,7 +281,8 @@ samplePath count points = (map sample positions, positions)
     segments = zip3 cumulative lengths pairs
     fallback = firstOr (Point 0 0) points
     sample position = case dropWhile (\(start, size, _) -> start + size < position) segments of
-      (start, size, (first, second)) : _ -> interpolate first second (if size == 0 then 0 else (position - start) / size)
+      (_, 0, (first, second)) : _ -> interpolate first second 0
+      (start, size, (first, second)) : _ -> interpolate first second ((position - start) / size)
       [] -> lastOr fallback points
 
 interpolate :: Point -> Point -> Double -> Point
@@ -281,57 +300,86 @@ interpolate first second fraction = Point lat lon
       | rawLon < - 180 = rawLon + 360
       | otherwise = rawLon
 
+type ElevationTrend = (Double, Double, Int, Double, Double)
+
 gainLoss :: RouteRules -> [Double] -> (Double, Double)
 gainLoss _ [] = (0, 0)
-gainLoss rules (first : rest) = finish (foldl' advance (first, first, 0 :: Int, 0, 0) rest)
-  where
-    advance state@(anchor, extreme, trend, gain, loss) value
-      | trend == 0 && abs (value - anchor) >= routeElevationNoiseM rules = (anchor, value, if value > anchor then 1 else -1, gain, loss)
-      | trend == 0 = state
-      | trend > 0 && value >= extreme = (anchor, value, trend, gain, loss)
-      | trend > 0 && extreme - value >= routeElevationNoiseM rules = (extreme, value, -1, gain + extreme - anchor, loss)
-      | trend < 0 && value <= extreme = (anchor, value, trend, gain, loss)
-      | trend < 0 && value - extreme >= routeElevationNoiseM rules = (extreme, value, 1, gain, loss + anchor - extreme)
-      | otherwise = state
-    finish (anchor, extreme, trend, gain, loss)
-      | trend > 0 = (gain + extreme - anchor, loss)
-      | trend < 0 = (gain, loss + anchor - extreme)
-      | otherwise = (gain, loss)
+gainLoss rules (first : rest) = finishTrend (foldl' (advanceTrend rules) (first, first, 0, 0, 0) rest)
 
-terrain :: RouteRules -> Send -> Path -> IO (Terrain, [DetailedStep])
-terrain rules send path
-  | total < routeTerrainMinimumM rules = pure (missing "route_too_short_for_terrain_sampling")
-  | spacing > routeMaximumSpacingM rules = pure (missing "route_too_long_for_detailed_terrain_sampling")
-  | otherwise = do
-      result <- timeout durationMicros (fetch "invalid_elevation_response" request)
-      pure (maybe (missing "elevation_timeout") (either (missing . failureCode) normalizeElevation) result)
+advanceTrend :: RouteRules -> ElevationTrend -> Double -> ElevationTrend
+advanceTrend rules state@(anchor, extreme, trend, gain, loss) value
+  | trend == 0 && abs (value - anchor) >= routeElevationNoiseM rules = (anchor, value, direction, gain, loss)
+  | trend == 0 = state
+  | trend > 0 && value >= extreme = (anchor, value, trend, gain, loss)
+  | trend > 0 && extreme - value >= routeElevationNoiseM rules = (extreme, value, -1, gain + extreme - anchor, loss)
+  | trend < 0 && value <= extreme = (anchor, value, trend, gain, loss)
+  | trend < 0 && value - extreme >= routeElevationNoiseM rules = (extreme, value, 1, gain, loss + anchor - extreme)
+  | otherwise = state
+  where
+    direction
+      | value > anchor = 1
+      | otherwise = -1
+
+finishTrend :: ElevationTrend -> (Double, Double)
+finishTrend (anchor, extreme, trend, gain, loss)
+  | trend > 0 = (gain + extreme - anchor, loss)
+  | trend < 0 = (gain, loss + anchor - extreme)
+  | otherwise = (gain, loss)
+
+data TerrainPlan = TerrainUnavailable Text | TerrainSamples [Point] [Double] Double
+
+planTerrain :: RouteRules -> Path -> TerrainPlan
+planTerrain rules path
+  | total < routeTerrainMinimumM rules = TerrainUnavailable "route_too_short_for_terrain_sampling"
+  | spacing > routeMaximumSpacingM rules = TerrainUnavailable "route_too_long_for_detailed_terrain_sampling"
+  | otherwise = TerrainSamples samples positions spacing
   where
     points = pathPoints path
     total = sum (zipWith distance points (drop 1 points))
     count = min (routeSampleLimit rules) (max (routeSampleMinimum rules) (ceiling (total / routeTargetSpacingM rules) + 1))
     spacing = total / fromIntegral (count - 1)
     (samples, positions) = samplePath count points
+
+elevationRequest :: RouteRules -> [Point] -> Request
+elevationRequest rules samples = Request "GET" (routeElevationUrl rules) [] params EmptyBody (routeHttpBytes rules) (routeElevationTimeout rules)
+  where
     coordinate item = Text.pack (printf "%.6f,%.6f" (latitude item) (longitude item))
     locations = Text.intercalate "|" (map coordinate samples)
     params = [textParam "locations" locations]
-    durationMicros = routeElevationTimeout rules * 1000000
-    request = send (Request "GET" (routeElevationUrl rules) [] params EmptyBody (routeHttpBytes rules) (routeElevationTimeout rules))
-    missing reason = (unavailable reason, pathSteps path)
-    normalizeElevation response = either missing finish (elevationValues rules count samples spacing response)
-    finish values = (summaryValue, zipWith (stepGround rules positions elevations) (pathSpans path) (pathSteps path))
-      where
-        elevations = map elevationElevation values
-        resolution = foldl' max 0 (map (fromMaybe 0 . elevationResolution) values)
-        (gain, loss) = gainLoss rules elevations
-        net = lastOr 0 elevations - firstOr 0 elevations
-        summaryValue = Terrain "estimated" "Google Maps Elevation API" Nothing (Just count) (Just (rounded 1 spacing))
-          (Just (rounded 1 resolution)) (Just (round gain)) (Just (round loss)) (Just (round net))
-          (Just (routeElevationNoiseM rules)) (Just (routeTerrainLimitations rules))
 
-elevationValues :: RouteRules -> Int -> [Point] -> Double -> Elevations -> Either Text [Elevation]
-elevationValues rules count samples spacing response
+terrain :: RouteRules -> Send -> Path -> IO (Terrain, [DetailedStep])
+terrain rules send path = case planTerrain rules path of
+  TerrainUnavailable reason -> pure (unavailable reason, pathSteps path)
+  TerrainSamples samples positions spacing -> do
+    let request = elevationRequest rules samples
+        durationMicros = routeElevationTimeout rules * 1000000
+    response <- timeout durationMicros (fetch "invalid_elevation_response" (send request))
+    pure (terrainResult rules path samples positions spacing response)
+
+terrainResult :: RouteRules -> Path -> [Point] -> [Double] -> Double -> Maybe (Result Elevations) -> (Terrain, [DetailedStep])
+terrainResult rules path samples positions spacing response = case response of
+  Nothing -> missing "elevation_timeout"
+  Just (Left issue) -> missing (failureCode issue)
+  Just (Right value) -> either missing finish (elevationValues rules samples spacing value)
+  where
+    missing reason = (unavailable reason, pathSteps path)
+    finish values = (terrainSummary rules spacing values, steps)
+      where steps = zipWith (stepGround rules positions (map elevationElevation values)) (pathSpans path) (pathSteps path)
+
+terrainSummary :: RouteRules -> Double -> [Elevation] -> Terrain
+terrainSummary rules spacing values = Terrain "estimated" "Google Maps Elevation API" Nothing (Just (length values)) (Just (rounded 1 spacing))
+  (Just (rounded 1 resolution)) (Just (round gain)) (Just (round loss)) (Just (round net))
+  (Just (routeElevationNoiseM rules)) (Just (routeTerrainLimitations rules))
+  where
+    elevations = map elevationElevation values
+    resolution = foldl' max 0 (map (fromMaybe 0 . elevationResolution) values)
+    (gain, loss) = gainLoss rules elevations
+    net = lastOr 0 elevations - firstOr 0 elevations
+
+elevationValues :: RouteRules -> [Point] -> Double -> Elevations -> Either Text [Elevation]
+elevationValues rules samples spacing response
   | elevStatus response /= "OK" = Left statusError
-  | length values /= count = Left "invalid_elevation_response"
+  | length values /= length samples = Left "invalid_elevation_response"
   | not (and (zipWith (\expected actual -> distance expected (point (elevationLocation actual)) <= routeElevationLocationToleranceM rules) samples values)) = Left "elevation_locations_do_not_match_route"
   | any (isNothing . elevationResolution) values = Left "elevation_resolution_unknown"
   | any invalid values = Left "invalid_elevation_response"
@@ -342,7 +390,9 @@ elevationValues rules count samples spacing response
     resolution = foldl' max 0 (map (fromMaybe 0 . elevationResolution) values)
     invalid value = elevationElevation value < routeElevationMinimumM rules || elevationElevation value > routeElevationMaximumM rules
       || maybe False (\metres -> metres < 0 || metres > routeElevationMaximumResolutionM rules) (elevationResolution value)
-    statusError = if elevStatus response `elem` routeElevationStatuses rules then "elevation_" <> Text.toLower (elevStatus response) else "elevation_request_failed"
+    statusError
+      | elevStatus response `elem` routeElevationStatuses rules = "elevation_" <> Text.toLower (elevStatus response)
+      | otherwise = "elevation_request_failed"
 
 stepGround :: RouteRules -> [Double] -> [Double] -> (Double, Double) -> DetailedStep -> DetailedStep
 stepGround rules positions elevations (begin, end) step = step {detailTerrain = Just ground}
@@ -352,28 +402,39 @@ stepGround rules positions elevations (begin, end) step = step {detailTerrain = 
     values = map snd samples
     (gain, loss) = gainLoss rules values
     net = lastOr 0 values - firstOr 0 values
-    ground = if length values < routeSampleMinimum rules || covered < (end - begin) * routeStepCoverage rules
-      then StepTerrain "unavailable" (Just "insufficient_samples_for_this_step") Nothing Nothing Nothing Nothing Nothing
-      else StepTerrain "estimated" Nothing (Just (length values)) (Just (round covered)) (Just (round gain)) (Just (round loss)) (Just (round net))
+    ground
+      | length values < routeSampleMinimum rules || covered < (end - begin) * routeStepCoverage rules =
+        StepTerrain "unavailable" (Just "insufficient_samples_for_this_step") Nothing Nothing Nothing Nothing Nothing
+      | otherwise = StepTerrain "estimated" Nothing (Just (length values)) (Just (round covered)) (Just (round gain)) (Just (round loss)) (Just (round net))
+
+routeRequest :: RouteRules -> Place -> Place -> Result Request
+routeRequest rules origin destination = do
+  validateWaypoint rules origin
+  validateWaypoint rules destination
+  let resource = RouteRequest (placeWaypoint origin) (placeWaypoint destination) "WALK" (routeLanguage rules) "METRIC" False "HIGH_QUALITY" "GEO_JSON_LINESTRING"
+      body = JsonBody (toJSON resource)
+      fields = Text.encodeUtf8 (routeRouteFields rules)
+  Right (Request "POST" (routeRouteUrl rules) [("X-Goog-FieldMask", fields)] [] body (routeHttpBytes rules) (routeHttpTimeout rules))
 
 route :: RouteRules -> Send -> Bool -> Place -> Place -> IO (Result Value)
-route rules send elevation origin destination = either (pure . Left) (const retrieve) validated
-  where
-    validated = validateWaypoint rules origin >> validateWaypoint rules destination
-    retrieve = do
-      response <- fetch "maps_invalid_route_response" (send request)
-      either (pure . Left) finish (response >>= normalize rules origin destination)
-    body = RouteRequest (placeWaypoint origin) (placeWaypoint destination) "WALK" (routeLanguage rules) "METRIC" False "HIGH_QUALITY" "GEO_JSON_LINESTRING"
-    fields = Text.encodeUtf8 (routeRouteFields rules)
-    request = Request "POST" (routeRouteUrl rules) [("X-Goog-FieldMask", fields)] [] (JsonBody (toJSON body)) (routeHttpBytes rules) (routeHttpTimeout rules)
-    finish (value, path) = do
-      (ground, steps) <- if elevation then terrain rules send path else pure (unavailable "not_enabled", resultSteps value)
-      let result = value {resultTerrain = Just ground, resultSteps = steps}
-      pure (if referenceByteSize result > routeOutputBytes rules then Left (failure "maps_route_too_large") else Right (toJSON result))
+route rules send elevation origin destination = case routeRequest rules origin destination of
+  Left issue -> pure (Left issue)
+  Right request -> do
+    response <- fetch "maps_invalid_route_response" (send request)
+    either (pure . Left) (completeRoute rules send elevation) (response >>= normalize rules origin destination)
 
+completeRoute :: RouteRules -> Send -> Bool -> (RouteResult, Path) -> IO (Result Value)
+completeRoute rules _ False (value, _) = pure (finishRoute rules value (unavailable "not_enabled", resultSteps value))
+completeRoute rules send True (value, path) = fmap (finishRoute rules value) (terrain rules send path)
+
+finishRoute :: RouteRules -> RouteResult -> (Terrain, [DetailedStep]) -> Result Value
+finishRoute rules value (ground, steps) = toJSON <$> routeBudget rules result
+  where result = value {resultTerrain = Just ground, resultSteps = steps}
 
 validateWaypoint :: RouteRules -> Place -> Result ()
-validateWaypoint rules place = do
-  _ <- validPoint (placePoint place)
-  if Text.length ident > routePlaceIdChars rules || Text.any (< ' ') ident then Left (failure "maps_invalid_route_place") else Right ()
-  where ident = placeId place
+validateWaypoint rules place = validPoint (placePoint place) >> validId
+  where
+    ident = placeId place
+    validId
+      | Text.length ident > routePlaceIdChars rules || Text.any (< ' ') ident = Left (failure "maps_invalid_route_place")
+      | otherwise = Right ()

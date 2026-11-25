@@ -103,7 +103,9 @@ spec = describe "Incoming context retention" $ do
     map fst events `shouldBe` ["incoming_message_delivery"]
   it "sends the missed-call outcome when the replacement caller message fails" $ withFixture $ \rules -> do
     sent <- newMVar []
-    let sender _ _ kind = modifyMVar_ sent (pure . (kind:)) >> pure (Receipt (if kind == Outcome then Sent else Failed) Nothing Nothing)
+    let receipt Outcome = Receipt Sent Nothing Nothing
+        receipt _ = Receipt Failed Nothing Nothing
+        sender _ _ kind = modifyMVar_ sent (pure . (kind:)) >> pure (receipt kind)
     result <- withMessages rules (\_ _ -> pure ()) sender $ \service -> do
       context <- beginContext service "replacement"
       withAsync (deliverOutcome service "replacement" "MESSAGE_FAILED" Nothing False) $ \task -> do

@@ -9,9 +9,9 @@ digraph Baerbel {
   owner [label="Owner ingress :9092\nSeparate managed-media registry\nPIN gate for private email tools", pos="400,480!", width=4.9, fillcolor="#f1eaf8", color="#9674b2"];
   public [label="Public ingress :9093\nSeparate registry and restricted session\nScreen / decline / take message only", pos="1170,480!", width=5.0, fillcolor="#fff1e5", color="#b98b65"];
   home [label="Home route :4573\nPure destination policy\nNo model-selected dialplan", pos="1510,635!", width=3.25, fillcolor="#eaf2ed"];
-  pure [label="Pure decisions and typed data\nRouting · call transitions · tool validation\nTranscript selection · protocol reduction\nJSON codecs · provider normalization", pos="800,305!", width=5.4, height=1.35, fillcolor="#ffffff", color="#527fa5", penwidth=2.0];
+  pure [label="Pure decisions and typed data\nTyped commands · call transitions · routing\nTranscript selection · protocol reduction\nJSON codecs · provider normalization", pos="800,305!", width=5.4, height=1.35, fillcolor="#ffffff", color="#527fa5", penwidth=2.0];
   live [label="Speech providers\nLive WebSocket\nLegacy STT → chat → TTS", pos="130,300!", width=3.25];
-  providers [label="Shared provider capabilities\nGmail · Calendar · Contacts\nMaps · Windguru · local profile", pos="400,135!", width=5.0];
+  providers [label="Shared provider capabilities\nGmail · Calendar · Contacts\nMaps · Windguru · shared profile store", pos="400,135!", width=5.0];
   notifications [label="Fixed-recipient notifications\nNo public access to owner tools\nAccepted delivery survives hangup", pos="1190,135!", width=5.1, fillcolor="#fff1e5"];
   effects [label="Small effect interpreters\nBounded HTTP / WebSocket · OAuth refresh\nAudio / VAD / resampling · files / SQLite / logs", pos="800,-30!", width=6.7, fillcolor="#eaf2ed"];
   state [label="Durable external state\nGmail/Calendar/SMS receipts · PBX event cursor\nPrivate profile · existing call archive", pos="800,-165!", width=6.5, fillcolor="#f3f4f6"];
