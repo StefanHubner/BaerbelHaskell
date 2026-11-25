@@ -7,7 +7,7 @@ import Baerbel.Core.Error (Result, failure)
 import Baerbel.Runtime.Effects (continue, mapResult)
 import Baerbel.Runtime.Error (ioResult)
 import Baerbel.Runtime.Storage (atomicWrite, databaseResult)
-import Control.Monad (unless, void, when)
+import Control.Monad (filterM, unless, void, when)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Bytes8
@@ -15,7 +15,7 @@ import Data.Char (isDigit)
 import Data.List (isSuffixOf)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (isNothing, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -111,12 +111,16 @@ readPlan config database = runExceptT $ do
   pure (pbx, files)
 
 preview :: FilePath -> FilePath -> FilePath -> IO (Result ())
-preview config database destination = do
-  plan <- readPlan config database
-  continue (\(_, files) -> saveFiles destination files) plan
+preview config database destination = runExceptT $ do
+  (pbx, files) <- ExceptT (readPlan config database)
+  parents <- ExceptT (parentFiles pbx files)
+  ExceptT (saveBytes destination (stagedFiles files parents))
 
-saveFiles :: FilePath -> Map FilePath Text -> IO (Result ())
-saveFiles folder = saveBytes folder . Map.map Text.encodeUtf8
+parentFiles :: Pbx -> Map FilePath Text -> IO (Result (Map FilePath Bytes.ByteString))
+parentFiles pbx files = ioResult "asterisk_configuration_unavailable" (readParents (pbxDirectory pbx) (Map.keys files))
+
+stagedFiles :: Map FilePath Text -> Map FilePath Bytes.ByteString -> Map FilePath Bytes.ByteString
+stagedFiles files parents = Map.union (Map.map Text.encodeUtf8 files) (Map.mapKeys ("parent-" <>) parents)
 
 saveBytes :: FilePath -> Map FilePath Bytes.ByteString -> IO (Result ())
 saveBytes folder files = runExceptT $ do
@@ -134,18 +138,18 @@ applyPlan backup pbx files = runExceptT $ do
   let root = pbxDirectory pbx
       names = Map.keys files
   ExceptT idle
-  parents <- ExceptT (ioResult "asterisk_configuration_unavailable" (readParents root names))
+  parents <- ExceptT (parentFiles pbx files)
   ExceptT (backupPaths root backup names (Map.keys parents))
   ExceptT (applyOrRestore root backup files parents)
 
 readParents :: FilePath -> [FilePath] -> IO (Map FilePath Bytes.ByteString)
 readParents root names = do
-  paths <- listDirectory root
-  let parents = filter (\name -> isSuffixOf ".conf" name && isNothing (managedName name)) paths
-      sources = Map.fromList [(path, root </> path) | path <- parents]
+  paths <- filterM (doesFileExist . (root </>)) modules
+  let sources = Map.fromList [(path, root </> path) | path <- paths]
   original <- Map.traverseWithKey (const Bytes.readFile) sources
   pure (Map.mapMaybe changed original)
   where
+    modules = ["asterisk.conf", "pjsip.conf", "extensions.conf", "manager.conf", "rtp.conf", "cdr.conf", "cdr_custom.conf"]
     changed old
       | new == old = Nothing
       | otherwise = Just new
@@ -182,13 +186,11 @@ applyOrRestore root backup files parents = do
 installFiles :: FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -> FilePath -> IO (Result ())
 installFiles root files parents staging = runExceptT $ do
   let target = root </> "phone-assistant"
-  ExceptT (saveBytes staging (Map.union contents parentsForStage))
+  ExceptT (saveBytes staging (stagedFiles files parents))
   ExceptT (command "install" ["-d", "-m", "0750", "-g", "asterisk", target])
   ExceptT (fmap sequence_ (traverse (copyManaged target) (Map.keys files)))
   ExceptT (fmap sequence_ (traverse copyParent (Map.keys parents)))
   where
-    contents = Map.map Text.encodeUtf8 files
-    parentsForStage = Map.mapKeys ("parent-" <>) parents
     copyManaged target name = command "install" ["-m", "0640", "-g", "asterisk", staging </> name, target </> name]
     copyParent name = command "dd" ["if=" <> (staging </> ("parent-" <> name)), "of=" <> (root </> name), "status=none"]
 
