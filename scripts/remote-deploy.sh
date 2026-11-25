@@ -98,6 +98,30 @@ activate_accounts() {
   return 1
 }
 
+rollback_accounts() {
+  local backup route previous
+  require_idle
+  backup=$(find /var/backups -maxdepth 1 -type d -name 'phone-assistant-accounts.*' -printf '%T@ %p\n' |
+    sort -nr | sed -n '1s/^[^ ]* //p')
+  [[ -n "$backup" && -f "$backup/zz-baerbel-haskell.conf" && -f "$backup/user.json" &&
+     -f "$backup/phone-assistant-extensions.conf" ]] || {
+    printf 'The pre-cutover backup was not found.\n' >&2
+    return 1
+  }
+  previous=$(sed -n 's|^ExecStart=\(/home/stefan/apps/baerbel/releases/[^ ]*/bin/phone-assistant-server\) .*|\1|p' "$backup/zz-baerbel-haskell.conf")
+  [[ -x "$previous" ]] || { printf 'The previous Haskell executable is missing.\n' >&2; return 1; }
+  route=/etc/asterisk/phone-assistant-extensions.conf
+  python3 "$work/account-incident.py" || printf 'Optional routing trace was unavailable.\n' >&2
+  cp -a "$backup/phone-assistant-extensions.conf" "$route"
+  cp -a "$backup/user.json" "$user_config"
+  cp -a "$backup/zz-baerbel-haskell.conf" "$override"
+  asterisk -rx 'dialplan reload'
+  systemctl daemon-reload
+  systemctl restart "$service"
+  verify_service "$previous"
+  rm -f /etc/phone-assistant/account-routes
+}
+
 rollback_release() {
   local python
   python=$(readlink -e /home/stefan/.venvs/assistant/bin/python)
@@ -134,5 +158,6 @@ case "$action" in
   prepare) prepare_release ;;
   activate) activate_release ;;
   activate-accounts) activate_accounts ;;
+  rollback-accounts) rollback_accounts ;;
   rollback) rollback_release ;;
 esac

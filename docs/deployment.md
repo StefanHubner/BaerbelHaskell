@@ -59,6 +59,11 @@ See [the routing template notes](../deploy/asterisk/README.md).
 make rollback
 ```
 
-For an account routing cutover, restore the backed-up managed dialplan and private configuration before returning to Python. Rollback uses sudo, checks that Asterisk has no active calls, removes only the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. Releases and the private JSON remain available; shared state is not rewound, so accepted actions are not replayed.
+After an account routing cutover, `make rollback-accounts` restores the
+pre-cutover Asterisk dialplan, private configuration and Haskell systemd
+override. It saves a redacted summary of recent Asterisk routing to
+`/run/baerbel-account-incident.json` for troubleshooting.
+
+The separate `make rollback` command returns to Python. It uses sudo, checks that Asterisk has no active calls, removes only the Haskell override and restarts the same service with its preserved Python configuration. It verifies service health and PID stability and reports the restored executable and command. Releases and the private JSON remain available; shared state is not rewound, so accepted actions are not replayed.
 
 Only activation and rollback require privileged access. No configuration conversion, upload or target binary check needs to be performed manually. See [migration.md](migration.md) for actual deployment status and [live-checks.md](live-checks.md) for provider, synthetic-session and verified real-call evidence.
