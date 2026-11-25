@@ -2,6 +2,14 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
+The corrective release from commit `21d47c7` is installed and passed target preflight. It fixes accumulating audio delay/overflow and Windguru's trailing forecast arrays. Activation stopped because sudo requires a password; the previous Haskell release still serves calls. From the workstation, run:
+
+```sh
+make -C ~/Dropbox/baerbel_hs activate
+```
+
+The helper checks for active calls before switching. See [the staged release record](migration.md#corrective-release-staged) for exact revisions and verification.
+
 ## Check and package
 
 Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared rules remain in `config/global.json`.

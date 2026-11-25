@@ -43,7 +43,7 @@ Live cleanup stops and joins the bridge workers before provider finalization. If
 
 Continuous Live input and playback use an absolute frame deadline. `Core.Concurrent.frameSchedule` computes the next deadline from supplied timestamps: ordinary scheduler lateness does not shift the stream clock, while a stall longer than one frame rebases it to avoid a burst of overdue frames. `Runtime.Concurrent.paceStream` owns the clock read and interruptible wait. Live resets input epochs after that wait and checks output generation/pause state both before and after it; obsolete audio stays suppressed. The first delivered output establishes its subsequent deadline from actual delivery time. Worker cancellation and resource ownership are unchanged.
 
-The shared `phone.tool` log projection includes the tool failure code alongside existing status, identifier and elapsed-time fields. It does not add tool arguments, returned content or credentials. These pacing and diagnostic corrections have passed local checks and the focused target-provider reruns; deployment is still pending.
+The shared `phone.tool` log projection includes the tool failure code alongside existing status, identifier and elapsed-time fields. It does not add tool arguments, returned content or credentials. These pacing and diagnostic corrections have passed local checks and the focused target-provider reruns; the release is installed and checked, with sudo activation pending.
 
 ## Persistence
 
@@ -51,7 +51,7 @@ SQLite is used for receipts and positions, not as a conversational database: Gma
 
 The saved profile remains a private JSON document with atomic replacement. Typed read and update capabilities share one prepared store; reads obtain a coherent descriptor snapshot without creating a mutation lock or reading the clock. Context and Windguru consume typed profile state directly. Write preparation is pure: it returns either no content for an unchanged state or bounded serialized bytes for the existing atomic writer. Its existing directory/file ownership, mode and link restrictions are preserved. Saved values are reference facts, never permissions. Note audio comes from the existing Asterisk mixed-call WAV. Notes select an excerpt rather than starting a second recorder; only the VAD remainder and bounded transcript history are retained in memory.
 
-Windguru forecast parsing uses timestamps to address readings. A forecast array must cover every timestamp; trailing readings with no timestamp are ignored, while short arrays remain invalid. Saved-set results retain each member's independent provider failure, so one failed member does not hide available forecasts. The target checks and pending service deployment are recorded in [live-checks.md](live-checks.md#production-incidents-under-investigation).
+Windguru forecast parsing uses timestamps to address readings. A forecast array must cover every timestamp; trailing readings with no timestamp are ignored, while short arrays remain invalid. Saved-set results retain each member's independent provider failure, so one failed member does not hide available forecasts. The target checks and pending service activation are recorded in [live-checks.md](live-checks.md#production-incidents-under-investigation).
 
 ## Deployment boundary
 

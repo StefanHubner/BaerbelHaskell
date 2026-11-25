@@ -225,8 +225,7 @@ configuration/native checks. The expanded target suite initially completed with
 **17 passes and two failures**: the saved-set issue corrected above, and an
 invalid audio-soak assertion. Both failed checks subsequently passed focused
 reruns. Google, Maps, native audio, general speech, interruption, PIN, owner
-hangup and cancellation passed in the full run; no single all-green full-suite
-rerun is claimed.
+hangup and cancellation passed in the full run.
 
 The first target soak stayed alive for 210 seconds, answered after 190 seconds
 and finalized, but its assertion incorrectly counted variable-sized resampler
@@ -247,4 +246,5 @@ against wall time. Its focused target rerun **passed**:
 This exercises the production Live runtime and actual speech provider on the
 target, with simulated telephone transport and continuous input beyond the
 observed 149-second failure. It does not replace a real Asterisk call after
-activation. Deployment of the corrected release remains pending.
+activation. The corrected release is installed and checked under `~/apps/baerbel`; activation
+is waiting for sudo authentication. See [deployment.md](deployment.md).
