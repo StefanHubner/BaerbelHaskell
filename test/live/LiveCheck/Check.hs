@@ -29,7 +29,7 @@ check name action = do
 measured :: IO (Result a) -> IO (Double, Result a)
 measured action = do
   start <- monotonicSeconds
-  let limited = within (failure "live_check_timeout") 180000000 action
+  let limited = within (failure "live_check_timeout") 300000000 action
   result <- attempt "live_check_io_failed" limited
   finish <- monotonicSeconds
   pure (finish - start, result)

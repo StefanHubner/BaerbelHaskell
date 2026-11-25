@@ -7,7 +7,10 @@ import Baerbel.Core.JSON (decodeBytes, decodeValue, jsonOptions)
 import Baerbel.Core.ProviderConfig (WindguruRules(..))
 import Baerbel.Core.TimeZones (timeZones)
 import Baerbel.Runtime.Windguru (windguru)
+import Baerbel.Core.Windguru
+    ( parseStart, Numeric(..), RawSpot(..), Forecast(..), ForecastPoint(..), forecast )
 import Data.Aeson hiding (Result)
+import Data.Aeson.Types (Pair)
 import qualified Data.ByteString as Bytes
 import Data.IORef (newIORef, atomicModifyIORef', readIORef, writeIORef)
 import Data.List (find)
@@ -17,6 +20,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Time (UTCTime(..), fromGregorian, addUTCTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Control.Concurrent (threadDelay)
 import Control.Monad (when)
 import GHC.Clock (getMonotonicTimeNSec)
@@ -60,6 +64,8 @@ runCase rules fixture = do
 
 spec :: Spec
 spec = describe "Windguru tool equivalence" $ do
+  timestampSpec
+  forecastArraySpec
   fixtures <- runIO loadCases
   case fixtures of
     Left issue -> it "loads baseline fixtures" (expectationFailure (show issue))
@@ -69,6 +75,53 @@ spec = describe "Windguru tool equivalence" $ do
       it "keeps completed set members at the shared deadline" (withRules "windguru" (partialDeadline cases))
       it "includes saved-set memory lookup in the deadline" (withRules "windguru" (resolverDeadline cases))
   where fixtureExample fixture = it (Text.unpack (caseLabel fixture)) (withRules "windguru" (`runCase` fixture))
+
+
+timestampSpec :: Spec
+timestampSpec = do
+  it "accepts Python timezone-bearing timestamps with minute or second precision" $ withRules "windguru" $ \rules -> do
+    let expected = Right (UTCTime (fromGregorian 2026 11 26) 32400)
+        examples = ["2026-11-26T09:00:00Z", "2026-11-26T09:00Z",
+                    "2026-11-26T09:00+00:00", "2026-11-26 09:00:00+00:00",
+                    "2026-11-26 09:00+00:00", "2026-11-26T11:30+02:30",
+                    "2026-11-26 04:00-05:00"]
+    mapM_ (\value -> parseStart rules value `shouldBe` expected) examples
+  it "still rejects timestamps without an explicit timezone" $ withRules "windguru" $ \rules -> do
+    let invalid = ["2026-11-26", "2026-11-26T09:00", "2026-11-26 09:00:00", "invalid"]
+    mapM_ (\value -> parseStart rules value `shouldBe` Left (failure "windguru_invalid_arguments")) invalid
+
+
+forecastArraySpec :: Spec
+forecastArraySpec = do
+  it "ignores trailing weather readings without timestamps" $ withRules "windguru" $ \rules -> do
+    let fields = ["WINDSPD" .= [10, 11 :: Int], "GUST" .= [20, 21, 999 :: Int]]
+        expected = [Map.fromList [("wind_knots", Just 10), ("gust_knots", Just 20)],
+                    Map.fromList [("wind_knots", Just 11), ("gust_knots", Just 21)]]
+    forecastReadings rules fields `shouldBe` Right expected
+  it "ignores trailing wave readings without inventing timestamps" $ withRules "windguru" $ \rules -> do
+    let fields = ["HTSGW" .= [1, 2, 999 :: Int]]
+        expected = map (Map.singleton "wave_height_m" . Just) [1, 2]
+    forecastReadings rules fields `shouldBe` Right expected
+  it "rejects forecast arrays missing a timestamped reading slot" $ withRules "windguru" $ \rules -> do
+    let fields = ["WINDSPD" .= [10 :: Int]]
+    forecastReadings rules fields `shouldBe` Left (failure "windguru_invalid_response")
+  it "retains explicit missing readings before extra trailing values" $ withRules "windguru" $ \rules -> do
+    let fields = ["WINDSPD" .= [Null, String "", Number 999]]
+        expected = replicate 2 (Map.singleton "wind_knots" Nothing)
+    forecastReadings rules fields `shouldBe` Right expected
+
+forecastReadings :: WindguruRules -> [Pair] -> Result [Map Text (Maybe Double)]
+forecastReadings rules fields = do
+  raw <- decodeValue "fixture" wire
+  value <- forecast rules (zonedInstant timeZones) now location 1 now 2 raw
+  Right (map pointNumbers (outPoints value))
+  where
+    now = UTCTime (fromGregorian 2026 11 26) 0
+    stamp = utcTimeToPOSIXSeconds now
+    timed = ["initstamp" .= stamp, "hours" .= [0, 1 :: Int]]
+    body = object (timed <> fields)
+    wire = object ["id_spot" .= (1 :: Int), "id_model" .= (1 :: Int), "fcst" .= body]
+    location = RawSpot (Numeric 1) Nothing Nothing 0 0 Nothing Nothing [Numeric 1] Nothing Nothing Nothing
 
 
 newtype Retrieved = Retrieved {retrievedRetrievedAt :: Text} deriving (Eq, Show, Generic)

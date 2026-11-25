@@ -193,7 +193,11 @@ parseStart rules value
     normalized
       | "Z" `Text.isSuffixOf` value = Text.dropEnd 1 value <> "+00:00"
       | otherwise = value
-    parsed = parseTimeM True defaultTimeLocale "%FT%T%Q%Ez" (Text.unpack normalized)
+    source = Text.unpack normalized
+    formats = ["%FT%T%Q%Ez", "%FT%H:%M%Ez", "%F %T%Q%Ez", "%F %H:%M%Ez"]
+    parsed = listToMaybe (mapMaybe parse formats)
+    parse :: String -> Maybe ZonedTime
+    parse format = parseTimeM True defaultTimeLocale format source
 
 parseWindow :: WindguruRules -> Int -> Maybe Text -> Result Window
 parseWindow rules hours supplied
@@ -219,7 +223,7 @@ validateForecastData rules now expectedSpot model response dataValue arrays
   | not (any (`Map.member` arrays) (windguruRequiredFields rules)) = Left (failure "windguru_forecast_unavailable")
   | round (numericValue (rawForecastIdSpot response)) /= expectedSpot || round (numericValue (rawForecastIdModel response)) /= model = Left (failure "windguru_invalid_response")
   | null sourceHours || length sourceHours > windguruMaximumSourcePoints rules || not (and (zipWith (<) sourceHours (drop 1 sourceHours))) = Left (failure "windguru_invalid_response")
-  | any ((/= length sourceHours) . length) (Map.elems arrays) = Left (failure "windguru_invalid_response")
+  | any ((< length sourceHours) . length) (Map.elems arrays) = Left (failure "windguru_invalid_response")
   | initialized > addUTCTime (realToFrac (windguruFutureToleranceSeconds rules)) now = Left (failure "windguru_invalid_response")
   | otherwise = Right ()
   where

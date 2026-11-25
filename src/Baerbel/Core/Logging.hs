@@ -31,7 +31,7 @@ projectEvent _ _ = []
 
 syntheticEvents :: [(Text, (Text, [Text]))]
 syntheticEvents =
-  [("phone.tool", ("live_tool", ["delegation_id", "response_id", "tool", "tool_call_id", "status", "elapsed_ms", "result_count", "has_more", "repeat_query"])),
+  [("phone.tool", ("live_tool", ["delegation_id", "response_id", "tool", "tool_call_id", "status", "error", "elapsed_ms", "result_count", "has_more", "repeat_query"])),
    ("phone.session_started", ("live_session_started", ["role", "setup_ms", "model", "voice", "backend_model", "web_search_enabled"])),
    ("phone.session_closed", ("live_session_closed", ["finalized", "final_usage", "reason", "duration_ms"])),
    ("phone.audio_started", ("live_audio_started", ["first_audio_ms"])),

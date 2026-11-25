@@ -1,23 +1,27 @@
-module LiveCheck.Providers.Public (mapsRead, windguruRead) where
+module LiveCheck.Providers.Public (mapsRead, windguruRead, windguruSavedRead) where
 
 import Baerbel.Core.Calendar (TimeZones(..))
 import Baerbel.Core.Config (Settings, rule, setting, booleanSetting)
-import Baerbel.Core.Error (Result, failure)
-import Baerbel.Core.JSON (field, textField)
-import Baerbel.Core.Services (mapsAuthorization)
+import Baerbel.Core.Error (Failure(..), Result)
+import Baerbel.Core.JSON (field, textField, jsonOptions)
+import Baerbel.Core.Services (mapsAuthorization, readForecastSet)
 import Baerbel.Core.TimeFormat (isoUtc)
 import Baerbel.Core.TimeZones (timeZones)
 import Baerbel.Runtime.HTTP (Send)
 import Baerbel.Runtime.Maps (maps)
 import Baerbel.Runtime.Provider (Execute)
+import Baerbel.Runtime.Profile (ProfileStore(profileRead))
+import Baerbel.Runtime.Store (profileStore)
 import Baerbel.Runtime.Windguru (windguru)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), ToJSON(..), genericToJSON, object, (.=))
 import Data.Text (Text)
-import Data.Maybe (isJust, isNothing)
-import Data.Time (getCurrentTime)
-import LiveCheck.Check (metered)
+import Data.Maybe (isJust, isNothing, mapMaybe)
+import Data.Time (UTCTime, addUTCTime, getCurrentTime)
+import GHC.Generics (Generic)
+import qualified Data.Map.Strict as Map
+import LiveCheck.Check (metered, emit)
 import LiveCheck.Providers.Common
 import qualified Data.Text as Text
 
@@ -81,13 +85,13 @@ mapReport elevation cold warm requests details route = do
 
 windguruRead :: Settings -> Send -> IO (Result Value)
 windguruRead settings sender = runExceptT $ do
-  rules <- except (rule settings "providers" "windguru")
   (counted, requests) <- lift (metered sender)
-  let noSavedSet = pure (Left (failure "live_saved_forecast_set_not_requested"))
-  execute <- lift (windguru rules counted getCurrentTime (zonedInstant timeZones) noSavedSet)
+  execute <- ExceptT (savedExecutor settings counted)
   spot <- ExceptT (findSpot execute)
   model <- ExceptT (findModel execute spot)
-  ExceptT (forecastWorkflow execute requests spot model)
+  individual <- ExceptT (forecastWorkflow execute requests spot model)
+  saved <- ExceptT (savedForecastWorkflow execute)
+  pure (object ["individual" .= individual, "saved_set" .= saved])
 
 findSpot :: Execute -> IO (Result Int)
 findSpot execute = runExceptT $ do
@@ -128,3 +132,60 @@ forecastReport requests cold warm value = do
   where hasWind point = case field "wind_knots" point of
           Just (Number _) -> True
           _ -> False
+
+data SavedWindow = SavedWindow
+  { windowName :: Text, windowStatus :: Text, windowForecastCount :: Int
+  , windowAvailableForecasts :: Int, windowEmptyForecasts :: Int, windowReturnedPoints :: Int
+  , windowFailureCodes :: Map.Map Text Int } deriving (Generic)
+
+instance ToJSON SavedWindow where toJSON = genericToJSON (jsonOptions 6)
+
+windguruSavedRead :: Settings -> Send -> IO (Result Value)
+windguruSavedRead settings sender = runExceptT $ do
+  execute <- ExceptT (savedExecutor settings sender)
+  ExceptT (savedForecastWorkflow execute)
+
+savedExecutor :: Settings -> Send -> IO (Result Execute)
+savedExecutor settings sender = runExceptT $ do
+  rules <- except (rule settings "providers" "windguru")
+  profileRules <- except (rule settings "providers" "profile")
+  storeRules <- except (rule settings "profile" "store")
+  let path = Text.unpack (setting settings "PHONE_ASSISTANT_PROFILE_FILE")
+  store <- ExceptT (profileStore profileRules storeRules path)
+  let saved = readForecastSet . fmap Just <$> profileRead store
+  lift (windguru rules sender getCurrentTime (zonedInstant timeZones) saved)
+
+savedForecastWorkflow :: Execute -> IO (Result Value)
+savedForecastWorkflow execute = runExceptT $ do
+  now <- lift getCurrentTime
+  current <- lift (savedWindow execute now ("current", 0, 6))
+  later <- lift (traverse (savedWindow execute now) [("tomorrow", 24, 24), ("multiday", 0, 72)])
+  let rows = current : later
+      report = object ["windows" .= rows]
+      valid = all ((== "ok") . windowStatus) rows
+  lift (emit report)
+  except (ensure "live_windguru_saved_set_failed" valid)
+  except (ensure "live_windguru_saved_set_no_current_points" (windowAvailableForecasts current > 0))
+  pure report
+
+savedWindow :: Execute -> UTCTime -> (Text, Int, Int) -> IO SavedWindow
+savedWindow execute now (name, offset, hours) = do
+  let start = addUTCTime (fromIntegral offset * 3600) now
+      arguments = object ["start" .= isoUtc start, "hours" .= hours]
+  result <- tool execute "windguru_forecast_set" arguments
+  pure (either (failedWindow name) id (result >>= savedWindowReport name))
+
+failedWindow :: Text -> Failure -> SavedWindow
+failedWindow name issue = SavedWindow name "error" 0 0 0 0 codes
+  where codes = Map.singleton (failureCode issue) 1
+
+savedWindowReport :: Text -> Value -> Result SavedWindow
+savedWindowReport name result = do
+  forecasts <- member "forecasts" result :: Result [Value]
+  let successfulRows = filter ((== Just "ok") . textField "status") forecasts
+      failures = mapMaybe (textField "error") forecasts
+      codes = Map.fromListWith (+) [(code, 1) | code <- failures]
+  counts <- traverse (member "returned_point_count") successfulRows :: Result [Int]
+  let available = length (filter (> 0) counts)
+      empty = length (filter (== 0) counts)
+  Right (SavedWindow name "ok" (length forecasts) available empty (sum counts) codes)

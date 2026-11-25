@@ -30,6 +30,7 @@ import GHC.Clock (getMonotonicTimeNSec)
 import LiveCheck.Check (CheckResult, check, ensure, skip)
 import LiveCheck.Conversation.Audio (spoken, speechPair)
 import LiveCheck.Conversation.Pin (pinCheck)
+import LiveCheck.Conversation.Soak (soakCheck)
 import LiveCheck.Conversation.Model
 import LiveCheck.Conversation.Session
 import System.FilePath ((</>))
@@ -45,6 +46,7 @@ conversationChecks settings _ = do
     [ greetingResult settings
     , check "live_owner_schema_acceptance" (schemaCheck settings)
     , check "live_general_and_followup" (generalCheck settings speech)
+    , check "live_sustained_audio_pacing" (soakCheck settings speech)
     , webResult settings speech
     , check "live_temporary_profile_tools" (profileCheck settings speech)
     , check "live_pending_tool_responsiveness" (backgroundCheck settings speech)

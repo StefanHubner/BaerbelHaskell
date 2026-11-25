@@ -103,8 +103,8 @@
 <!-- status -->
 <g id="node2" class="node">
 <title>status</title>
-<text text-anchor="middle" x="849.5" y="-1267.5" font-family="DejaVu Sans" font-size="15.00">Haskell active · real owner Gmail call verified</text>
-<text text-anchor="middle" x="849.5" y="-1250.5" font-family="DejaVu Sans" font-size="15.00">Other routes and features need real&#45;call verification</text>
+<text text-anchor="middle" x="849.5" y="-1267.5" font-family="DejaVu Sans" font-size="15.00">Haskell active · owner Gmail + known&#45;caller ringing verified</text>
+<text text-anchor="middle" x="849.5" y="-1250.5" font-family="DejaVu Sans" font-size="15.00">Forwarded caller ended before answer · other call paths unverified</text>
 </g>
 <!-- phones -->
 <g id="node3" class="node">

@@ -6,11 +6,13 @@ import Baerbel.Core.Live (LiveConfig(..))
 import Baerbel.Core.Protocol (buildSession)
 import Baerbel.Core.Session (liveConfiguration)
 import Baerbel.Core.Speech (audiblePCM, splitFrames)
-import Baerbel.Runtime.Concurrent (paceFrame)
+import Baerbel.Runtime.Concurrent (paceStream)
 import Baerbel.Runtime.Effects (continue, within)
 import Baerbel.Runtime.Live (Media(..), LiveControls(..), AudioDelivery(..), runLiveSession)
 import Baerbel.Runtime.Provider (Execute)
 import Control.Concurrent (threadDelay)
+import Control.Monad (foldM_)
+import Data.Maybe (fromMaybe)
 import Control.Concurrent.Async (Async, AsyncCancelled, cancel, poll, waitCatch, withAsync)
 import Control.Concurrent.STM
 import Control.Exception (SomeException, fromException)
@@ -29,7 +31,7 @@ import qualified Data.Map.Strict as Map
 data Harness = Harness
   { harnessTrace :: TVar Trace, harnessInput :: TQueue ByteString
   , harnessControls :: TVar (Maybe LiveControls), harnessCancelled :: TVar Bool
-  , harnessConfig :: LiveConfig, harnessStarted :: Word64 }
+  , harnessClock :: TVar Word64, harnessConfig :: LiveConfig, harnessStarted :: Word64 }
 
 data Running = Running {runningHarness :: Harness, runningTask :: Async (Result ())}
 
@@ -57,8 +59,10 @@ withConfiguredMedia cfg prepareMedia execute action = do
   withAsync session (runAction harness action)
 
 newHarness :: LiveConfig -> IO Harness
-newHarness cfg = Harness <$> newTVarIO emptyTrace <*> newTQueueIO <*> newTVarIO Nothing
-  <*> newTVarIO False <*> pure cfg <*> getMonotonicTimeNSec
+newHarness cfg = do
+  started <- getMonotonicTimeNSec
+  Harness <$> newTVarIO emptyTrace <*> newTQueueIO <*> newTVarIO Nothing
+    <*> newTVarIO False <*> newTVarIO started <*> pure cfg <*> pure started
 
 runAction :: Harness -> (Running -> IO (Result Value)) -> Async (Result ()) -> IO (Result Value)
 runAction harness action task = do
@@ -84,17 +88,35 @@ finishReport cancelled harness trace result closed = do
 
 media :: Harness -> Media
 media harness = Media
-  { receiveAudio = Right . Just <$> atomically (readTQueue (harnessInput harness))
+  { receiveAudio = Right . Just <$> receiveFrame harness
   , sendAudio = delivered harness
   , finishCall = atomically (modifyTVar' (harnessTrace harness) markFinished) >> pure (Right ())
   , observeEvent = observe harness
   , muteInput = pure False
   , beforeTool = \_ _ -> pure (Right ())
   , installControls = atomically . writeTVar (harnessControls harness) . Just
-  , observeInputAudio = const (observe harness (object ["type" .= ("check.input.audio" :: Text)]))
+  , observeInputAudio = observedInput harness
   , afterTool = \name _ -> observe harness (toolEvent "check.tool.submitted" name)
   , mediaPaused = pure False, mediaEpoch = pure 0, progressSuppressed = pure False
   }
+
+observedInput :: Harness -> ByteString -> IO ()
+observedInput harness bytes = observe harness event
+  where
+    count = Bytes.length bytes
+    event = object ["type" .= ("check.input.audio" :: Text), "bytes" .= count]
+
+receiveFrame :: Harness -> IO ByteString
+receiveFrame harness = do
+  deadline <- readTVarIO (harnessClock harness)
+  next <- paceStream (liveFrameMicros cfg) deadline
+  atomically $ do
+    writeTVar (harnessClock harness) next
+    frame <- tryReadTQueue (harnessInput harness)
+    pure (fromMaybe silence frame)
+  where
+    cfg = harnessConfig harness
+    silence = Bytes.replicate (liveFrameBytes cfg) 0
 
 observe :: Harness -> Value -> IO ()
 observe harness value = do
@@ -138,7 +160,8 @@ await running code duration predicate = within (failure code) duration loop
 
 say :: Running -> ByteString -> IO Word64
 say running bytes = do
-  mapM_ (sendFrame harness) complete
+  started <- getMonotonicTimeNSec
+  foldM_ (sendFrame harness) started complete
   getMonotonicTimeNSec
   where
     harness = runningHarness running
@@ -151,11 +174,11 @@ trailing size bytes
   | Bytes.null bytes = []
   | otherwise = [bytes <> Bytes.replicate (size - Bytes.length bytes) 0]
 
-sendFrame :: Harness -> ByteString -> IO ()
-sendFrame harness bytes = do
-  started <- getMonotonicTimeNSec
+sendFrame :: Harness -> Word64 -> ByteString -> IO Word64
+sendFrame harness deadline bytes = do
+  next <- paceStream (liveFrameMicros (harnessConfig harness)) deadline
   atomically (writeTQueue (harnessInput harness) bytes)
-  paceFrame (liveFrameMicros (harnessConfig harness)) started
+  pure next
 
 controls :: Running -> IO (Result LiveControls)
 controls running = maybe (Left (failure "live_check_controls_missing")) Right

@@ -8,7 +8,7 @@ module Baerbel.Runtime.Live
 import Baerbel.Core.AudioMetrics
     ( AudioDelivery(..),
       AudioMetrics,
-      AudioNotice,
+      AudioNotice(..),
       emptyMetrics,
       recordInputFrame,
       recordQueueDepth,
@@ -30,7 +30,7 @@ import Baerbel.Core.Protocol
       appendCommand,
       announcementReady )
 import Baerbel.Runtime.Concurrent
-    ( raceWorkers, awaitReady, paceFrame )
+    ( raceWorkers, awaitReady, paceStream )
 import Baerbel.Runtime.Recording
     ( Timeline, emptyTimeline, addFrame, resetTimeline, sentSamples )
 import Baerbel.Runtime.Speech
@@ -240,9 +240,10 @@ bridgeWorkers runtime execute = withResampler inputRate providerRate $ \up ->
   withResampler providerRate inputRate $ \down -> do
     mediaGeneration <- mediaEpoch (media runtime)
     previewGeneration <- readTVarIO (generation runtime)
+    deadline <- getMonotonicTimeNSec
     let epochs = (mediaGeneration, previewGeneration)
-        workers = [sendInput runtime up False epochs, receiveOutput runtime down BS.empty 0,
-                   playOutput runtime, runTools runtime execute, reportProgress runtime (Progress False 0), waitStopped runtime]
+        workers = [sendInput runtime up False epochs deadline, receiveOutput runtime down BS.empty 0,
+                   playOutput runtime deadline, runTools runtime execute, reportProgress runtime (Progress False 0), waitStopped runtime]
     raceWorkers workers
   where
     inputRate = liveInputRate (config runtime)
@@ -274,14 +275,14 @@ enqueueInput cfg queue started (frame : frames) = do
               | otherwise = writeTBQueue queue frame >> enqueueInput cfg queue started frames
   enqueue
 
-sendInput :: Runtime -> Resampler -> Bool -> (Int, Int) -> IO (Result ())
-sendInput runtime converter greeted epochs = do
-  before <- getMonotonicTimeNSec
+sendInput :: Runtime -> Resampler -> Bool -> (Int, Int) -> Word64 -> IO (Result ())
+sendInput runtime converter greeted epochs deadline = do
+  next <- paceStream (liveFrameMicros (config runtime)) deadline
   nextEpochs <- resetInputEpoch runtime converter epochs
-  Effects.continue (sendInputAt runtime converter greeted before) nextEpochs
+  Effects.continue (sendInputAt runtime converter greeted next) nextEpochs
 
 sendInputAt :: Runtime -> Resampler -> Bool -> Word64 -> (Int, Int) -> IO (Result ())
-sendInputAt runtime converter greeted before nextEpochs = do
+sendInputAt runtime converter greeted deadline nextEpochs = do
   next <- atomically (tryReadTBQueue (inputQueue runtime))
   muted <- muteInput (media runtime)
   paused <- mediaPaused (media runtime)
@@ -296,8 +297,7 @@ sendInputAt runtime converter greeted before nextEpochs = do
     Left err -> pure (Left err)
     Right spoken -> do
       atomically (modifyTVar' (audioMetrics runtime) recordInputFrame)
-      paceFrame (liveFrameMicros (config runtime)) before
-      sendInput runtime converter spoken nextEpochs
+      sendInput runtime converter spoken nextEpochs deadline
 
 sendInputFrame :: Runtime -> Bool -> BS.ByteString -> IO (Result Bool)
 sendInputFrame runtime greeted pcm
@@ -391,30 +391,46 @@ updateTools runtime event = do
                  | otherwise = Left (failure "live_tool_queue_overflow")
       pure result
 
-playOutput :: Runtime -> IO (Result ())
-playOutput runtime = do
+playOutput :: Runtime -> Word64 -> IO (Result ())
+playOutput runtime deadline = do
   PlaybackFrame epoch frame <- atomically $ do
     next <- readTBQueue (outputQueue runtime)
     writeTVar (playing runtime) True
     pure next
-  before <- getMonotonicTimeNSec
-  current <- currentGeneration runtime
-  paused <- mediaPaused (media runtime)
-  let send | current /= epoch || paused = pure (Right Suppressed)
-           | otherwise = sendAudio (media runtime) frame
+  readyToPlay <- playbackCurrent runtime epoch
+  let send | readyToPlay = sendPlayback runtime deadline epoch frame
+           | otherwise = pure (Right (deadline, Suppressed))
   sent <- send `onException` atomically (writeTVar (playing runtime) False)
   case sent of
     Left problem -> atomically (writeTVar (playing runtime) False) >> pure (Left problem)
-    Right delivery -> finishPlayback runtime before frame delivery
+    Right (next, delivery) -> finishPlayback runtime next frame delivery
+
+playbackCurrent :: Runtime -> Int -> IO Bool
+playbackCurrent runtime epoch = do
+  current <- currentGeneration runtime
+  paused <- mediaPaused (media runtime)
+  pure (current == epoch && not paused)
+
+sendPlayback :: Runtime -> Word64 -> Int -> BS.ByteString -> IO (Result (Word64, AudioDelivery))
+sendPlayback runtime deadline epoch frame = do
+  next <- paceStream (liveFrameMicros (config runtime)) deadline
+  readyToPlay <- playbackCurrent runtime epoch
+  let send | readyToPlay = sendAudio (media runtime) frame
+           | otherwise = pure (Right Suppressed)
+  delivered <- send
+  pure ((,) next <$> delivered)
 
 finishPlayback :: Runtime -> Word64 -> BS.ByteString -> AudioDelivery -> IO (Result ())
-finishPlayback runtime before frame delivery = do
+finishPlayback runtime deadline frame delivery = do
   now <- getMonotonicTimeNSec
   let audible = audiblePCM frame
   notices <- atomically (recordPlayed runtime now audible delivery)
+  let period = fromIntegral (liveFrameMicros (config runtime)) * 1000
+      next = case notices of
+        AudioStarted _ : _ -> now + period
+        _ -> deadline
   mapM_ (observeEvent (media runtime) . noticeValue) notices
-  unless (delivery == Suppressed) (paceFrame (liveFrameMicros (config runtime)) before)
-  playOutput runtime
+  playOutput runtime next
 
 recordPlayed :: Runtime -> Word64 -> Bool -> AudioDelivery -> STM [AudioNotice]
 recordPlayed runtime now audible delivery = do
@@ -497,7 +513,8 @@ boundedTool runtime execute call arguments = do
       output = either (failureOutput cfg name) id checked
       elapsed = fromIntegral (ended - started) / (1000000 :: Double)
   observeEvent (media runtime) (object ["type" .= ("phone.tool" :: Text), "tool" .= name,
-    "tool_call_id" .= toolCallId call, "status" .= textField "status" output, "elapsed_ms" .= elapsed])
+    "tool_call_id" .= toolCallId call, "status" .= textField "status" output,
+    "error" .= textField "error" output, "elapsed_ms" .= elapsed])
   pure checked
   where
     cfg = config runtime

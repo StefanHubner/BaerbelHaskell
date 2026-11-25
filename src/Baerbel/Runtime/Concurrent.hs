@@ -1,8 +1,9 @@
-module Baerbel.Runtime.Concurrent (raceWorkers, awaitReady, hasElapsed, stateMVar, updateMVar, paceFrame) where
+module Baerbel.Runtime.Concurrent (raceWorkers, awaitReady, hasElapsed, stateMVar, updateMVar, paceFrame, paceStream) where
 
-import Baerbel.Core.Concurrent ( hasElapsed, frameDelay )
+import Baerbel.Core.Concurrent ( hasElapsed, frameDelay, frameSchedule )
 import Baerbel.Runtime.Error ( Result, failure )
 import Control.Concurrent ( threadDelay )
+import Control.Monad ( when )
 import Control.Concurrent.Async ( race )
 import Control.Concurrent.MVar ( MVar, modifyMVar, modifyMVar_ )
 import Control.Concurrent.STM
@@ -38,3 +39,10 @@ paceFrame duration started = do
   now <- getMonotonicTimeNSec
   let remaining = frameDelay duration started now
   threadDelay remaining
+
+paceStream :: Int -> Word64 -> IO Word64
+paceStream duration deadline = do
+  now <- getMonotonicTimeNSec
+  let (delay, next) = frameSchedule duration deadline now
+  when (delay > 0) (threadDelay delay)
+  pure next

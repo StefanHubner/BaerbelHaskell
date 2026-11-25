@@ -18,19 +18,22 @@ data Event = Event
 
 data Frame = Frame {frameAt :: Word64, frameBytes :: Int, frameSpeech :: Bool}
 
-data Trace = Trace {traceEvents :: [Event], traceFrames :: [Frame], traceFinished :: Bool}
+data Trace = Trace {traceEvents :: [Event], traceFrames :: [Frame], traceFinished :: Bool, traceInputBytes :: Int}
 
 emptyTrace :: Trace
-emptyTrace = Trace [] [] False
+emptyTrace = Trace [] [] False 0
 
 recordEvent :: Word64 -> Value -> Trace -> Trace
-recordEvent now value trace = trace {traceEvents = event : traceEvents trace}
+recordEvent now value trace = trace
+  {traceEvents = event : traceEvents trace, traceInputBytes = traceInputBytes trace + inputBytes}
   where
     payload = case textField "type" value of
       Just "response.event" -> fromMaybe value (field "event" value)
       _ -> value
     kind = fromMaybe "unknown" (textField "type" payload)
     content = fromMaybe "" (textField "delta" payload)
+    inputBytes | kind == "check.input.audio" = round (fromMaybe 0 (numberField "bytes" payload))
+               | otherwise = 0
     elapsed = case numberField "elapsed_ms" payload of
       Just millis -> Just millis
       Nothing -> numberField "setup_ms" payload

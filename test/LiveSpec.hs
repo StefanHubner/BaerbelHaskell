@@ -28,6 +28,7 @@ import Data.Text (Text)
 import Data.Time (UTCTime(..), fromGregorian, secondsToDiffTime)
 import Test.Hspec
 import qualified LiveCloseSpec
+import qualified PacingSpec
 import qualified PinVerificationSpec
 
 limits :: ToolLimits
@@ -57,6 +58,7 @@ advance = foldl step (Right (emptyToolState, []))
 spec :: Spec
 spec = do
   LiveCloseSpec.spec
+  PacingSpec.spec
   describe "Live setup classification" $ do
     it "distinguishes startup, provider failure, closure and unrelated events" $ do
       let classify kind = observeStarted (object ["type" .= (kind :: Text)])

@@ -241,6 +241,7 @@ executable baerbel-live-check
       LiveCheck.Conversation.Model
       LiveCheck.Conversation.Pin
       LiveCheck.Conversation.Session
+      LiveCheck.Conversation.Soak
       LiveCheck.Delivery
       LiveCheck.Delivery.Calendar
       LiveCheck.Delivery.Common
@@ -437,6 +438,7 @@ test-suite baerbel-test
       MetricsSpec
       NoteMailSpec
       NotesSpec
+      PacingSpec
       PinVerificationSpec
       StoreSpec
       TelephonySpec

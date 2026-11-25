@@ -33,6 +33,16 @@ spec = do
         lookup "arguments" fields `shouldBe` Nothing
         lookup "result" fields `shouldBe` Nothing
       events -> expectationFailure (show events)
+  it "retains tool failure codes without logging private arguments or results" $ do
+    let event = object ["type" .= ("phone.tool" :: Text), "tool" .= ("windguru_forecast" :: Text),
+          "status" .= ("error" :: Text), "error" .= ("windguru_forecast_unavailable" :: Text),
+          "arguments" .= ("private request" :: Text), "result" .= ("private response" :: Text)]
+    case projectEvent True event of
+      [(_, fields)] -> do
+        lookup "error" fields `shouldBe` Just (String "windguru_forecast_unavailable")
+        lookup "arguments" fields `shouldBe` Nothing
+        lookup "result" fields `shouldBe` Nothing
+      events -> expectationFailure (show events)
   it "keeps backend lifecycle metadata but excludes public source citations" $ do
     let event = object ["type" .= ("response.event" :: Text), "delegation_id" .= ("delegation" :: Text),
           "event" .= object ["type" .= ("response.output_text.annotation.added" :: Text),
