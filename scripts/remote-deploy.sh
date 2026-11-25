@@ -102,7 +102,9 @@ UNIT
 activate_prepared() {
   local release
   release=$(readlink -e "$prefix/staged") || return
-  if [[ -f "$legacy_global_config" && -f "$legacy_routes" ]]; then
+  if [[ -f "$global_config" && -f "$pbx_config" ]]; then
+    activate_release "$work/global.yaml" "$global_config"
+  elif [[ -f "$legacy_global_config" && -f "$legacy_routes" ]]; then
     activate_pbx_database "$release"
   elif [[ -f "$global_config" || -f "$legacy_global_config" ]]; then
     activate_release "$work/global.yaml" "$global_config" || return
@@ -193,12 +195,7 @@ activate_pbx_database() {
     return 1
   fi
   if install_pbx_database "$installer" "$backup" "$release" "$service_user"; then
-    mv -- "$legacy_global_config" "$backup/active-global.json"
-    mv -- "$legacy_routes" "$backup/legacy-account-routes"
-    move_legacy "$work/account-routes" "$backup/staged-account-routes"
-    move_legacy "$work/global.json" "$backup/staged-global.json"
-    move_legacy /etc/phone-assistant/telematica.env "$backup/telematica.env"
-    move_legacy /home/stefan/.config/phone-assistant/telematica.pending.env "$backup/telematica.pending.env"
+    archive_pbx_inputs "$backup" || return
     printf 'Asterisk configuration installed from YAML and SQLite. Backup %s\n' "$backup"
     return
   fi
@@ -245,12 +242,23 @@ install_account_routing() {
   backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
   result=$("$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$backup") || return
   printf '%s\n' "$result"
+  archive_pbx_inputs "$backup" || return
   if [[ "$result" == "Asterisk configuration already current." ]]; then
-    rmdir -- "$backup"
+    rmdir -- "$backup" 2>/dev/null || true
     return
   fi
   systemctl restart "$service" || return
   verify_service "$binary"
+}
+
+archive_pbx_inputs() {
+  local backup=$1
+  move_legacy "$legacy_global_config" "$backup/active-global.json" || return
+  move_legacy "$legacy_routes" "$backup/legacy-account-routes" || return
+  move_legacy "$work/account-routes" "$backup/staged-account-routes" || return
+  move_legacy "$work/global.json" "$backup/staged-global.json" || return
+  move_legacy /etc/phone-assistant/telematica.env "$backup/telematica.env" || return
+  move_legacy /home/stefan/.config/phone-assistant/telematica.pending.env "$backup/telematica.pending.env"
 }
 
 move_legacy() {
@@ -346,7 +354,7 @@ verify_service() {
   current_pid=$(systemctl show "$service" --property=MainPID --value)
   [[ "$current_pid" == "$first_pid" ]] || { printf 'Assistant restarted during startup verification.\n' >&2; return 1; }
   verify_running "$expected" "$current_pid" || return
-  systemctl show "$service" --property=ExecStart --property=MainPID
+  systemctl --no-pager show "$service" --property=ExecStart --property=MainPID
   printf 'Process checks passed; real call behavior has not been exercised.\n'
 }
 
