@@ -186,6 +186,7 @@ activate_pbx_database() {
   runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.yaml" || return
   backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
   cp -a "$override" "$legacy_routes" "$legacy_global_config" "$backup/" || return
+  preflight_pbx_database "$installer" "$backup" || return
   systemctl stop "$service" || return
   if ! cp -a "$user_database" "$backup/users.sqlite3"; then
     systemctl start "$service"
@@ -205,6 +206,21 @@ activate_pbx_database() {
   systemctl daemon-reload
   systemctl start "$service"
   return 1
+}
+
+preflight_pbx_database() {
+  local installer=$1 backup=$2
+  local candidate="$backup/preview.sqlite3"
+  python3 -c '
+import sqlite3, sys
+from contextlib import closing
+with closing(sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True)) as live:
+    with closing(sqlite3.connect(sys.argv[2])) as copy:
+        live.backup(copy)
+' "$user_database" "$candidate" || return
+  "$installer" adopt "$pbx_directory" "$legacy_routes" "$backup/preview.yaml" "$candidate" || return
+  "$installer" prepare "$backup/preview.yaml" "$candidate" "$backup/preview" || return
+  rm -r -- "$backup/preview" "$backup/preview.yaml" "$candidate"
 }
 
 install_pbx_database() {
