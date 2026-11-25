@@ -1,5 +1,20 @@
 # Migration evidence
 
+## Portable site configuration and instructions
+
+On 2026-11-25 at 23:36 UTC, the miniserver ran release
+`1309600e6073028ca464df2d67272c0e3e138a33a36daa402df6ea80783b5157`
+from source `8e73e71` after `make activate config`. Bärbel and Asterisk
+were active with zero restarts after startup. The installed instructions
+matched the release, both private YAML files had mode `0600`, and
+FastAGI selected the Standard and Pro accounts. SQLite passed integrity
+and foreign-key checks and retained the three Google connections, five
+delivery receipts, eight SMS receipts and six event cursors. The test
+using stock Asterisk config exercised one initial apply and a zero-write
+repeat. These checks exercised the application routing and installer.
+Real carrier call evidence below belongs to earlier releases.
+
+
 Release `49448f75…` from source `4a41916` activated at
 2026-11-25T22:58:48Z. The service uses `/etc/phone-assistant/global.yaml`.
 The Haskell `asteriskconfig` executable installed the managed configuration

@@ -3,7 +3,6 @@ module Baerbel.Runtime.Config
   , setting, integerSetting, numericSetting, booleanSetting, toolDefinitions, rule, ruleSection
   ) where
 
-import Control.Applicative (liftA2)
 import Baerbel.Core.Config
     ( Settings(..),
       User(..),
