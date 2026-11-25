@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Provider
-  ( Execute, Durable, Existing, Nullable(..), renamedOptions, referenceSize, referenceByteSize, truthy, optionalField, get, post, fetch, boundedMap, textParam
+  ( Execute, Durable, Existing, Nullable(..), renamedOptions, referenceSize, referenceByteSize, truthy, optionalField, get, post, boundedMap, textParam
   , clean, firstOr, limitJson, combine ) where
 
 import Baerbel.ProviderConfig (HttpPolicy(..))
 import Baerbel.Error (Result)
 import Baerbel.HTTP (Body(..), Request(..))
-import Baerbel.JSON (decodeValue, jsonOptions)
+import Baerbel.JSON (jsonOptions)
 import Control.Concurrent (newQSem, signalQSem, waitQSem)
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Exception (bracket_)
@@ -76,9 +76,6 @@ get policy url query = Request "GET" url [] query EmptyBody (httpResponseBytes p
 post :: ToJSON a => HttpPolicy -> Text -> [(ByteString, Maybe ByteString)] -> a -> Request
 post policy url query body = Request "POST" url [] query (JsonBody resource) (httpResponseBytes policy) (httpTimeoutSeconds policy)
   where resource = toJSON body
-
-fetch :: FromJSON a => Text -> Result Value -> Result a
-fetch code result = result >>= decodeValue code
 
 boundedMap :: Int -> (a -> IO b) -> [a] -> IO [b]
 boundedMap concurrency operation items = do

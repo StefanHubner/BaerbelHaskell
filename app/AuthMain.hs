@@ -1,5 +1,6 @@
 module Main (main) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.CLI (runProgram, rejected)
 import Baerbel.Authorize
 import Baerbel.Config (Global, User(..), Settings, resolveSettings, rule)
@@ -25,7 +26,7 @@ run :: [String] -> IO ()
 run (globalPath:arguments) = do
   raw <- ioResult "global_config_unavailable" (BS.readFile globalPath)
   let prepared = raw >>= decodeBytes "global_config_invalid" >>= authorizationSettings
-  result <- either (pure . Left) (configure arguments) prepared
+  result <- Effects.continue (configure arguments) prepared
   either rejected (const (pure ())) result
 run _ = Text.hPutStrLn stderr "Usage: phone-assistant-gmail-auth GLOBAL_CONFIG --client-secrets FILE [--token-file FILE] [--calendar] [--contacts] [--no-gmail] [--no-browser] [--port PORT] [--timeout SECONDS]" >> exitFailure
 
@@ -41,14 +42,14 @@ authorizationSettings global = do
     settings = resolveSettings global (User Map.empty)
 
 configure :: [String] -> (AuthorizationRules, ScopeGroups) -> IO (Result ())
-configure arguments (rules, groups) = either (pure . Left) open (parseOptions rules arguments)
+configure arguments (rules, groups) = Effects.continue open (parseOptions rules arguments)
   where
     open :: AuthorizationOptions -> IO (Result ())
     open options = do
       client <- readClient rules (authClientFile options)
       sender <- newRawSender
       let effects = AuthorizationEffects sender Text.putStrLn openBrowser getCurrentTime
-      either (pure . Left) (\value -> authorize rules groups options value effects) client
+      Effects.continue (\value -> authorize rules groups options value effects) client
 
 openBrowser :: Text -> IO ()
 openBrowser url = void (ioResult "authorization_browser_unavailable" (createProcess command))

@@ -2,7 +2,7 @@
 module Baerbel.VAD (VAD, withVAD, resetVAD, isSpeech) where
 
 import Baerbel.Error (Result, failure)
-import Control.Exception (bracket)
+import Baerbel.Effects (withResult)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Int (Int16)
@@ -20,11 +20,8 @@ foreign import ccall unsafe "WebRtcVad_Free" release :: Ptr () -> IO ()
 foreign import ccall unsafe "WebRtcVad_Process" process :: Ptr () -> CInt -> Ptr Int16 -> CInt -> IO CInt
 
 withVAD :: Int -> (VAD -> IO (Result a)) -> IO (Result a)
-withVAD mode action = bracket acquire cleanup use
-  where
-  acquire = openVAD mode
-  cleanup = either (const (pure ())) (\(VAD pointer) -> release pointer)
-  use = either (pure . Left) action
+withVAD mode = withResult (openVAD mode) close
+  where close (VAD pointer) = release pointer
 
 openVAD :: Int -> IO (Result VAD)
 openVAD mode = alloca createAt

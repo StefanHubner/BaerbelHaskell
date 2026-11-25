@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Profile (ProfileState(..), ProfileStore(..), Command(..), profile, parseCommand, transition, emptyProfile, snapshot, validKey, validValue) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.JSON (argumentOptions, decodeValue, jsonOptions)
 import Baerbel.ProviderConfig (ProfileRules(..))
@@ -116,7 +117,7 @@ change rules now state key value
     result = combine [snapshot rules updated Nothing, toJSON detail]
 
 profile :: ProfileRules -> ProfileStore -> IO UTCTime -> Execute
-profile rules store clock name arguments _ = either (pure . Left) run prepared
+profile rules store clock name arguments _ = Effects.continue run prepared
   where
     prepared = parseCommand rules name arguments
     run (ReadProfile key) = fmap (\state -> snapshot rules state key) <$> profileRead store

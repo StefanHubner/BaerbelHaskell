@@ -1,10 +1,11 @@
 module Baerbel.NoteMail (NoteMailRules(..), NoteDelivery, noteSession, noteSessionWith) where
 
 import Baerbel.Cache (onceSuccess)
+import Baerbel.Effects (continue)
 import Baerbel.Encoder (Encoding, encodeAudio)
 import Baerbel.Error (Failure(..), Result)
 import Baerbel.Gmail (account, accountRequest, sendEnvelope)
-import Baerbel.HTTP (Send)
+import Baerbel.HTTP (Send, requestJSON)
 import Baerbel.JSON (jsonOptions)
 import Baerbel.MIME (Envelope(..), File(..))
 import Baerbel.Provider (Durable)
@@ -34,7 +35,7 @@ noteSession rules = noteSessionWith (encodeAudio (noteMailEncoding rules)) rules
 
 noteSessionWith :: (ByteString -> IO (Result ByteString)) -> NoteMailRules -> GmailRules -> Send -> Durable -> IO UTCTime -> IO NoteDelivery
 noteSessionWith encode rules gmailRules send durable clock = do
-  owner <- onceSuccess (account <$> send request)
+  owner <- onceSuccess (requestJSON send request account)
   pure (noteDelivery encode owner rules configured send durable clock)
   where
     configured = gmailRules {gmailHttp = noteMailHttp rules}
@@ -50,14 +51,14 @@ noteDelivery encode owner rules gmailRules send durable clock ident transcript p
     operation = normalize <$> prepare
     prepare = do
       encoded <- encode pcm
-      either (pure . Left) (deliver owner rules gmailRules send clock ident transcript) encoded
+      continue (deliver owner rules gmailRules send clock ident transcript) encoded
     normalize = either (Right . toJSON . mailFailure) Right
 
 deliver :: IO (Result Text) -> NoteMailRules -> GmailRules -> Send -> IO UTCTime -> Text -> Text -> ByteString -> IO (Result Value)
 deliver owner rules gmailRules send clock ident transcript audio = do
   sender <- owner
   now <- clock
-  either (pure . Left) (submit now) sender
+  continue (submit now) sender
   where
     submit now origin = do
       let (envelope, file) = noteMessage rules now origin ident transcript audio

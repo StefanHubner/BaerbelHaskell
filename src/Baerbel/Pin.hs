@@ -4,6 +4,7 @@ module Baerbel.Pin
   , parsePinHash, verifyPin, newPinGate
   ) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar_)
@@ -201,7 +202,7 @@ requestPin cfg state deadline closed send = do
   let expires = now + fromIntegral (pinWindowMicros cfg)
   atomically (writeTVar state emptyPinState >> writeTVar deadline expires)
   prompted <- send (pinPrompt cfg)
-  either (pure . Left) (const (waitVerified state deadline closed)) prompted
+  Effects.continue (const (waitVerified state deadline closed)) prompted
 
 waitVerified :: TVar PinState -> TVar Integer -> TVar Bool -> IO (Result ())
 waitVerified state deadline closed = do

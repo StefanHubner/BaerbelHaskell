@@ -6,8 +6,9 @@ module Baerbel.Calendar (calendar, TimeZones(..), eventSummary) where
 import Baerbel.TimeFormat (isoZoned)
 import Data.Char (isDigit)
 import qualified Data.Bifunctor as Bifunctor
+import Baerbel.Effects (continue)
 import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Request, Send)
+import Baerbel.HTTP (Request, Send, requestJSON)
 import Baerbel.GoogleValidation (address, textValue)
 import Baerbel.JSON (decodeValue, argumentOptions, camelOptions, jsonOptions)
 import Baerbel.Provider
@@ -241,8 +242,8 @@ listCalendars rules send = loop initialPage
     | pageNumber state >= calendarListPages rules || pageScanned state >= calendarCalendarLimit rules = pure (Discovery (pageItems state) False Nothing)
     | otherwise = do
       let request = calendarPageRequest rules state
-      response <- send request
-      either pure loop (calendarPage rules state (fetch "calendar_invalid_calendar_list" response))
+      response <- requestJSON send request (decodeValue "calendar_invalid_calendar_list")
+      either pure loop (calendarPage rules state response)
 
 calendarPageRequest :: CalendarRules -> PageState CalendarEntry -> Request
 calendarPageRequest rules state = get (calendarHttp rules) (calendarCalendarUrl rules) params
@@ -314,8 +315,8 @@ listEvents rules send zones first lastTime query entry = loop initialPage
     | pageNumber state >= calendarEventPages rules || pageScanned state >= calendarEventScanLimit rules = pure (Right (pageItems state, True))
     | otherwise = do
       let request = eventPageRequest rules first lastTime query entry state
-      response <- send request
-      either pure loop (eventPage rules zones first lastTime entry state (fetch "calendar_invalid_response" response))
+      response <- requestJSON send request (decodeValue "calendar_invalid_response")
+      either pure loop (eventPage rules zones first lastTime entry state response)
 
 eventPageRequest :: CalendarRules -> UTCTime -> UTCTime -> Text -> CalendarEntry -> PageState CalendarEvent -> Request
 eventPageRequest rules first lastTime query entry state = get (calendarHttp rules) url params
@@ -473,7 +474,7 @@ coverageError coverage
 createEvent :: CalendarRules -> Send -> Durable -> Existing -> TimeZones -> Text -> CreateRequest -> IO (Result Value)
 createEvent rules send durable existing zones requestId request = do
   previous <- existing requestId "calendar_create" normalized
-  either (pure . Left) (maybe create (pure . Right)) previous
+  continue (maybe create (pure . Right)) previous
   where
     args = createArguments request
     normalized = toJSON args
@@ -489,8 +490,7 @@ createEvent rules send durable existing zones requestId request = do
       maybe commit (pure . Right) (conflictResult rules result)
     operation = do
       let wire = post (calendarHttp rules) (eventUrl rules "primary") params resource
-      response <- send wire
-      pure (response >>= creationReceipt rules zones (createPeriod request) resource)
+      requestJSON send wire (creationReceipt rules zones (createPeriod request) resource)
     updates = case resourceAttendees resource of
       [] -> "none"
       _ -> "all"
@@ -609,7 +609,7 @@ prepareCommand rules zones name arguments = case name of
     decoded = decodeValue "invalid_tool_arguments" arguments
 
 calendar :: CalendarRules -> Send -> Durable -> Existing -> TimeZones -> Execute
-calendar rules send durable existing zones name arguments requestId = either (pure . Left) execute prepared
+calendar rules send durable existing zones name arguments requestId = continue execute prepared
   where
     prepared = prepareCommand rules zones name arguments
     execute :: CalendarCommand -> IO (Result Value)

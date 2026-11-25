@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.NoteRuntime (NoteObserverConfig(..), NoteRuntime(..), withNoteRuntime) where
 
-import Baerbel.JSON (jsonOptions)
+import qualified Baerbel.Effects as Effects
+import Baerbel.JSON (jsonOptions, eventDelta, numberField)
 import GHC.Generics (Generic)
 import Baerbel.Error (Result, failure)
 import Baerbel.Notes (Fragment(..), Transcript(..), NoteEffects(..), NoteRules, notes)
@@ -19,12 +20,10 @@ import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString as BS
 import Data.Maybe (isJust)
 import Data.Foldable (toList)
-import Data.Scientific (toRealFloat)
 import Data.Sequence (Seq, ViewL(..), (|>))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
-import GHC.Clock (getMonotonicTimeNSec)
 
 data NoteObserverConfig = NoteObserverConfig
   { observerVadMode :: Int, observerFrameBytes :: Int, observerRate :: Int
@@ -68,13 +67,10 @@ archiveRead :: Maybe Archive -> Double -> Double -> IO (Result BS.ByteString)
 archiveRead Nothing _ _ = pure (Left (failure "call_recording_unavailable"))
 archiveRead (Just archive) begin end = readClip archive begin end
 
-nowSeconds :: IO Double
-nowSeconds = (\value -> fromIntegral value / 1000000000) <$> getMonotonicTimeNSec
-
 snapshot :: TVar Observation -> IO Transcript
 snapshot state = do
   current <- readTVarIO state
-  now <- nowSeconds
+  now <- Effects.monotonicSeconds
   pure (observedTranscript now current)
 
 observedTranscript :: Double -> Observation -> Transcript
@@ -104,7 +100,7 @@ audioFrames cfg bytes current = (frames, current {observedPending = pending})
 observeFrame :: NoteObserverConfig -> VAD -> TVar Observation -> BS.ByteString -> IO ()
 observeFrame cfg vad state frame = do
   result <- isSpeech vad (observerRate cfg) frame
-  now <- nowSeconds
+  now <- Effects.monotonicSeconds
   atomically (modifyTVar' state (speechTransition (observerGapFrames cfg) now result))
 
 speechTransition :: Int -> Double -> Result Bool -> Observation -> Observation
@@ -116,16 +112,14 @@ speechTransition gap now (Right True) current = current { observedQuiet = 0, obs
             | otherwise = observedVoiceStart current
 
 observeEvent :: Value -> Maybe (KM.KeyMap Value, Text)
-observeEvent (Object fields)
-  | KM.lookup "type" fields == Just (String "session.input_transcript.delta") =
-      case KM.lookup "delta" fields of
-        Just (String text) | not (T.null text) -> Just (fields, text)
-        _ -> Nothing
+observeEvent event@(Object fields) = case eventDelta "session.input_transcript.delta" event of
+  Just text | not (T.null text) -> Just (fields, text)
+  _ -> Nothing
 observeEvent _ = Nothing
 
 addTranscript :: NoteObserverConfig -> TVar Observation -> KM.KeyMap Value -> Text -> IO ()
 addTranscript cfg state fields text = do
-  now <- nowSeconds
+  now <- Effects.monotonicSeconds
   atomically (modifyTVar' state (appendFragment (observerHistoryChars cfg) now fields text))
 
 appendFragment :: Int -> Double -> KM.KeyMap Value -> Text -> Observation -> Observation
@@ -133,13 +127,13 @@ appendFragment _ _ _ _ current | observedClosed current = current
 appendFragment limit now fields text current = trimHistory limit updated
   where
     sequenceNumber = observedSequence current + 1
-    part = Fragment sequenceNumber text (number "archive_start") (number "archive_end")
+    event = Object fields
+    begin = numberField "archive_start" event
+    end = numberField "archive_end" event
+    part = Fragment sequenceNumber text begin end
     updated = current { observedSequence = sequenceNumber, observedLastDelta = now,
                         observedFragments = observedFragments current |> part,
                         observedChars = observedChars current + T.length text }
-    number key = case KM.lookup key fields of
-      Just (Number value) -> Just (toRealFloat value)
-      _ -> Nothing
 
 trimHistory :: Int -> Observation -> Observation
 trimHistory limit current

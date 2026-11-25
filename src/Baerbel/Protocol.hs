@@ -8,10 +8,11 @@ module Baerbel.Protocol
 
 import Baerbel.Error (Result, failure)
 import Baerbel.Config (Settings, rule, setting, integerSetting, booleanSetting)
-import Baerbel.JSON (camelOptions)
+import Baerbel.JSON (camelOptions, textField)
 import Control.Monad (foldM)
 import Data.Char (isAlphaNum, generalCategory, GeneralCategory(..))
 import Data.List (isInfixOf, isSuffixOf)
+import Data.Maybe (mapMaybe)
 import Data.Text.Normalize (NormalizationMode(NFKD), normalize)
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=), encode)
 import qualified Data.Map.Strict as Map
@@ -267,12 +268,7 @@ appendConfigured :: Settings -> Text -> Instructions -> Result Instructions
 appendConfigured settings key current = (`appendBoth` current) <$> rule settings "protocol" key
 
 toolNames :: [Value] -> [Text]
-toolNames = foldr collect []
-  where
-    collect (Object fields) names = case KM.lookup "name" fields of
-      Just (String name) -> name : names
-      _ -> names
-    collect _ names = names
+toolNames = mapMaybe (textField "name")
 
 configuredZone :: Settings -> Result TZ
 configuredZone settings = do

@@ -6,10 +6,11 @@ module Baerbel.Authorize
   ) where
 
 import Baerbel.Error (Result, failure, ioResult)
+import Baerbel.Effects (attempt, continue, mapResult, within)
 import Baerbel.HTTP (RawSend, Request(..), Response(..), Body(..))
 import Baerbel.JSON (decodeBytes, encodeBytes, decodeValue, camelOptions)
 import Baerbel.Storage (atomicWrite)
-import Control.Monad (join, void, unless)
+import Control.Monad ((>=>), void, unless)
 import Data.Bifunctor (second)
 import Control.Concurrent.Async (race)
 import Control.Concurrent.STM
@@ -42,7 +43,6 @@ import System.IO.Error (isDoesNotExistError)
 import System.Posix.Files (FileStatus, getSymbolicLinkStatus, isDirectory, isSymbolicLink, fileOwner, fileMode, accessModes, setFileMode)
 import System.Posix.User (getEffectiveUserID)
 import System.Posix.Types (UserID)
-import System.Timeout (timeout)
 import Text.Read (readMaybe)
 import Data.Bits ((.&.))
 
@@ -85,8 +85,9 @@ selectedScopes groups options
 readClient :: AuthorizationRules -> FilePath -> IO (Result DesktopClient)
 readClient rules path = do
   expanded <- expandPath path
-  bytes <- ioResult "authorization_client_unreadable" (BS.readFile expanded)
-  pure (bytes >>= decodeBytes "authorization_client_invalid" >>= clientDocument rules)
+  let readBytes = ioResult "authorization_client_unreadable" (BS.readFile expanded)
+      decode = decodeBytes "authorization_client_invalid" >=> clientDocument rules
+  mapResult decode readBytes
 
 clientDocument :: AuthorizationRules -> Value -> Result DesktopClient
 clientDocument rules (Object document) = case KM.lookup "installed" document of
@@ -247,8 +248,7 @@ authorizedDocument rules client scopes now access refresh lifetime = object
 prepareTokenPath :: FilePath -> IO (Result FilePath)
 prepareTokenPath raw = do
   path <- expandPath raw
-  result <- ioResult "authorization_token_directory_invalid" (prepare path)
-  pure (join result)
+  attempt "authorization_token_directory_invalid" (prepare path)
   where
     prepare :: FilePath -> IO (Result FilePath)
     prepare path = do
@@ -261,7 +261,7 @@ inspectPath :: FilePath -> FilePath -> IO (Result FilePath)
 inspectPath path parent = do
   metadata <- getSymbolicLinkStatus parent
   owner <- getEffectiveUserID
-  either (pure . Left) (const (inspectToken path)) (privateDirectory owner metadata)
+  continue (const (inspectToken path)) (privateDirectory owner metadata)
 
 privateDirectory :: UserID -> FileStatus -> Result ()
 privateDirectory owner metadata
@@ -286,19 +286,20 @@ expandPath ('~':'/':rest) = (</> rest) <$> getHomeDirectory
 expandPath path = pure path
 
 authorize :: AuthorizationRules -> ScopeGroups -> AuthorizationOptions -> DesktopClient -> AuthorizationEffects -> IO (Result ())
-authorize rules groups options client effects = case selectedScopes groups options of
-  Left problem -> pure (Left problem)
-  Right scopes -> do
-    prepared <- prepareTokenPath (fromMaybe (defaultTokenPath options) (authTokenFile options))
-    either (pure . Left) (startAuthorization rules groups options client effects scopes) prepared
+authorize rules groups options client effects = continue prepare (selectedScopes groups options)
+  where
+    prepare :: [Text] -> IO (Result ())
+    prepare scopes = do
+      let path = fromMaybe (defaultTokenPath options) (authTokenFile options)
+      prepared <- prepareTokenPath path
+      continue (startAuthorization rules groups options client effects scopes) prepared
 
 startAuthorization :: AuthorizationRules -> ScopeGroups -> AuthorizationOptions -> DesktopClient -> AuthorizationEffects -> [Text] -> FilePath -> IO (Result ())
 startAuthorization rules groups options client effects scopes tokenPath = do
   verifier <- randomText 64
   state <- randomText 32
   let run = consent rules groups options client effects scopes tokenPath verifier state
-  opened <- ioResult "authorization_callback_unavailable" (bracket (openCallback (authPort options)) close run)
-  pure (join opened)
+  attempt "authorization_callback_unavailable" (bracket (openCallback (authPort options)) close run)
 
 openCallback :: Int -> IO Socket
 openCallback port = bracketOnError (socket AF_INET Stream defaultProtocol) close configure
@@ -325,7 +326,7 @@ consent rules groups options client effects scopes tokenPath verifier state conn
       announceAuthorization effects (T.replace "{url}" url (message rules "openURL"))
       unless (authNoBrowser options) (openAuthorizationBrowser effects url)
       received <- awaitConsent rules options state connection
-      either (pure . Left) (exchangeAndSave rules groups client scopes verifier redirect effects tokenPath) received
+      continue (exchangeAndSave rules groups client scopes verifier redirect effects tokenPath) received
 
 awaitConsent :: AuthorizationRules -> AuthorizationOptions -> Text -> Socket -> IO (Result Text)
 awaitConsent rules options state connection = do
@@ -334,31 +335,30 @@ awaitConsent rules options state connection = do
       server = Warp.runSettingsSocket settings connection (callbackApplication rules state selected)
       waitCode = atomically (takeTMVar selected)
       micros = floor (authTimeout options * 1000000)
-  result <- timeout micros (race server waitCode)
-  pure (consentResult result)
+      deadline = failure "authorization_timeout"
+  within deadline micros (consentResult <$> race server waitCode)
 
-consentResult :: Maybe (Either () (Result Text)) -> Result Text
-consentResult Nothing = Left (failure "authorization_timeout")
-consentResult (Just (Left ())) = Left (failure "authorization_callback_stopped")
-consentResult (Just (Right received)) = received
+consentResult :: Either () (Result Text) -> Result Text
+consentResult (Left ()) = Left (failure "authorization_callback_stopped")
+consentResult (Right received) = received
 
 exchangeAndSave :: AuthorizationRules -> ScopeGroups -> DesktopClient -> [Text] -> Text -> Text -> AuthorizationEffects -> FilePath -> Text -> IO (Result ())
-exchangeAndSave rules groups client scopes verifier redirect effects path code = case prepared of
-  Left issue -> pure (Left issue)
-  Right request -> do
-    response <- authorizationSend effects request
-    now <- authorizationClock effects
-    either (pure . Left) save (exchangeCode rules client scopes now response)
+exchangeAndSave rules groups client scopes verifier redirect effects path code = continue exchange prepared
   where
     prepared = codeRequest rules groups client scopes code verifier redirect
+    exchange :: Request -> IO (Result ())
+    exchange request = do
+      response <- authorizationSend effects request
+      now <- authorizationClock effects
+      continue save (exchangeCode rules client scopes now response)
     save :: Value -> IO (Result ())
     save token = do
       checked <- prepareTokenPath path
-      either (pure . Left) (const (persist token)) checked
+      continue (const (persist token)) checked
     persist :: Value -> IO (Result ())
     persist token = do
       result <- atomicWrite path (encodeBytes token <> "\n")
-      either (pure . Left) (const saved) result
+      continue (const saved) result
     saved :: IO (Result ())
     saved = announceAuthorization effects (T.replace "{path}" (T.pack path) (message rules "saved")) >> pure (Right ())
 

@@ -22,10 +22,10 @@ import Baerbel.Services (Service(..), Services, withCallServices, deliverOwnerNo
 import qualified Baerbel.Tools as Tools
 import Baerbel.Server (socketMedia)
 import Control.Exception (finally)
-import Control.Monad (foldM, when, void)
+import Control.Monad (when, void)
 import Data.Time (UTCTime, getCurrentTime)
-import System.Timeout (timeout)
 import Network.Socket (Socket)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.Live (LiveConfig(..), Media(..), LiveControls(..), ToolLimits(..), runLiveSession, appendTranscript)
 import Baerbel.Protocol (SessionRole(..), SessionSettings(..), sessionConfig, voiceIdentity, greetingCommand, buildSessionWithProfile, announcementComplete)
@@ -123,7 +123,7 @@ awaitAnnouncement transcript lastAudio completion quietMicros = do
 
 ownerSession :: Settings -> Services -> Report -> Registry -> Handoffs -> Text -> Socket -> IO (Result ())
 ownerSession settings factories report registry handoffs identifier connection =
-  either (pure . Left) route (telephonyConfiguration settings)
+  Effects.continue route (telephonyConfiguration settings)
   where
     route native = do
       claimed <- claimHandoff native handoffs identifier
@@ -136,13 +136,13 @@ ownerSession settings factories report registry handoffs identifier connection =
       in startOwner settings factories native identifier managed {managedMedia = transport}
 
 playHandoff :: Settings -> Socket -> Text -> IO (Result ())
-playHandoff settings connection line = either (pure . Left) play (rule settings "runtime" "socket")
+playHandoff settings connection line = Effects.continue play (rule settings "runtime" "socket")
   where
     play rules = do
       let transport = socketMedia rules connection (const (pure ())) (const (pure ()))
           configured = handoffAnnouncement settings line
           run (cfg, completion, quiet, duration) = boundedAnnouncement duration cfg transport completion quiet
-      finally (either (pure . Left) run configured) (void (finishCall transport))
+      finally (Effects.continue run configured) (void (finishCall transport))
 
 handoffAnnouncement :: Settings -> Text -> Result (LiveConfig, Text, Int, Int)
 handoffAnnouncement settings line = do
@@ -153,9 +153,8 @@ handoffAnnouncement settings line = do
     _ -> Left (failure "announcement_configuration_invalid")
 
 boundedAnnouncement :: Int -> LiveConfig -> Media -> Text -> Int -> IO (Result ())
-boundedAnnouncement duration cfg transport completion quiet = do
-  result <- timeout duration (runAnnouncement cfg transport completion quiet)
-  pure (fromMaybe (Left (failure "announcement_timeout")) result)
+boundedAnnouncement duration cfg transport completion quiet =
+  Effects.within (failure "announcement_timeout") duration (runAnnouncement cfg transport completion quiet)
 
 takeLast :: Int -> [a] -> [a]
 takeLast count values = drop (max 0 (length values - count)) values
@@ -196,7 +195,7 @@ openOwnerSession settings factories native identifier managed = case pinConfigur
   Left err -> pure (Left err)
   Right cfg -> do
     gate <- Pin.newPinGate cfg
-    either (pure . Left) (\pin -> finally (bindOwner settings factories native identifier managed pin) (Pin.closePin pin)) gate
+    Effects.continue (\pin -> finally (bindOwner settings factories native identifier managed pin) (Pin.closePin pin)) gate
 
 bindOwner :: Settings -> Services -> TelephonyConfig -> Text -> ManagedCall -> Pin.PinGate -> IO (Result ())
 bindOwner settings factories native identifier managed pin = do
@@ -207,7 +206,7 @@ bindOwner settings factories native identifier managed pin = do
     bind True = do
       let hooks = nativeMedia settings managed pin
       opened <- openOwner native validateNumber hooks identifier
-      either (pure . Left) runBound opened
+      Effects.continue runBound opened
     runBound owner = do
       setReattachAllowed managed (ownerCanResume owner)
       finally (runOwner settings factories managed pin (Just owner)) (closeOwner owner)
@@ -238,16 +237,15 @@ announceManaged settings managed line completion interruptible = case configurat
             <*> rule settings "protocol" "ownerAnnouncementMicros"
       (quiet, duration) <- either (const (Left (failure "announcement_unavailable"))) Right limits
       pure (cfg, quiet, duration)
-    play cfg quiet duration current = do
-      result <- timeout duration (playAnnouncement current cfg completion quiet interruptible)
-      pure (fromMaybe (Left (failure "announcement_timeout")) result)
+    play cfg quiet duration current = Effects.within (failure "announcement_timeout") duration
+      (playAnnouncement current cfg completion quiet interruptible)
 
 runOwner :: Settings -> Services -> ManagedCall -> Pin.PinGate -> Maybe OwnerControl -> IO (Result ())
 runOwner settings factories managed pin owner = withCallServices factories $ \services -> do
   context <- fromMaybe (pure (Right "")) (ownerProfileContext factories)
   archive <- openArchive settings owner
   let run text = withNotes settings factories archive (observeEvent (managedMedia managed)) (continueOwner settings services managed pin owner text)
-  finally (either (pure . Left) run context) (maybe (pure ()) closeRecording archive)
+  finally (Effects.continue run context) (maybe (pure ()) closeRecording archive)
 
 openArchive :: Settings -> Maybe OwnerControl -> IO (Maybe Archive)
 openArchive settings owner
@@ -261,7 +259,7 @@ withNotes settings factories archive report action
   | booleanSetting settings "PHONE_ASSISTANT_OWNER_NOTES" /= Right True = action Nothing
   | otherwise = case deliverOwnerNote factories of
       Nothing -> pure (Left (failure "owner_note_mail_unavailable"))
-      Just prepare -> either (pure . Left) (open prepare) configuration
+      Just prepare -> Effects.continue (open prepare) configuration
   where
     configuration = (,) <$> observerConfiguration settings <*> rule settings "notes" "selection"
     open prepare (cfg, rules) = do
@@ -276,7 +274,7 @@ continueOwner settings services managed pin owner profile notesRuntime = do
   now <- getCurrentTime
   let configured = ownerConfiguration settings services managed pin owner profile notesRuntime now
       run (cfg, handlers) = runOwnerMedia cfg handlers managed pin owner notesRuntime
-  either (pure . Left) run configured
+  Effects.continue run configured
 
 ownerConfiguration :: Settings -> [Service] -> ManagedCall -> Pin.PinGate -> Maybe OwnerControl -> Text -> Maybe NoteRuntime -> UTCTime -> Result (LiveConfig, [Service])
 ownerConfiguration settings services managed pin owner profile notesRuntime now = do
@@ -315,7 +313,7 @@ executeOwnerEnd managed pin notesRuntime cfg settings _ args requestId = do
   controls <- managedControls managed
   case controls of
     Nothing -> pure (Left (failure "end_call_unavailable"))
-    Just current -> either (pure . Left) (run current) (parseEndReason args)
+    Just current -> Effects.continue (run current) (parseEndReason args)
   where
     run current = executeEndCall cfg (endSnapshot managed pin notesRuntime current requestId) (endEffects managed current settings)
 
@@ -371,10 +369,8 @@ voiceTest settings managed notesRuntime = do
     (_, True, _) -> pure (Left (failure "finish_or_cancel_note_before_voice_test"))
     (_, _, Left err) -> pure (Left err)
     (_, _, Right samples) -> do
-      played <- foldM play (Right ()) samples
+      played <- Effects.runAll (playSample settings managed) samples
       pure (sampleResult settings samples played)
-  where
-    play result sample = either (pure . Left) (const (playSample settings managed sample)) result
 
 voiceSamples :: Settings -> Result [VoiceSample]
 voiceSamples settings = do
@@ -398,9 +394,10 @@ playSample settings managed sample = case sampleConfiguration settings sample of
     controls <- managedControls managed
     let completion = T.unwords (takeLast 5 (T.words (sampleText sample)))
         play current = playAnnouncement current cfg completion quiet False
-    result <- timeout duration (maybe (pure (Left (failure "voice_test_unavailable"))) play controls)
+    let announce = maybe (pure (Left (failure "voice_test_unavailable"))) play controls
+    result <- Effects.within (failure "voice_test_timeout") duration announce
     threadDelay gap
-    pure (maybe (Left (failure "voice_test_timeout")) void result)
+    pure (void result)
 
 sampleConfiguration :: Settings -> VoiceSample -> Result (LiveConfig, Int, Int, Int)
 sampleConfiguration settings sample = do

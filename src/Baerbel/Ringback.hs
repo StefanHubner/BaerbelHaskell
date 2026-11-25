@@ -1,6 +1,7 @@
 module Baerbel.Ringback (RingRules(..), ringFrame, withRingback) where
 
 import Baerbel.AudioMetrics (AudioDelivery(..))
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result)
 import Baerbel.JSON (jsonOptions)
 import Baerbel.Live (Media(..))
@@ -55,7 +56,7 @@ runTone rules media ring epoch index = do
   paused <- mediaPaused media
   when (paused || current /= epoch) (atomically (writeTVar (ringActive ring) False))
   result <- withMVar (ringLock ring) (const (writeTone rules media ring index))
-  either (pure . Left) (const advance) result
+  Effects.continue (const advance) result
   where
     advance :: IO (Result a)
     advance = do

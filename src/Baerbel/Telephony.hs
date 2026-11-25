@@ -1,17 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Baerbel.Telephony
   ( TelephonyConfig(..), TelephonyRules(..), TelephonyMedia(..), OwnerControl(..), IncomingControl(..), IncomingEnd(..)
   , Handoffs, newHandoffs, claimHandoff, openOwner, openIncoming, homeRouteHandler
   ) where
 
+import Baerbel.Concurrent (stateMVar, updateMVar)
 import Baerbel.AMI (AMI(..), AMIRules, Channel(..), Message, connectAMI, field, variable, ownerChannel, incomingChannel)
 import Baerbel.CallState
-import Baerbel.Error (Failure(..), Result, failure, ioResult)
-import Baerbel.JSON (jsonOptions, resultValue)
+import qualified Baerbel.Effects as Effects
+import Baerbel.Error (Failure(..), Result, failure)
+import Baerbel.JSON (jsonOptions, resultValue, textField)
 import Baerbel.Incoming (trustedEndpoint, callbackNumber, remainingBudget)
 import Baerbel.Recording (Archive, openRecording)
 import Baerbel.Routing
-import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar_, modifyMVar, withMVar)
+import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar, withMVar)
 import Control.Concurrent.STM (TChan, atomically, newBroadcastTChanIO, dupTChan, readTChan, writeTChan)
 import Control.Exception (finally, onException)
 import Control.Monad (when, unless, void)
@@ -32,7 +35,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (decodeUtf8, decodeUtf8', encodeUtf8)
 import GHC.Generics (Generic)
-import GHC.Clock (getMonotonicTimeNSec)
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as N
 import Data.ByteArray.Encoding (Base(Base16), convertToBase)
@@ -81,9 +83,6 @@ data DirectArgs = DirectArgs
 
 type ValidateNumber = Text -> IO (Result Text)
 
-seconds :: IO Double
-seconds = (\value -> fromIntegral value / 1000000000) <$> getMonotonicTimeNSec
-
 freshToken :: IO Text
 freshToken = render <$> (getRandomBytes 16 :: IO ByteString)
   where
@@ -91,9 +90,8 @@ freshToken = render <$> (getRandomBytes 16 :: IO ByteString)
     render = decodeUtf8 . convertToBase Base16
 
 textArgument :: Text -> KM.KeyMap Value -> Result Text
-textArgument key fields = case KM.lookup (K.fromText key) fields of
-  Just (String value) -> Right value
-  _ -> Left (failure "invalid_arguments")
+textArgument key fields = maybe invalid Right (textField key (Object fields))
+  where invalid = Left (failure "invalid_arguments")
 
 nullableText :: Text -> KM.KeyMap Value -> Result (Maybe Text)
 nullableText key fields = case KM.lookup (K.fromText key) fields of
@@ -142,7 +140,7 @@ checkToken value
   | otherwise = Left (failure "invalid_arguments")
 
 bindOwner :: AMIRules -> AMI -> Text -> IO (Result Channel)
-bindOwner rules ami identifier = fmap (>>= ownerChannel rules identifier) statuses
+bindOwner rules ami identifier = Effects.mapResult (ownerChannel rules identifier) statuses
   where
     statuses :: IO (Result [Message])
     statuses = amiAction ami "Status" [("Variables", "PA_CALL_ID,PA_OWNER_AUTHORIZED,PA_PERMISSION")] (Just "StatusComplete")
@@ -152,7 +150,7 @@ openOwner cfg validate media identifier = do
   state <- newMVar Nothing
   events <- newBroadcastTChanIO
   connected <- connectAMI (amiRules cfg) (amiUsername cfg) (amiPassword cfg) (observeOwner state events media)
-  either (pure . Left) (finishOwner cfg validate media identifier state events) connected
+  Effects.continue (finishOwner cfg validate media identifier state events) connected
 
 finishOwner :: TelephonyConfig -> ValidateNumber -> TelephonyMedia -> Text -> MVar (Maybe CallState) -> TChan () -> AMI -> IO (Result OwnerControl)
 finishOwner cfg validate media identifier pending events ami = do
@@ -166,7 +164,7 @@ createOwner cfg validate media identifier pending events ami channel = do
   let initial = initialCall identifier Owner channel
   state <- newMVar initial
   lock <- newMVar ()
-  modifyMVar_ pending (const (pure (Just initial)))
+  updateMVar pending (const (Just initial))
   active <- newMVar ami
   let proxy = proxyAMI active
   let reconnect = reconnectOwner cfg pending events media active
@@ -177,7 +175,7 @@ createOwner cfg validate media identifier pending events ami channel = do
 -- arrive while an announcement or native dial is awaiting completion.
 observeOwner :: MVar (Maybe CallState) -> TChan () -> TelephonyMedia -> Message -> IO ()
 observeOwner state events media message = do
-  snapshot <- modifyMVar state (pure . update)
+  snapshot <- stateMVar state update
   let digit = snapshot >>= sendDigit message
   maybe (pure ()) (keypadDigit media) digit
   atomically (writeTChan events ())
@@ -210,8 +208,8 @@ currentState runtime pending = do
 
 saveState :: OwnerRuntime -> MVar (Maybe CallState) -> CallState -> IO ()
 saveState runtime pending state = do
-  modifyMVar_ (ownerState runtime) (const (pure state))
-  modifyMVar_ pending (pure . preserve)
+  updateMVar (ownerState runtime) (const state)
+  updateMVar pending preserve
   where
     preserve :: Maybe CallState -> Maybe CallState
     preserve (Just previous) | callPhase previous `elem` [Connected, Ended] = Just previous {callResults = M.union (callResults state) (callResults previous)}
@@ -235,7 +233,7 @@ verifyHome route channel
 validatedRoute :: OwnerRuntime -> ValidateNumber -> DirectArgs -> IO (Result Route)
 validatedRoute runtime validate args
   | argumentNumber args == "home" = pure (selectRoute Right settings Owner "home")
-  | otherwise = fmap (>>= selectRoute Right settings Owner) (validate (argumentNumber args))
+  | otherwise = Effects.mapResult (selectRoute Right settings Owner) (validate (argumentNumber args))
   where
     settings :: RouteSettings
     settings = routeSettings (ownerConfig runtime)
@@ -244,7 +242,7 @@ runDirect :: OwnerRuntime -> MVar (Maybe CallState) -> DirectMode -> Text -> Dir
 runDirect runtime pending mode requestId args route = do
   token <- freshToken
   attempt <- freshToken
-  now <- seconds
+  now <- Effects.monotonicSeconds
   state <- currentState runtime pending
   let request = DialRequest requestId attempt (argumentToken args) route (argumentLabel args) (argumentConfirmed args) token now
   case mode of
@@ -291,7 +289,7 @@ nativeDial runtime pending request = do
   ExceptT (awaitDial runtime pending request)
 
 markDialing :: OwnerRuntime -> MVar (Maybe CallState) -> IO (Result ())
-markDialing _ pending = modifyMVar pending (pure . transition)
+markDialing _ pending = stateMVar pending transition
   where
     transition :: Maybe CallState -> (Maybe CallState, Result ())
     transition (Just state) | callPhase state == Announcing = (Just state {callPhase = Dialing}, Right ())
@@ -369,7 +367,7 @@ abandonOwner :: OwnerRuntime -> MVar (Maybe CallState) -> IO ()
 abandonOwner runtime pending = do
   ownership <- owned runtime pending
   either (const (pure ())) (\channel -> void (hangup (ownerAMI runtime) channel "16")) ownership
-  modifyMVar_ pending (pure . fmap (\state -> state {callPhase = Ended}))
+  updateMVar pending (fmap (\state -> state {callPhase = Ended}))
   atomically (writeTChan (ownerEvents runtime) ())
 
 recordOwner :: OwnerRuntime -> IO (Result Archive)
@@ -439,9 +437,9 @@ freshUUID = UUID.toText <$> UUID.nextRandom
 
 prepareHandoff :: Handoffs -> Channel -> Text -> Text -> IO (Result Text)
 prepareHandoff (Handoffs rules pending) channel identifier text = do
-  now <- seconds
+  now <- Effects.monotonicSeconds
   token <- freshUUID
-  modifyMVar pending (pure . insert now token)
+  stateMVar pending (insert now token)
   where
     insert :: Double -> Text -> M.Map Text PendingHandoff -> (M.Map Text PendingHandoff, Result Text)
     insert now token records
@@ -453,12 +451,12 @@ prepareHandoff (Handoffs rules pending) channel identifier text = do
         active = M.filter ((> now) . handoffDeadline) records
 
 forgetHandoff :: Handoffs -> Text -> IO ()
-forgetHandoff (Handoffs _ pending) token = modifyMVar_ pending (pure . M.delete token)
+forgetHandoff (Handoffs _ pending) token = updateMVar pending (M.delete token)
 
 claimHandoff :: TelephonyConfig -> Handoffs -> Text -> IO (Result (Maybe Text))
 claimHandoff cfg (Handoffs _ pending) token = do
-  now <- seconds
-  claimed <- modifyMVar pending (pure . consume now)
+  now <- Effects.monotonicSeconds
+  claimed <- stateMVar pending (consume now)
   maybe (pure (Right Nothing)) (verifyHandoff cfg token) claimed
   where
     consume :: Double -> M.Map Text PendingHandoff -> (M.Map Text PendingHandoff, Maybe PendingHandoff)
@@ -470,7 +468,7 @@ claimHandoff cfg (Handoffs _ pending) token = do
 verifyHandoff :: TelephonyConfig -> Text -> PendingHandoff -> IO (Result (Maybe Text))
 verifyHandoff cfg token pending = do
   connected <- connectAMI (amiRules cfg) (amiUsername cfg) (amiPassword cfg) (const (pure ()))
-  either (pure . Left) inspect connected
+  Effects.continue inspect connected
   where
     inspect :: AMI -> IO (Result (Maybe Text))
     inspect ami = runExceptT (checkHandoff ami token pending) `finally` amiClose ami
@@ -518,7 +516,7 @@ validOwnerChannel name = any matches ["PJSIP/phone-assistant-aa-outbound-", "PJS
 openIncoming :: TelephonyConfig -> Handoffs -> Text -> IO () -> IO (Result IncomingControl)
 openIncoming cfg handoffs identifier pause = do
   connected <- connectAMI (amiRules cfg) (amiUsername cfg) (amiPassword cfg) (const (pure ()))
-  either (pure . Left) bind connected
+  Effects.continue bind connected
   where
     bind :: AMI -> IO (Result IncomingControl)
     bind ami = do
@@ -612,9 +610,10 @@ incomingReason MessageFailed = "MESSAGE_FAILED"
 incomingReason MessageUncertain = "MESSAGE_UNCERTAIN"
 
 homeRouteHandler :: TelephonyConfig -> ValidateNumber -> Socket -> IO (Result ())
-homeRouteHandler cfg validate connection = do
-  result <- timeout (nativeAGIMicros (telephonyRules cfg)) (ioResult "agi_connection_failed" (runExceptT (homeRoute cfg validate connection)))
-  pure (maybe (Left (failure "agi_timeout")) (>>= id) result)
+homeRouteHandler cfg validate connection = Effects.within (failure "agi_timeout") duration operation
+  where
+    duration = nativeAGIMicros (telephonyRules cfg)
+    operation = Effects.attempt "agi_connection_failed" (runExceptT (homeRoute cfg validate connection))
 
 homeRoute :: TelephonyConfig -> ValidateNumber -> Socket -> ExceptT Failure IO ()
 homeRoute cfg validate connection = do
@@ -663,8 +662,7 @@ homeCommands route = map command [("PA_DIRECT_NUMBER", routeNumber route), ("PA_
 agiCommand :: TelephonyRules -> Socket -> Text -> Text -> IO (Result ())
 agiCommand rules connection command expected = do
   N.sendAll connection (encodeUtf8 (command <> "\n"))
-  response <- readAgiLine rules connection
-  pure (response >>= verify)
+  Effects.mapResult verify (readAgiLine rules connection)
   where
     verify :: Text -> Result ()
     verify line
@@ -796,9 +794,9 @@ reconnectOwner cfg state events media active = do
 
 replaceAMI :: MVar (Maybe CallState) -> MVar AMI -> AMI -> IO (Result ())
 replaceAMI state active next = do
-  previous <- modifyMVar active (\previous -> pure (next, previous))
+  previous <- stateMVar active (next,)
   amiClose previous
-  modifyMVar_ state (pure . fmap (\current -> current {callControlLost = False}))
+  updateMVar state (fmap (\current -> current {callControlLost = False}))
   pure (Right ())
 
 directNumber :: DirectMode -> KM.KeyMap Value -> Result Text

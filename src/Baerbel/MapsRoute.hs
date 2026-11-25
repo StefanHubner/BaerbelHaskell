@@ -3,13 +3,14 @@
 module Baerbel.MapsRoute (route, distance, heading, gainLoss, samplePath) where
 
 import Data.Char (isDigit, isAsciiUpper)
+import Baerbel.Effects (continue)
 import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Body(..), Request(..), Send)
-import Baerbel.JSON (camelOptions, jsonOptions)
+import Baerbel.HTTP (Body(..), Request(..), Send, requestJSON)
+import Baerbel.JSON (camelOptions, jsonOptions, decodeValue)
 import Baerbel.MailContent (htmlTextWith)
 import Baerbel.MapTypes
 import Baerbel.ProviderConfig (RouteRules(..))
-import Baerbel.Provider (fetch, firstOr, textParam, combine, referenceByteSize)
+import Baerbel.Provider (firstOr, textParam, combine, referenceByteSize)
 import Data.Aeson hiding (Result, pairs)
 import Control.Monad (foldM)
 import Text.Printf (printf)
@@ -411,9 +412,8 @@ route :: RouteRules -> Send -> Bool -> Place -> Place -> IO (Result Value)
 route rules send elevation origin destination = case routeRequest rules origin destination of
   Left issue -> pure (Left issue)
   Right request -> do
-    response <- send request
-    let normalized = fetch "maps_invalid_route_response" response >>= normalize rules origin destination
-    either (pure . Left) complete normalized
+    response <- requestJSON send request (decodeValue "maps_invalid_route_response")
+    continue complete (response >>= normalize rules origin destination)
   where
     complete (value, path)
       | not elevation = pure (finishRoute rules value (unavailable "not_enabled", resultSteps value))
@@ -423,7 +423,7 @@ route rules send elevation origin destination = case routeRequest rules origin d
     survey value path samples positions spacing = do
       let request = elevationRequest rules samples
           durationMicros = routeElevationTimeout rules * 1000000
-      response <- timeout durationMicros (fmap (fetch "invalid_elevation_response") (send request))
+      response <- timeout durationMicros (requestJSON send request (decodeValue "invalid_elevation_response"))
       let ground = terrain rules path samples positions spacing response
       pure (finishRoute rules value ground)
 

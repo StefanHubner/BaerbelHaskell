@@ -82,26 +82,26 @@
 <!-- live&#45;&gt;effects -->
 <g id="edge15" class="edge">
 <title>live&#45;&gt;effects</title>
-<path fill="none" stroke="#586f86" d="M234,-552.65C368.29,-515.52 570.2,-459.7 570.2,-459.7 570.2,-459.7 678.76,-357.2 742.24,-297.26"/>
-<polygon fill="#586f86" stroke="#586f86" points="744.35,-299.12 748.24,-291.6 740.5,-295.05 744.35,-299.12"/>
+<path fill="none" stroke="#586f86" d="M234,-552.65C368.29,-515.52 570.2,-459.7 570.2,-459.7 570.2,-459.7 668.84,-366.56 733.05,-305.94"/>
+<polygon fill="#586f86" stroke="#586f86" points="735.26,-307.7 739.15,-300.18 731.41,-303.63 735.26,-307.7"/>
 </g>
 <!-- providers&#45;&gt;effects -->
 <g id="edge13" class="edge">
 <title>providers&#45;&gt;effects</title>
-<path fill="none" stroke="#586f86" d="M475.77,-383.38C539.6,-357.05 625.59,-321.58 691.01,-294.6"/>
-<polygon fill="#586f86" stroke="#586f86" points="692.15,-297.16 698.48,-291.52 690.01,-291.98 692.15,-297.16"/>
+<path fill="none" stroke="#586f86" d="M475.77,-383.38C533.06,-359.75 608.19,-328.76 670.28,-303.15"/>
+<polygon fill="#586f86" stroke="#586f86" points="671.46,-305.69 677.79,-300.05 669.33,-300.51 671.46,-305.69"/>
 </g>
 <!-- notifications&#45;&gt;effects -->
 <g id="edge14" class="edge">
 <title>notifications&#45;&gt;effects</title>
-<path fill="none" stroke="#586f86" d="M1090.45,-383.38C1028.34,-357.11 944.72,-321.73 880.98,-294.76"/>
-<polygon fill="#586f86" stroke="#586f86" points="881.77,-292.05 873.31,-291.52 879.59,-297.21 881.77,-292.05"/>
+<path fill="none" stroke="#586f86" d="M1090.45,-383.38C1034.71,-359.8 961.64,-328.89 901.17,-303.3"/>
+<polygon fill="#586f86" stroke="#586f86" points="901.94,-300.59 893.48,-300.05 899.76,-305.75 901.94,-300.59"/>
 </g>
 <!-- effects&#45;&gt;state -->
 <g id="edge16" class="edge">
 <title>effects&#45;&gt;state</title>
-<path fill="none" stroke="#586f86" d="M787,-218.47C787,-201.96 787,-182.3 787,-164.9"/>
-<polygon fill="#586f86" stroke="#586f86" points="789.8,-164.56 787,-156.56 784.2,-164.56 789.8,-164.56"/>
+<path fill="none" stroke="#586f86" d="M787,-209.67C787,-195.33 787,-179.48 787,-165.15"/>
+<polygon fill="#586f86" stroke="#586f86" points="789.8,-164.91 787,-156.91 784.2,-164.91 789.8,-164.91"/>
 </g>
 <!-- config&#45;&gt;pure -->
 <g id="edge12" class="edge">
@@ -195,10 +195,11 @@
 <!-- effects -->
 <g id="node12" class="node">
 <title>effects</title>
-<path fill="#eaf2ed" stroke="#728397" stroke-width="1.4" d="M1016,-291.5C1016,-291.5 558,-291.5 558,-291.5 552,-291.5 546,-285.5 546,-279.5 546,-279.5 546,-230.5 546,-230.5 546,-224.5 552,-218.5 558,-218.5 558,-218.5 1016,-218.5 1016,-218.5 1022,-218.5 1028,-224.5 1028,-230.5 1028,-230.5 1028,-279.5 1028,-279.5 1028,-285.5 1022,-291.5 1016,-291.5"/>
-<text text-anchor="middle" x="787" y="-268.5" font-family="DejaVu Sans" font-size="15.00">Effect coordinators</text>
-<text text-anchor="middle" x="787" y="-251.5" font-family="DejaVu Sans" font-size="15.00">HTTP / WebSocket / AMI · clocks / state</text>
-<text text-anchor="middle" x="787" y="-234.5" font-family="DejaVu Sans" font-size="15.00">Audio / VAD / resampling · files / SQLite / logs</text>
+<path fill="#eaf2ed" stroke="#728397" stroke-width="1.4" d="M1016,-300C1016,-300 558,-300 558,-300 552,-300 546,-294 546,-288 546,-288 546,-222 546,-222 546,-216 552,-210 558,-210 558,-210 1016,-210 1016,-210 1022,-210 1028,-216 1028,-222 1028,-222 1028,-288 1028,-288 1028,-294 1022,-300 1016,-300"/>
+<text text-anchor="middle" x="787" y="-277" font-family="DejaVu Sans" font-size="15.00">Shared effect boundaries</text>
+<text text-anchor="middle" x="787" y="-260" font-family="DejaVu Sans" font-size="15.00">HTTP / WebSocket / AMI · clocks / state</text>
+<text text-anchor="middle" x="787" y="-243" font-family="DejaVu Sans" font-size="15.00">Result sequencing · lifetimes · deadlines</text>
+<text text-anchor="middle" x="787" y="-226" font-family="DejaVu Sans" font-size="15.00">Audio / files / SQLite / logs</text>
 </g>
 <!-- state -->
 <g id="node13" class="node">

@@ -1,6 +1,7 @@
 module Baerbel.HTTP
-  ( Body (..), Request (..), Send, RawSend, StreamSend, Response (..), newSender, newSenderWith, newRawSender, newStreamSender, send, rawSend, streamSend, authenticated ) where
+  ( Body (..), Request (..), Send, RawSend, StreamSend, Response (..), newSender, newSenderWith, newRawSender, newStreamSender, send, rawSend, streamSend, authenticated, requestJSON ) where
 
+import Baerbel.Effects (continue, mapResult)
 import Data.Bifunctor (first)
 import Data.Maybe (isJust, fromMaybe)
 import Baerbel.Error (Failure (..), Result, failure)
@@ -38,6 +39,9 @@ type RawSend = Request -> IO (Result Response)
 type Send = Request -> IO (Result Value)
 type StreamSend = Request -> (ByteString -> IO (Result ())) -> IO (Result ())
 
+requestJSON :: Send -> Request -> (Value -> Result a) -> IO (Result a)
+requestJSON sender request parse = mapResult parse (sender request)
+
 newSender :: IO Send
 newSender = newSenderWith (const Nothing)
 
@@ -66,9 +70,11 @@ sendWith mutation manager spec = withResponse uncertain manager spec consumeJSON
   where
   policy = mutation spec
   uncertain = isJust policy
-  consumeJSON response = case responseStatusResult (fromMaybe (const False) policy) (statusCode (HTTP.responseStatus response)) of
-    Left err -> pure (Left err)
-    Right () -> fmap (first mark . decodeBody) (readBounded (requestLimit spec) (HTTP.responseBody response))
+  consumeJSON response = continue readJSON checked
+    where
+    checked = responseStatusResult (fromMaybe (const False) policy) (statusCode (HTTP.responseStatus response))
+    body = readBounded (requestLimit spec) (HTTP.responseBody response)
+    readJSON () = first mark <$> mapResult decodeBody body
   mark err = err {failureUncertain = uncertain}
 
 rawSend :: HTTP.Manager -> RawSend
@@ -79,12 +85,13 @@ rawSend manager spec = withResponse True manager spec readRaw
 streamSend :: HTTP.Manager -> StreamSend
 streamSend manager spec sink = withResponse False manager spec consumeResponse
   where
-  consumeResponse response = case responseStatusResult (const False) (statusCode (HTTP.responseStatus response)) of
-    Left err -> pure (Left err)
-    Right () -> consume (\() chunk -> sink chunk) () (requestLimit spec) (HTTP.responseBody response)
+  consumeResponse response = continue stream checked
+    where
+    checked = responseStatusResult (const False) (statusCode (HTTP.responseStatus response))
+    stream () = consume (\() chunk -> sink chunk) () (requestLimit spec) (HTTP.responseBody response)
 
 withResponse :: Bool -> HTTP.Manager -> Request -> (HTTP.Response HTTP.BodyReader -> IO (Result a)) -> IO (Result a)
-withResponse uncertain manager spec consumeResponse = either (pure . Left) exchange (prepare spec)
+withResponse uncertain manager spec consumeResponse = continue exchange (prepare spec)
   where
   exchange request = do
     outcome <- try (HTTP.withResponse request manager consumeResponse)
@@ -146,10 +153,10 @@ consume step state limit reader = HTTP.brRead reader >>= advance
   advanceState chunk = do
     next <- step state chunk
     let remaining = limit - BS.length chunk
-    either (pure . Left) (\value -> consume step value remaining reader) next
+    continue (\value -> consume step value remaining reader) next
 
-decodeBody :: Result ByteString -> Result Value
-decodeBody result = result >>= decodeBytes "invalid_response" >>= jsonObject
+decodeBody :: ByteString -> Result Value
+decodeBody bytes = decodeBytes "invalid_response" bytes >>= jsonObject
 
 jsonObject :: Value -> Result Value
 jsonObject value@(Object _) = Right value
@@ -158,7 +165,7 @@ jsonObject _ = Left (failure "invalid_response")
 authenticated :: IO (Result Text) -> Send -> Send
 authenticated token base request = do
   credential <- token
-  either (pure . Left) (base . authorize) credential
+  continue (base . authorize) credential
   where
   authorize value = request
     { requestHeaders = ("Authorization", "Bearer " <> Text.encodeUtf8 value) : requestHeaders request }

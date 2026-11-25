@@ -80,6 +80,7 @@ library
       Baerbel.ConfigPaths
       Baerbel.Contacts
       Baerbel.Directory
+      Baerbel.Effects
       Baerbel.Encoder
       Baerbel.EndCall
       Baerbel.Error
@@ -309,6 +310,7 @@ test-suite baerbel-test
       ConfigPathsSpec
       ContactsSpec
       CoreSpec
+      EffectsSpec
       EventsSpec
       GmailSpec
       HTTPSpec

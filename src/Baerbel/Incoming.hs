@@ -4,6 +4,7 @@ module Baerbel.Incoming
   , trustedEndpoint, callbackNumber, remainingBudget, handoffLine, callerDisplayName
   ) where
 
+import qualified Baerbel.JSON as JSON
 import Baerbel.AMI (Channel(..))
 import Baerbel.Error (Result, failure)
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON)
@@ -34,9 +35,8 @@ messageText limit multiline text = not (T.null (T.strip text))
       && not (ord char >= 0xd800 && ord char <= 0xdfff)
 
 textField :: Text -> KM.KeyMap Value -> Result Text
-textField key fields = case KM.lookup (K.fromText key) fields of
-  Just (String value) -> Right value
-  _ -> Left (failure "invalid_screening_decision")
+textField key fields = maybe (Left (failure "invalid_screening_decision")) Right value
+  where value = JSON.textField key (Object fields)
 
 optionalText :: Text -> Int -> KM.KeyMap Value -> Result Text
 optionalText key limit fields = case KM.lookup (K.fromText key) fields of

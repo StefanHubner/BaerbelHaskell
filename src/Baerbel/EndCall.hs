@@ -4,6 +4,7 @@ module Baerbel.EndCall
   , parseEndReason, checkEndRequest, executeEndCall
   ) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.JSON (argumentOptions, decodeValue, jsonOptions, resultValue)
 import Data.Aeson (Value, FromJSON(..), Options(..), camelTo2, genericParseJSON)
@@ -50,9 +51,7 @@ checkPending _ reason = Right reason
 executeEndCall :: EndConfig -> IO EndContext -> EndEffects -> EndReason -> IO (Result Value)
 executeEndCall cfg snapshot effects reason = do
   context <- snapshot
-  case checkEndRequest context reason of
-    Left err -> pure (Left err)
-    Right _ -> completeCall cfg effects
+  Effects.continue (const (completeCall cfg effects)) (checkEndRequest context reason)
 
 completeCall :: EndConfig -> EndEffects -> IO (Result Value)
 completeCall cfg effects = do

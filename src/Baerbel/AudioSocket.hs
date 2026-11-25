@@ -7,10 +7,8 @@ module Baerbel.AudioSocket
 import Baerbel.JSON (jsonOptions)
 import Data.Aeson (FromJSON(..), genericParseJSON)
 import GHC.Generics (Generic)
-import Data.Maybe (fromMaybe)
-import System.Timeout (timeout)
 import Baerbel.Error (Result, failure, ioResult)
-import Control.Monad (join)
+import Baerbel.Effects (attempt, continue, within)
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
 import Data.Text (Text)
@@ -99,24 +97,20 @@ readExact socket size = go size []
         Just _ -> go next (chunk : chunks)
 
 readPacket :: Socket -> IO (Result Packet)
-readPacket socket = do
-  result <- ioResult "audiosocket_connection_failed" operation
-  pure (join result)
+readPacket socket = attempt "audiosocket_connection_failed" operation
   where
     operation :: IO (Result Packet)
     operation = do
       header <- readExact socket 3
-      either (pure . Left) (\(kind, size) -> fmap (Packet kind) <$> readExact socket size) (header >>= parseHeader)
+      continue (\(kind, size) -> fmap (Packet kind) <$> readExact socket size) (header >>= parseHeader)
 
 writePacket :: Socket -> Packet -> IO (Result ())
-writePacket socket packet = case encodePacket packet of
-  Left problem -> pure (Left problem)
-  Right bytes -> ioResult "audiosocket_connection_failed" (N.sendAll socket bytes)
+writePacket socket packet = continue send (encodePacket packet)
+  where send bytes = ioResult "audiosocket_connection_failed" (N.sendAll socket bytes)
 
 boundedWritePacket :: SocketRules -> Socket -> Packet -> IO (Result ())
-boundedWritePacket rules socket packet = do
-  result <- timeout (socketWriteMicros rules) (writePacket socket packet)
-  pure (fromMaybe (Left (failure "audiosocket_write_timeout")) result)
+boundedWritePacket rules socket = within deadline (socketWriteMicros rules) . writePacket socket
+  where deadline = failure "audiosocket_write_timeout"
 
 uuidText :: ByteString -> Result Text
 uuidText bytes

@@ -1,10 +1,11 @@
 module Baerbel.JSON
-  ( jsonOptions, camelOptions, argumentOptions, resultValue, decodeValue, decodeBytes, encodeBytes, encodeReference, decodeUnique, decodeUniqueIntegers ) where
+  ( field, textField, numberField, eventDelta, jsonOptions, camelOptions, argumentOptions, resultValue, decodeValue, decodeBytes, encodeBytes, encodeReference, decodeUnique, decodeUniqueIntegers ) where
 
 import Baerbel.Error (Result, failure)
-import Data.Aeson (FromJSON, ToJSON(..), Value, Options (..), defaultOptions, genericToJSON,
+import Data.Aeson (FromJSON, ToJSON(..), Value(..), Options (..), defaultOptions, genericToJSON,
                    eitherDecodeStrict', encode, camelTo2)
 import qualified Data.Aeson.Key
+import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson.Decoding.ByteString (bsToTokens)
 import Data.Aeson.Decoding.Tokens
 import qualified Data.Set as Set
@@ -12,6 +13,7 @@ import Data.Aeson.Types (parseEither, parseJSON)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Char (toLower, ord)
+import Data.Scientific (toRealFloat)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -95,3 +97,22 @@ uniqueRecord accepted seen (TkPair key value)
   | Set.member key seen = Left ()
   | otherwise = uniqueTokens accepted value >>= uniqueRecord accepted (Set.insert key seen)
 uniqueRecord _ _ (TkRecordErr _) = Left ()
+
+field :: Text -> Value -> Maybe Value
+field key (Object fields) = KM.lookup (Data.Aeson.Key.fromText key) fields
+field _ _ = Nothing
+
+textField :: Text -> Value -> Maybe Text
+textField key value = case field key value of
+  Just (String text) -> Just text
+  _ -> Nothing
+
+numberField :: Text -> Value -> Maybe Double
+numberField key value = case field key value of
+  Just (Number number) -> Just (toRealFloat number)
+  _ -> Nothing
+
+eventDelta :: Text -> Value -> Maybe Text
+eventDelta kind value
+  | textField "type" value == Just kind = textField "delta" value
+  | otherwise = Nothing

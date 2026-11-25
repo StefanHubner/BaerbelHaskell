@@ -1,6 +1,7 @@
 module Baerbel.Encoder (Encoding(..), encodeAudio) where
 
-import Baerbel.Error (Result, failure, ioResult)
+import Baerbel.Error (Result, failure)
+import Baerbel.Effects (attempt, mapResult, within)
 import Baerbel.JSON (jsonOptions)
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson (FromJSON(..), genericParseJSON)
@@ -10,7 +11,6 @@ import GHC.Generics (Generic)
 import System.Exit (ExitCode(..))
 import System.IO (Handle, hClose)
 import System.Process
-import System.Timeout (timeout)
 
 data Encoding = Encoding
   { encodingExecutable :: FilePath, encodingArguments :: [String]
@@ -18,16 +18,13 @@ data Encoding = Encoding
 instance FromJSON Encoding where parseJSON = genericParseJSON (jsonOptions 8)
 
 encodeAudio :: Encoding -> ByteString -> IO (Result ByteString)
-encodeAudio encoding input = do
-  outcome <- ioResult "note_encoding_failed" limited
-  pure (outcome >>= finish)
+encodeAudio encoding input = mapResult check (attempt "note_encoding_failed" limited)
   where
     duration = encodingTimeoutSeconds encoding * 1000000
     process = (proc (encodingExecutable encoding) (encodingArguments encoding))
       {std_in = CreatePipe, std_out = CreatePipe, std_err = NoStream}
-    limited = timeout duration (withCreateProcess process (communicate input))
-    finish Nothing = Left (failure "note_encoding_timed_out")
-    finish (Just result) = result >>= check
+    deadline = failure "note_encoding_timed_out"
+    limited = within deadline duration (withCreateProcess process (communicate input))
     check output
       | Bytes.null output || Bytes.length output > encodingMaximumBytes encoding = Left (failure "note_encoding_failed")
       | otherwise = Right output

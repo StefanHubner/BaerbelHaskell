@@ -6,12 +6,12 @@ module Baerbel.Windguru (windguru, forecast, Numeric(..)) where
 import Baerbel.TimeFormat (isoUtc, isoZoned)
 import Data.Either (rights)
 import Data.Char (isDigit)
-import GHC.Clock (getMonotonicTimeNSec)
 import Baerbel.Cache (memoize)
+import Baerbel.Effects (continue, mapResult, within, monotonicSeconds)
 import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Body(..), Request(..), Send)
+import Baerbel.HTTP (Body(..), Request(..), Send, requestJSON)
 import Baerbel.JSON (argumentOptions, jsonOptions, decodeValue)
-import Baerbel.Provider hiding (fetch)
+import Baerbel.Provider
 import Baerbel.ProviderConfig (WindguruRules(..))
 import Control.Applicative (empty, (<|>))
 import System.Timeout (timeout)
@@ -267,9 +267,8 @@ readingNumber lower upper raw = do
 data Received a = Received {receivedValue :: a, receivedAt :: UTCTime}
 type TimedSend = Request -> IO (Result (Received Value))
 
-fetch :: FromJSON a => Text -> Result (Received Value) -> Result (Received a)
-fetch code response = response >>= parseReceived
-  where parseReceived value = (`Received` receivedAt value) <$> decodeValue code (receivedValue value)
+decodeReceived :: FromJSON a => Text -> Received Value -> Result (Received a)
+decodeReceived code value = (`Received` receivedAt value) <$> decodeValue code (receivedValue value)
 
 request :: WindguruRules -> Text -> [(Text, Text)] -> Request
 request rules query params = Request "GET" (windguruApiUrl rules) headers queryParams EmptyBody (windguruHttpBytes rules) (windguruHttpTimeout rules)
@@ -348,14 +347,14 @@ availableModel model value
 getForecast :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> ForecastQuery -> IO (Result Value)
 getForecast rules send clock local query = do
   let spotRequest = request rules "forecast_spot" [("id_spot", Text.pack (show (querySpot query)))]
-  response <- send spotRequest
-  let spotResponse = fetch "windguru_invalid_response" response >>= getSpot rules (querySpot query)
+  response <- mapResult (decodeReceived "windguru_invalid_response") (send spotRequest)
+  let spotResponse = response >>= getSpot rules (querySpot query)
       selected = spotResponse >>= availableModel (queryModel query) . receivedValue
-  either (pure . Left) retrieve selected
+  continue retrieve selected
   where
     retrieve raw = do
       let wire = forecastRequest rules (querySpot query) (queryModel query)
-      response <- fmap (fetch "windguru_invalid_response") (send wire)
+      response <- mapResult (decodeReceived "windguru_invalid_response") (send wire)
       now <- clock
       let window = queryWindow query
           start = fromMaybe now (windowStart window)
@@ -495,14 +494,14 @@ newtype Deadline = Deadline Double
 
 newDeadline :: Int -> IO Deadline
 newDeadline seconds = do
-  now <- getMonotonicTimeNSec
-  let end = fromIntegral now / 1000000000 + fromIntegral seconds
+  now <- monotonicSeconds
+  let end = now + fromIntegral seconds
   pure (Deadline end)
 
 beforeDeadline :: Deadline -> IO a -> IO (Maybe a)
 beforeDeadline (Deadline end) action = do
-  now <- getMonotonicTimeNSec
-  let remaining = max 0 (end - fromIntegral now / 1000000000)
+  now <- monotonicSeconds
+  let remaining = max 0 (end - now)
       micros = floor (remaining * 1000000)
   timeout micros action
 
@@ -516,20 +515,20 @@ forecastSet rules send clock local readSet window = do
   deadline <- newDeadline (windguruHttpTimeout rules)
   saved <- beforeDeadline deadline readSet
   let selected = fromMaybe (Left (failure "windguru_timeout")) saved >>= parseSetId rules
-  either (pure . Left) (loadSet rules send clock local deadline window) selected
+  continue (loadSet rules send clock local deadline window) selected
 
 loadSet :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline -> Window -> Int -> IO (Result Value)
 loadSet rules send clock local deadline window ident = do
   let wire = request rules "forecast_set" [("set", Text.pack (show ident))]
-  response <- beforeDeadline deadline (fmap (>>= decodeSet rules) (send wire))
+  response <- beforeDeadline deadline (mapResult (decodeSet rules) (send wire))
   let decoded = fromMaybe (Left (failure "windguru_timeout")) response
-  either (pure . Left) retrieve decoded
+  continue retrieve decoded
   where
     retrieve received = do
       now <- clock
       let prepared = validateSet rules (receivedValue received)
           start = fromMaybe now (windowStart window)
-      either (pure . Left) (setMembers rules send clock local deadline ident (receivedAt received) start (windowHours window)) prepared
+      continue (setMembers rules send clock local deadline ident (receivedAt received) start (windowHours window)) prepared
 
 setMembers :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline -> Int -> UTCTime -> UTCTime -> Int -> ForecastSet -> IO (Result Value)
 setMembers rules send clock local deadline ident retrieved start hours value = do
@@ -549,7 +548,7 @@ fetchMember :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> Deadline
 fetchMember rules send clock local deadline start hours selected@(raw, model, _) = case planMember rules selected of
   Left issue -> pure (False, Left issue)
   Right wire -> do
-    response <- beforeDeadline deadline (fmap (fetch "windguru_invalid_response") (send wire))
+    response <- beforeDeadline deadline (mapResult (decodeReceived "windguru_invalid_response") (send wire))
     now <- clock
     pure (memberResult rules local now raw model start hours response)
 
@@ -589,8 +588,8 @@ windguru rules send clock local readSet = do
   where
     key requestValue = (requestUrl requestValue, requestQuery requestValue)
     retrieve requestValue = do
-      response <- send requestValue
-      either (pure . Left) timestamp (response >>= apiResult)
+      response <- requestJSON send requestValue apiResult
+      continue timestamp response
     timestamp value = Right . Received value <$> clock
 
 apiResult :: Value -> Result Value
@@ -632,28 +631,26 @@ parseRequest rules name arguments = case name of
     validSet args = parseWindow rules (setHours args) (setStart args)
 
 execute :: WindguruRules -> TimedSend -> IO UTCTime -> LocalZone -> IO (Result Text) -> Execute
-execute rules send clock local readSet name arguments _ = either (pure . Left) run (parseRequest rules name arguments)
+execute rules send clock local readSet name arguments _ = continue run (parseRequest rules name arguments)
   where
     run (SearchSpots args) = bounded $ do
       let wire = request rules "search_spots" [("search", argQuery args)]
-      response <- send wire
-      pure (fmap toJSON (fetch "windguru_invalid_response" response >>= search rules args))
+      response <- mapResult (decodeReceived "windguru_invalid_response") (send wire)
+      pure (fmap toJSON (response >>= search rules args))
     run (SpotMetadata ident) = bounded $ do
       let wire = request rules "forecast_spot" [("id_spot", Text.pack (show ident))]
-      response <- send wire
-      let selected = fetch "windguru_invalid_response" response >>= getSpot rules ident
-      either (pure . Left) catalog selected
+      response <- mapResult (decodeReceived "windguru_invalid_response") (send wire)
+      let selected = response >>= getSpot rules ident
+      continue catalog selected
     run (SpotForecast query) = bounded (getForecast rules send clock local query)
     run (SavedForecasts window) = forecastSet rules send clock local readSet window
     catalog value = do
       let wire = request rules "model_info_full" []
-      response <- send wire
-      let models = fetch "windguru_invalid_response" response
+      models <- mapResult (decodeReceived "windguru_invalid_response") (send wire)
       pure (Right (toJSON (metadata rules local models value)))
-    bounded operation = do
-      let micros = windguruHttpTimeout rules * 1000000
-      result <- timeout micros operation
-      pure (fromMaybe (Left (failure "windguru_timeout")) result)
+    bounded = within deadline micros
+    deadline = failure "windguru_timeout"
+    micros = windguruHttpTimeout rules * 1000000
 
 validNumericId :: Int -> Numeric -> Bool
 validNumericId cap value = number >= 1 && number <= fromIntegral cap && number == fromInteger (round number)

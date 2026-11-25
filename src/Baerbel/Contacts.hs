@@ -2,13 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Contacts (contacts, candidate, Candidate(..), Phone(..), Person(..), Name(..), Number(..)) where
 
+import Baerbel.Cache (onceSuccess)
+import Baerbel.Effects (continue)
 import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Request, Send)
+import Baerbel.HTTP (Request, Send, requestJSON)
 import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions, decodeValue)
 import Baerbel.ProviderConfig (ContactsRules(..))
-import Baerbel.Provider (Execute, clean, fetch, firstOr, get, textParam)
+import Baerbel.Provider (Execute, clean, firstOr, get, textParam)
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import Data.Aeson hiding (Result)
 import Data.Char (isDigit)
 import Data.List (nub)
@@ -89,38 +90,33 @@ lookupContacts rules query limit = get (contactsHttp rules) (contactsEndpoint ru
     params = [textParam "query" query, textParam "pageSize" pageSize,
       textParam "readMask" "names,phoneNumbers", textParam "sources" "READ_SOURCE_TYPE_CONTACT"]
 
-warm :: ContactsRules -> Send -> MVar Bool -> IO (Result ())
-warm rules send ready = modifyMVar ready operation
+warm :: ContactsRules -> Send -> IO (Result ())
+warm rules send = do
+  let request = lookupContacts rules "" 1
+  response <- requestJSON send request (decodeValue "contacts_invalid_response")
+  continue settle response
   where
-    operation True = pure (True, Right ())
-    operation False = do
-      let request = lookupContacts rules "" 1
-      response <- send request
-      let result = fetch "contacts_invalid_response" response :: Result Matches
-      case result of
-        Left issue -> pure (False, Left issue)
-        Right _ -> threadDelay delay >> pure (True, Right ())
     delay = contactsWarmupSeconds rules * 1000000
+    settle :: Matches -> IO (Result ())
+    settle _ = threadDelay delay >> pure (Right ())
 
 contacts :: ContactsRules -> Send -> IO Execute
 contacts rules send = do
-  ready <- newMVar False
+  ready <- onceSuccess (warm rules send)
   pure (execute rules send ready)
 
-execute :: ContactsRules -> Send -> MVar Bool -> Execute
+execute :: ContactsRules -> Send -> IO (Result ()) -> Execute
 execute rules send ready name arguments _
   | name /= "contacts_search" = pure (Left (failure "contacts_unknown_tool"))
-  | otherwise = either (pure . Left) perform prepared
+  | otherwise = continue perform prepared
   where
     prepared = decodeValue "contacts_invalid_arguments" arguments >>= prepareSearch rules
-    perform query = do
-      warmed <- warm rules send ready
-      either (pure . Left) (const (retrieve query)) warmed
-    retrieve query = do
-      let requested = searchLimit query + 1
-          request = lookupContacts rules (searchText query) requested
-      response <- send request
-      pure (fmap (search rules query) (fetch "contacts_invalid_response" response))
+    perform query = ready >>= continue (const (retrieve query))
+    retrieve query = requestJSON send request parse
+      where
+        requested = searchLimit query + 1
+        request = lookupContacts rules (searchText query) requested
+        parse = fmap (search rules query) . decodeValue "contacts_invalid_response"
 
 prepareSearch :: ContactsRules -> Query -> Result Search
 prepareSearch rules query

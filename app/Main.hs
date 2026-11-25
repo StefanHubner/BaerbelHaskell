@@ -1,5 +1,6 @@
 module Main (main) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.CLI (runProgram, rejected)
 import Control.Monad ((>=>))
 import Baerbel.ConfigPaths (validatePaths)
@@ -22,7 +23,7 @@ run _ = putStrLn "Usage: phone-assistant-server [--check] GLOBAL_CONFIG USER_CON
 configure :: FilePath -> FilePath -> (Settings -> IO ()) -> IO ()
 configure globalPath userPath action = do
   loaded <- loadSettings globalPath userPath
-  checked <- either (pure . Left) (validatePaths globalPath userPath) (loaded >>= validateSettings)
+  checked <- Effects.continue (validatePaths globalPath userPath) (loaded >>= validateSettings)
   either rejected action checked
 
 report :: String -> Result () -> IO ()

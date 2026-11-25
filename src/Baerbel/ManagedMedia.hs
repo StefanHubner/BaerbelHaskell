@@ -4,6 +4,7 @@ module Baerbel.ManagedMedia
   ) where
 
 import Baerbel.AudioSocket (SocketRules, boundedWritePacket, Packet(..), PacketKind(..), readPacket)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Failure, Result, failure)
 import Baerbel.AudioMetrics (AudioDelivery(..))
 import Baerbel.Live (LiveControls, Media(..))
@@ -187,10 +188,10 @@ expirePause previous state
   | otherwise = state
 
 waitResume :: Entry -> Int -> IO (Result ())
-waitResume entry seconds = do
-  result <- timeout (seconds * 1000000) (atomically ready)
-  pure (fromMaybe (Left (failure "call_resume_timeout")) result)
+waitResume entry seconds = Effects.within (failure "call_resume_timeout") micros (atomically ready)
   where
+    micros :: Int
+    micros = seconds * 1000000
     ready :: STM (Result ())
     ready = do
       state <- readTVar (entryState entry)
@@ -212,7 +213,7 @@ attached state
 receive :: Entry -> IO (Result (Maybe ByteString))
 receive entry = do
   attachment <- attached <$> readTVarIO (entryState entry)
-  either (pure . Left) (maybe (pure (Right Nothing)) (receiveFrom entry)) attachment
+  Effects.continue (maybe (pure (Right Nothing)) (receiveFrom entry)) attachment
 
 receiveFrom :: Entry -> Attachment -> IO (Result (Maybe ByteString))
 receiveFrom entry attachment = do
@@ -222,7 +223,7 @@ receiveFrom entry attachment = do
   let action
         | mediaEnded latest || attachmentSerial (activeAttachment latest) /= attachmentSerial attachment = Right ReceiveNext
         | otherwise = either (readPaused state latest) (const (Right ReceiveNext)) packet
-  either (pure . Left) perform action
+  Effects.continue perform action
   where
     perform ReceiveNext = receive entry
     perform (AwaitResume epoch) = atomically (awaitEpoch entry epoch) >> receive entry

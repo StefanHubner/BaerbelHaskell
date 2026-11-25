@@ -5,10 +5,11 @@ module Baerbel.IncomingSession
 
 import Baerbel.AMI (Channel(..))
 import Baerbel.Config (Settings, setting, rule, toolDefinitions, booleanSetting)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.Incoming (Decision(..), evaluateDecision, restrictTools, handoffLine, callerDisplayName)
 import Baerbel.Logging (Report, reportIncomingEvent)
-import Baerbel.JSON (resultValue)
+import Baerbel.JSON (resultValue, eventDelta)
 import Baerbel.Live (LiveConfig, Media(..), runLiveSession)
 import Baerbel.ManagedMedia (Registry, ManagedCall(..), withManaged)
 import Baerbel.Messages (Messages(..), Context)
@@ -22,8 +23,7 @@ import Control.Concurrent.MVar (newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (finally)
 import Control.Monad (void)
-import Data.Aeson (Value(..), (.=))
-import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson (Value, (.=))
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Word (Word64)
@@ -45,18 +45,18 @@ data Selected = Selected Decision (Maybe (Async Receipt))
 
 incomingSession :: Settings -> IncomingServices -> Report -> Registry -> Handoffs -> Text -> Socket -> IO (Result ())
 incomingSession settings services output registry handoffs identifier connection =
-  either (pure . Left) route (telephonyConfiguration settings)
+  Effects.continue route (telephonyConfiguration settings)
   where
     route :: TelephonyConfig -> IO (Result ())
     route native = do
       claimed <- claimHandoff native handoffs identifier
       let screen = withManaged registry identifier connection (bindSession settings services output native handoffs identifier)
-      either (pure . Left) (maybe screen (playHandoff settings connection)) claimed
+      Effects.continue (maybe screen (playHandoff settings connection)) claimed
 
 bindSession :: Settings -> IncomingServices -> Report -> TelephonyConfig -> Handoffs -> Text -> ManagedCall -> IO (Result ())
 bindSession settings services output native handoffs identifier managed = do
   opened <- openIncoming native handoffs identifier (pauseManaged managed)
-  either (pure . Left) run opened
+  Effects.continue run opened
   where
     run :: IncomingControl -> IO (Result ())
     run control = boundSession settings services output identifier control (managedMedia managed) `finally` closeIncoming control
@@ -147,7 +147,7 @@ decideUnknown scope micros = case restrictedSettings (scopeSettings scope) (scop
   Left problem -> pure (Left problem)
   Right cfg -> do
     selected <- selectDecision scope micros cfg
-    either (pure . Left) (completeDecision scope) selected
+    Effects.continue (completeDecision scope) selected
   where
     messageOnly :: Bool
     messageOnly = channelMessageOnly (incomingNativeChannel (scopeNative scope))
@@ -176,7 +176,7 @@ submitDecision scope selected name arguments = do
   let prior = fmap (\(Selected decision _) -> decision) previous
       messageOnly = channelMessageOnly (incomingNativeChannel (scopeNative scope))
       evaluated = evaluateDecision (scopeAllowsMessages scope) messageOnly prior name arguments
-  either (pure . Left) submit evaluated
+  Effects.continue submit evaluated
   where
     submit :: Decision -> IO (Result Value)
     submit decision = do
@@ -203,14 +203,7 @@ observeIncoming :: IncomingScope -> Value -> IO ()
 observeIncoming scope event = do
   reportIncomingEvent (scopeReport scope) (scopeIdentifier scope) event
   let append delta = withContext scope (\service context -> observeContext service context delta)
-  maybe (pure ()) append (observeTranscript event)
-
-observeTranscript :: Value -> Maybe Text
-observeTranscript (Object fields)
-  | KM.lookup "type" fields == Just (String "session.input_transcript.delta") = case KM.lookup "delta" fields of
-      Just (String delta) -> Just delta
-      _ -> Nothing
-observeTranscript _ = Nothing
+  maybe (pure ()) append (eventDelta "session.input_transcript.delta" event)
 
 withContext :: IncomingScope -> (Messages -> Context -> IO ()) -> IO ()
 withContext scope action = case (incomingMessages (scopeServices scope), scopeContext scope) of

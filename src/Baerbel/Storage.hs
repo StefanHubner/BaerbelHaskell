@@ -1,6 +1,7 @@
 module Baerbel.Storage (databaseResult, withDatabase, privateFile, atomicWrite) where
 
-import Control.Monad (join, unless)
+import qualified Baerbel.Effects as Effects
+import Control.Monad (unless)
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
 import Control.Exception (bracket, finally, try)
 import qualified Data.ByteString as Bytes
@@ -16,9 +17,7 @@ import System.Posix.User (getEffectiveUserID)
 
 -- Filesystem and SQL exceptions end at this boundary; cancellation passes through.
 databaseResult :: Text -> IO a -> IO (Result a)
-databaseResult code operation = do
-  result <- ioResult code (try operation)
-  pure (result >>= convert)
+databaseResult code operation = Effects.mapResult convert (ioResult code (try operation))
   where
   convert :: Either SQLError a -> Result a
   convert = either (const (Left (failure code))) Right
@@ -26,15 +25,13 @@ databaseResult code operation = do
 withDatabase :: Text -> FilePath -> (Connection -> IO (Result a)) -> IO (Result a)
 withDatabase code path action = do
   checked <- privateFile path
-  either (pure . Left) (const opened) checked
+  Effects.continue (const opened) checked
   where
-  opened = fmap join (databaseResult code (bracket (open path) close run))
+  opened = Effects.mapResult id (databaseResult code (bracket (open path) close run))
   run connection = execute_ connection "PRAGMA busy_timeout=5000" >> action connection
 
 privateFile :: FilePath -> IO (Result ())
-privateFile path = do
-  result <- ioResult "private_file_unavailable" prepare
-  pure (join result)
+privateFile path = Effects.attempt "private_file_unavailable" prepare
   where
   flags = defaultFileFlags {creat = Just 0o600, nofollow = True, cloexec = True}
   prepare = privateDirectory (takeDirectory path) >> bracket (openFd path ReadWrite flags) closeFd inspect
@@ -54,7 +51,7 @@ privateDirectory path = do
 atomicWrite :: FilePath -> Bytes.ByteString -> IO (Result ())
 atomicWrite path content = do
   created <- ioResult "storage_unavailable" (openBinaryTempFile parent ".baerbel-")
-  either (pure . Left) write created
+  Effects.continue write created
   where
   parent = takeDirectory path
   write (temporary, handle) = finally (prepare temporary handle) (cleanup temporary handle)
@@ -64,7 +61,7 @@ atomicWrite path content = do
     pure ()
   prepare temporary handle = do
     ready <- ioResult "storage_unavailable" (flush temporary handle)
-    either (pure . Left) (const (commit temporary)) ready
+    Effects.continue (const (commit temporary)) ready
   flush temporary handle = do
     setFileMode temporary 0o600
     Bytes.hPut handle content

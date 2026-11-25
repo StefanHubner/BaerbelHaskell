@@ -1,11 +1,12 @@
 module Baerbel.Directory (DirectoryRules(..), LookupCaller, greetingName, withDirectory) where
 
 import Baerbel.Contacts (Person(..), Name(..), Number(..))
+import Baerbel.Effects (monotonicSeconds)
 import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Send, Request(..), Body(..))
+import Baerbel.HTTP (Send, Request(..), Body(..), requestJSON)
 import Baerbel.Incoming (callbackNumber)
-import Baerbel.JSON (camelOptions, jsonOptions)
-import Baerbel.Provider (fetch, firstOr, textParam)
+import Baerbel.JSON (camelOptions, jsonOptions, decodeValue)
+import Baerbel.Provider (firstOr, textParam)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Concurrent.STM
@@ -18,7 +19,6 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Generics (Generic)
 import System.Timeout (timeout)
 
@@ -100,14 +100,12 @@ loadPage rules sender number token seen index
   | number >= directoryPages rules = pure (Left (failure "incoming_contacts_directory_limit"))
   | otherwise = do
     let request = directoryRequest rules token
-    response <- fmap (fetch "incoming_contacts_invalid_response") (sender request)
+    response <- requestJSON sender request (decodeValue "incoming_contacts_invalid_response")
     case response >>= advanceDirectory rules number seen index of
       Left issue -> pure (Left issue)
       Right (updated, Nothing) -> pure (Right updated)
       Right (updated, Just next) -> loadPage rules sender (number + 1) (Just next) (Set.insert next seen) updated
 
-seconds :: IO Double
-seconds = fmap ((/ 1000000000) . fromIntegral) getMonotonicTimeNSec
 
 withDirectory :: DirectoryRules -> Maybe Send -> (LookupCaller -> IO (Result a)) -> IO (Result a)
 withDirectory _ Nothing action = action (const (pure Nothing))
@@ -118,7 +116,7 @@ withDirectory rules (Just sender) action = do
 refresh :: DirectoryRules -> Send -> TVar Snapshot -> IO ()
 refresh rules sender state = do
   result <- timeout (directoryRefreshTimeoutMicros rules) (loadDirectory rules sender)
-  now <- seconds
+  now <- monotonicSeconds
   atomically (modifyTVar' state (update now result))
   where
   update now (Just (Right index)) _ = Snapshot index (Just now) True
@@ -127,7 +125,7 @@ refresh rules sender state = do
 lookupCaller :: DirectoryRules -> TVar Snapshot -> LookupCaller
 lookupCaller rules state number = do
   void (timeout (directoryReadyMicros rules) (atomically (readTVar state >>= check . snapshotReady)))
-  now <- seconds
+  now <- monotonicSeconds
   current <- readTVarIO state
   pure (snapshotName rules now number current)
 

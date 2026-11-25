@@ -1,5 +1,6 @@
 module Baerbel.Events (EventRules(..), Event(..), parseEvent, withEvents, pollEvents) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.JSON (jsonOptions)
 import Baerbel.Logging (Report)
@@ -10,7 +11,7 @@ import Baerbel.Storage (databaseResult, withDatabase)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (bracket)
-import Control.Monad (forever, join)
+import Control.Monad (forever)
 import Crypto.Hash (Digest, SHA256, hash)
 import Data.Aeson (FromJSON(..), genericParseJSON)
 import Data.ByteString (ByteString)
@@ -85,7 +86,7 @@ withEvents rules output messages source database action = withDatabase "incoming
     either (const (output "incoming_events_unavailable" [])) (const (pure ())) result
 
 pollEvents :: EventRules -> Report -> Messages -> FilePath -> Connection -> IO (Result Int)
-pollEvents rules output messages source connection = fmap join (databaseResult "incoming_events_unavailable" (visit 0 paths))
+pollEvents rules output messages source connection = Effects.mapResult id (databaseResult "incoming_events_unavailable" (visit 0 paths))
   where
   paths = [source ++ "." ++ show number | number <- [eventRotations rules, eventRotations rules - 1 .. 1]] ++ [source]
   visit count [] = pure (Right count)
@@ -94,7 +95,7 @@ pollEvents rules output messages source connection = fmap join (databaseResult "
     let readPresent | exists = readBatch rules connection path
                     | otherwise = pure (Right [])
     batch <- readPresent
-    either (pure . Left) (consumeBatch count rest) batch
+    Effects.continue (consumeBatch count rest) batch
   consumeBatch count remaining rows = do
     result <- consumeRows output messages connection count rows
     case result of
@@ -103,10 +104,9 @@ pollEvents rules output messages source connection = fmap join (databaseResult "
       Right (done, False) -> pure (Right done)
 
 readBatch :: EventRules -> Connection -> FilePath -> IO (Result [Row])
-readBatch rules connection path = do
-  result <- databaseResult "incoming_events_unavailable" (tryIOError opened)
-  pure (result >>= either unavailable id)
+readBatch rules connection path = Effects.mapResult (either unavailable id) operation
   where
+  operation = databaseResult "incoming_events_unavailable" (tryIOError opened)
   unavailable err
     | isDoesNotExistError err = Right []
     | otherwise = Left (failure "incoming_events_unavailable")
@@ -183,7 +183,7 @@ consumeRows output messages connection count (Row event cursor : rows) = do
   advance = do
     saved <- databaseResult "incoming_cursor_unavailable" (checkpoint connection cursor)
     let next = count + maybe 0 (const 1) event
-    either (pure . Left) (const (consumeRows output messages connection next rows)) saved
+    Effects.continue (const (consumeRows output messages connection next rows)) saved
 
 checkpoint :: Connection -> Cursor -> IO ()
 checkpoint connection cursor = execute connection "INSERT OR REPLACE INTO incoming_event_cursors VALUES (?, ?, ?, ?)"

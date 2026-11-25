@@ -1,6 +1,7 @@
 module Baerbel.Services
   ( Service (..), Services (..), withServices, checkServices, withCallServices, dispatch ) where
 
+import qualified Baerbel.Effects as Effects
 import Control.Monad (void)
 import Baerbel.Calendar (calendar, TimeZones(..))
 import Baerbel.Config (Settings, setting, rule, toolDefinitions, booleanSetting)
@@ -60,13 +61,13 @@ accounts = [AccountSpec "gmail" "PHONE_ASSISTANT_GMAIL_TOKEN_FILE" "gmail",
             AccountSpec "contacts" "PHONE_ASSISTANT_CONTACTS_TOKEN_FILE" "contacts"]
 
 withServices :: Settings -> (Services -> IO (Result a)) -> IO (Result a)
-withServices settings action = either (pure . Left) prepare policy
+withServices settings action = Effects.continue prepare policy
   where
   policy = rule settings "http" "mutations"
   prepare mutations = do
     sender <- newSenderWith (mutationPolicy mutations)
     prepared <- prepareAccounts settings sender
-    either (pure . Left) (bindGoogle settings sender action) prepared
+    Effects.continue (bindGoogle settings sender action) prepared
 
 data Mutation = Mutation
   { mutationMethod :: Text, mutationUrl :: Text, mutationDefiniteMinimum :: Int
@@ -91,13 +92,13 @@ prepareAccounts settings sender = do
 
 prepareAccount :: Settings -> Send -> AccountSpec -> IO (Result (Text, Send))
 prepareAccount settings sender (AccountSpec name key scopes) =
-  either (pure . Left) prepare requirements
+  Effects.continue prepare requirements
   where
   requirements = (,,) <$> rule settings "oauth" "refresh"
     <*> rule settings "oauth" scopes <*> rule settings "oauth" "allowed"
   prepare (endpoint, required, allowed) = do
     loaded <- loadCredentials endpoint (Set.fromList required) (Set.fromList allowed) path
-    either (pure . Left) (bind endpoint required allowed) loaded
+    Effects.continue (bind endpoint required allowed) loaded
   bind endpoint required allowed credentials = do
     source <- tokenSource sender endpoint (Set.fromList required) (Set.fromList allowed) credentials
     let authorized request = prefixErrors name <$> authenticated source sender request
@@ -121,8 +122,8 @@ bindGoogle settings sender action prepared = withOptionalLedger gmailPath withMa
     withCalendar mailLedger calendarLedger = do
       stored <- optionalProfileStore settings
       let assembled = stored >>= assembleServices settings sender prepared mailLedger calendarLedger
-      either (pure . Left) bindDirectory assembled
-    bindDirectory services = either (pure . Left) withLookup directoryRules
+      Effects.continue bindDirectory assembled
+    bindDirectory services = Effects.continue withLookup directoryRules
       where withLookup rules = withDirectory rules directorySender (action . services)
     directoryRules = rule settings "incoming_contacts" "directory"
     directorySender
@@ -257,7 +258,7 @@ optionalProfileStore settings
   | otherwise = fmap (Just <$>) (prepareProfileStore settings)
 
 prepareProfileStore :: Settings -> IO (Result ProfileStore)
-prepareProfileStore settings = either (pure . Left) prepare rules
+prepareProfileStore settings = Effects.continue prepare rules
   where
   rules = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
   prepare (profileRules, storeRules) = profileStore profileRules storeRules (Text.unpack (setting settings "PHONE_ASSISTANT_PROFILE_FILE"))

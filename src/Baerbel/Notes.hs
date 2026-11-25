@@ -3,14 +3,16 @@ module Baerbel.Notes
   ( Fragment(..), Transcript(..), NoteEffects(..), NoteRules(..)
   , notes, quoteSequence, completionMatches ) where
 
+import qualified Baerbel.Effects as Effects
+import Baerbel.Concurrent (stateMVar, updateMVar)
 import Baerbel.Error (Failure(..), Result, ioResult)
 import Baerbel.JSON (jsonOptions)
 import Baerbel.Provider (Execute)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, asyncWithUnmask, wait)
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar, readMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Control.Exception (mask, onException)
-import Control.Monad (void, join)
+import Control.Monad (void)
 import Data.Either (fromRight)
 import Data.Aeson hiding (Result)
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -215,7 +217,7 @@ awaitSettled rules effects = timeout duration loop
       | otherwise = threadDelay (notePollMicros rules) >> loop
 
 readState :: MVar Cell -> Transcript -> IO NoteState
-readState cell transcript = modifyMVar cell (pure . synchronizeCell transcript)
+readState cell transcript = stateMVar cell (synchronizeCell transcript)
 
 synchronizeCell :: Transcript -> Cell -> (Cell, NoteState)
 synchronizeCell transcript current = (current {cellState = state}, state)
@@ -277,8 +279,8 @@ acceptDraft rules effects draft transcript current = case confirmDraft rules dra
 
 waitDelivery :: MVar Cell -> Async Value -> IO Reply
 waitDelivery cell worker = do
-  receipt <- wait worker `onException` modifyMVar_ cell (pure . cacheUnknown)
-  modifyMVar_ cell (pure . remember receipt)
+  receipt <- wait worker `onException` updateMVar cell cacheUnknown
+  updateMVar cell (remember receipt)
   pure (Completed receipt)
 
 remember :: Value -> Cell -> Cell
@@ -297,20 +299,21 @@ cacheUnknown current = current {cellState = (cellState current) {noteReceipt = J
 
 deliver :: NoteRules -> NoteEffects -> Prepared -> IO Value
 deliver rules effects prepared = do
-  completed <- timeout duration (ioResult "note_send_outcome_unknown_do_not_retry" operation)
-  pure (maybe unknownOutcome (fromRight unknownOutcome) completed)
+  let issue = Failure "note_send_outcome_unknown_do_not_retry" True
+  completed <- Effects.within issue duration (ioResult "note_send_outcome_unknown_do_not_retry" operation)
+  pure (fromRight unknownOutcome completed)
   where
     duration = noteDeliverySeconds rules * 1000000
     operation = do
-      clip <- ioResult "call_recording_excerpt_unavailable" (noteReadClip effects (preparedBegin prepared) (preparedEnd prepared))
-      either (const (pure excerptUnavailable)) deliverClip (join clip)
+      clip <- Effects.attempt "call_recording_excerpt_unavailable" (noteReadClip effects (preparedBegin prepared) (preparedEnd prepared))
+      either (const (pure excerptUnavailable)) deliverClip clip
     deliverClip audio
       | Bytes.null audio || Bytes.length audio > noteMaximumBytes rules = pure excerptUnavailable
       | otherwise = fmap (either failureValue id) (noteDeliver effects (preparedId prepared) (preparedSpeech prepared) audio)
 
 close :: NoteEffects -> MVar Cell -> IO ()
 close effects cell = do
-  worker <- modifyMVar cell (pure . closeCell)
+  worker <- stateMVar cell closeCell
   noteReset effects
   traverse_ (void . wait) worker
 

@@ -6,6 +6,7 @@ module Baerbel.Recording
   , Timeline, emptyTimeline, addFrame, resetTimeline, sentSamples, transcriptBounds
   ) where
 
+import Baerbel.Effects (continue, mapResult)
 import Baerbel.Error (Result, failure, ioResult)
 import Control.Concurrent (MVar, modifyMVar, newMVar, readMVar, threadDelay)
 import Control.Concurrent.Async (Async, async, cancel)
@@ -303,21 +304,20 @@ closeRecording archive = do
   void (ioResult "recording_close_failed" (closeFd (archiveFd archive)))
 
 readClip :: Archive -> Double -> Double -> IO (Result ByteString)
-readClip archive start end = either (pure . Left) readInterval (clipInterval start end)
+readClip archive start end = continue readInterval (clipInterval start end)
   where
     readInterval interval = do
       now <- getMonotonicTimeNSec
-      ready <- waitSamples archive (end + 0.2) (now + 5000000000)
-      let bounds = ready >>= (`intervalBounds` interval)
-      either (pure . Left) (\(offset, size) -> readExcerpt size <$> pread (archiveFd archive) offset size) bounds
+      let untilTime = end + 0.2
+          deadline = now + 5000000000
+          readBounds = mapResult (`intervalBounds` interval) (waitSamples archive untilTime deadline)
+      bounds <- readBounds
+      continue (\(offset, size) -> mapResult (readExcerpt size) (pread (archiveFd archive) offset size)) bounds
 
-readExcerpt :: Int -> Result ByteString -> Result ByteString
-readExcerpt size result = result >>= complete
-  where
-    complete :: ByteString -> Result ByteString
-    complete bytes
-      | B.length bytes == size = Right bytes
-      | otherwise = Left (failure "recording_incomplete_excerpt")
+readExcerpt :: Int -> ByteString -> Result ByteString
+readExcerpt size bytes
+  | B.length bytes == size = Right bytes
+  | otherwise = Left (failure "recording_incomplete_excerpt")
 
 waitSamples :: Archive -> Double -> Word64 -> IO (Result ArchiveState)
 waitSamples archive end deadline = do

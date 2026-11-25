@@ -1,9 +1,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Baerbel.Store (StoreRules(..), profileStore, validateProfileFile) where
 
-import Control.Monad (join)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Storage (atomicWrite)
-import Baerbel.Error (Failure(..), Result, failure, ioResult)
+import Baerbel.Error (Failure(..), Result, failure)
 import Baerbel.JSON (argumentOptions, decodeUniqueIntegers, encodeBytes, jsonOptions)
 import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile, validKey, validValue)
 import Baerbel.ProviderConfig (ProfileRules(..))
@@ -50,10 +50,10 @@ profileStore profileRules rules path = do
 readCurrentProfile :: ProfileRules -> StoreRules -> FilePath -> IO (Result ProfileState)
 readCurrentProfile profileRules rules path = do
   owner <- inspectOwner path
-  either (pure . Left) (readProfile profileRules rules path) owner
+  Effects.continue (readProfile profileRules rules path) owner
 
 validateProfileFile :: ProfileRules -> StoreRules -> FilePath -> IO (Result ())
-validateProfileFile profileRules rules path = either (pure . Left) inspect (validatePath path)
+validateProfileFile profileRules rules path = Effects.continue inspect (validatePath path)
   where
   inspect () = fmap (const () <$>) (readCurrentProfile profileRules rules path)
 
@@ -63,7 +63,7 @@ validatePath path
   | otherwise = Right ()
 
 inspectOwner :: FilePath -> IO (Result UserID)
-inspectOwner path = fmap join (ioResult "profile_storage_unavailable" inspect)
+inspectOwner path = Effects.attempt "profile_storage_unavailable" inspect
   where
     parent = takeDirectory path
     inspect = do
@@ -95,10 +95,10 @@ privateRegular owner unlinked metadata = isRegularFile metadata && fileOwner met
 locked :: ProfileRules -> StoreRules -> FilePath -> (ProfileState -> Result (ProfileState, a)) -> IO (Result a)
 locked profileRules rules path operation = do
   owner <- inspectOwner path
-  either (pure . Left) protect owner
+  Effects.continue protect owner
   where
   flags = defaultFileFlags {creat = Just 0o600, nofollow = True, nonBlock = True, cloexec = True}
-  protect uid = fmap join (ioResult "profile_storage_unavailable" (bracket (openFd (path ++ ".lock") ReadWrite flags) closeFd (run uid)))
+  protect uid = Effects.attempt "profile_storage_unavailable" (bracket (openFd (path ++ ".lock") ReadWrite flags) closeFd (run uid))
   run uid descriptor = withPrivateDescriptor uid False descriptor (acquire uid descriptor)
   acquire uid descriptor = do
     obtained <- timeout (storeLockMicros rules) (awaitLock rules descriptor)
@@ -120,14 +120,14 @@ awaitLock rules descriptor@(Fd raw) = fileLock raw 6 >>= continue
 update :: ProfileRules -> StoreRules -> FilePath -> UserID -> (ProfileState -> Result (ProfileState, a)) -> IO (Result a)
 update profileRules rules path uid operation = do
   previous <- readProfile profileRules rules path uid
-  either (pure . Left) (persist rules path) (previous >>= apply)
+  Effects.continue (persist rules path) (previous >>= apply)
   where
   apply previous = do
     (next, result) <- operation previous
     Right (previous, next, result)
 
 readProfile :: ProfileRules -> StoreRules -> FilePath -> UserID -> IO (Result ProfileState)
-readProfile profileRules rules path owner = fmap join (ioResult "profile_storage_unavailable" openedFile)
+readProfile profileRules rules path owner = Effects.attempt "profile_storage_unavailable" openedFile
   where
   openedFile = do
     opened <- try (openFd path ReadOnly flags)

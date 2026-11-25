@@ -13,7 +13,7 @@ digraph Baerbel {
   live [label="Speech providers\nLive WebSocket\nLegacy STT → chat → TTS", pos="130,300!", width=3.25];
   providers [label="Shared provider capabilities\nGmail · Calendar · Contacts\nMaps · Windguru · shared profile store", pos="400,135!", width=5.0];
   notifications [label="Fixed-recipient notifications\nNo public access to owner tools\nAccepted delivery survives hangup", pos="1190,135!", width=5.1, fillcolor="#fff1e5"];
-  effects [label="Effect coordinators\nHTTP / WebSocket / AMI · clocks / state\nAudio / VAD / resampling · files / SQLite / logs", pos="800,-30!", width=6.7, fillcolor="#eaf2ed"];
+  effects [label="Shared effect boundaries\nHTTP / WebSocket / AMI · clocks / state\nResult sequencing · lifetimes · deadlines\nAudio / files / SQLite / logs", pos="800,-30!", width=6.7, fillcolor="#eaf2ed"];
   state [label="Durable external state\nGmail/Calendar/SMS receipts · PBX event cursor\nPrivate profile · existing call archive", pos="800,-165!", width=6.5, fillcolor="#f3f4f6"];
   config [label="Configuration boundary\nOne global rules + schema file\nOne private user settings file", pos="1470,305!", width=3.8, fillcolor="#f3f4f6"];
   permissions [shape=plain, style="", label="Public caller input never grants owner capabilities\nUncertain mutations are recorded before submission and never replayed automatically", fontsize=14, pos="800,-270!"];

@@ -6,7 +6,8 @@ module Baerbel.Speech
   ) where
 
 import Baerbel.Error (Result, failure)
-import Control.Exception (IOException, bracket, catch, onException)
+import Baerbel.Effects (attempt, continue, withResult)
+import Control.Exception (onException)
 import Data.Aeson (Value, object, (.=))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Bits ((.|.), shiftL, shiftR)
@@ -37,14 +38,10 @@ data Resampler = Resampler
 withResampler :: Int -> Int -> (Resampler -> IO (Result a)) -> IO (Result a)
 withResampler inputRate outputRate action
   | inputRate <= 0 || outputRate <= 0 = pure (Left (failure "invalid_sample_rate"))
-  | otherwise = catch run unavailable
+  | otherwise = attempt "audio_resampler_unavailable" run
   where
-    run = bracket acquire release use
     acquire = openResampler inputRate outputRate
-    release = either (const (pure ())) closeResampler
-    use = either (pure . Left) action
-    unavailable :: IOException -> IO (Result a)
-    unavailable _ = pure (Left (failure "audio_resampler_unavailable"))
+    run = withResult acquire closeResampler action
 
 openResampler :: Int -> Int -> IO (Result Resampler)
 openResampler inputRate outputRate = do
@@ -75,9 +72,8 @@ resample :: Resampler -> BS.ByteString -> Bool -> IO (Result BS.ByteString)
 resample converter bytes final = do
   done <- readIORef (finished converter)
   pending <- readIORef (remainder converter)
-  case preparePCM done final pending bytes of
-    Left err -> pure (Left err)
-    Right (complete, rest) -> processChunk converter final complete rest
+  let prepared = preparePCM done final pending bytes
+  continue (uncurry (processChunk converter final)) prepared
 
 preparePCM :: Bool -> Bool -> BS.ByteString -> BS.ByteString -> Result ([Int16], BS.ByteString)
 preparePCM done final pending bytes

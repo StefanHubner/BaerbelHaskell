@@ -4,9 +4,10 @@ module Baerbel.Pipeline
   ) where
 
 import Baerbel.WebSocket (withSecureSocket)
-import Baerbel.Concurrent (raceWorkers, awaitReady)
+import Baerbel.Concurrent (raceWorkers, awaitReady, paceFrame)
 import Baerbel.Chat
 import Baerbel.Config (Settings, setting, rule, integerSetting, numericSetting, ruleSection)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.HTTP (StreamSend, Request(..), Body(..), newStreamSender)
 import Baerbel.JSON (jsonOptions, decodeBytes)
@@ -18,9 +19,8 @@ import Baerbel.VAD (VAD, withVAD, resetVAD, isSpeech)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race, withAsync, wait)
 import Control.Concurrent.STM
-import Control.Monad (foldM, void, unless)
+import Control.Monad (void, unless)
 import Data.Either (fromRight)
-import Data.Maybe (fromMaybe)
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=), encode)
 import qualified Data.Aeson.KeyMap as KM
 import qualified Data.ByteString as BS
@@ -33,7 +33,6 @@ import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Generics (Generic)
 import Network.Socket (Socket)
 import qualified Network.WebSockets as WS
-import System.Timeout (timeout)
 
 data PipelineRules = PipelineRules
   { pipelineHost :: String, pipelinePort :: Int, pipelinePath :: String
@@ -104,11 +103,8 @@ pipelineConfiguration settings = do
       maximumFrames = ceiling (maximumSeconds / frameSeconds)
   pure (rules, ceiling (duration * 1000000), quietFrames, maximumFrames, tokens, limit)
 
-nowSeconds :: IO Double
-nowSeconds = (\nanos -> fromIntegral nanos / 1000000000) <$> getMonotonicTimeNSec
-
 pipelineSession :: Pipeline -> Report -> Text -> Socket -> IO (Result ())
-pipelineSession pipeline report identifier socket = either (pure . Left) start configured
+pipelineSession pipeline report identifier socket = Effects.continue start configured
   where
     configured = rule (pipelineSettings pipeline) "runtime" "socket"
     rules = pipelineRules pipeline
@@ -149,9 +145,9 @@ queueInput queue ready bytes = do
 startPipeline :: Pipeline -> Media -> TBQueue BS.ByteString -> TVar Bool -> TVar Bool -> WS.Connection -> IO (Result ())
 startPipeline pipeline transport queue ready started conn = do
   let setup = sendSTT pipeline conn (transcriptionConfig (setting (pipelineSettings pipeline) "OPENAI_STT_MODEL")) >>= await
-      await = either (pure . Left) (const (awaitUpdated conn))
-  connected <- timeout (pipelineTimeout pipeline) setup
-  either (pure . Left) (const run) (fromMaybe (Left (failure "transcription_setup_timeout")) connected)
+      await = Effects.continue (const (awaitUpdated conn))
+  connected <- Effects.within (failure "transcription_setup_timeout") (pipelineTimeout pipeline) setup
+  Effects.continue (const run) connected
   where
     run = do
       atomically (writeTVar started True)
@@ -161,7 +157,7 @@ startPipeline pipeline transport queue ready started conn = do
 pipelineOpening :: Pipeline -> Media -> TVar Bool -> IO (Result ())
 pipelineOpening pipeline transport ready = do
   result <- playBytes rules transport (pipelineGreeting pipeline)
-  either (pure . Left) (const finished) result
+  Effects.continue (const finished) result
   where
     rules = pipelineRules pipeline
     finished = do
@@ -195,28 +191,22 @@ consumeInput pipeline queue conn vad converter state pending = do
   bytes <- atomically (readTBQueue queue)
   let combined = pending <> bytes
       (frames, rest) = splitFrames (pipelineFrameBytes (pipelineRules pipeline)) combined
-  result <- foldM processFrame (Right ()) frames
-  either (pure . Left) (const (consumeInput pipeline queue conn vad converter state rest)) result
-  where
-    processFrame (Left err) _ = pure (Left err)
-    processFrame (Right ()) frame = acceptFrame pipeline conn vad converter state frame
+  result <- Effects.runAll (acceptFrame pipeline conn vad converter state) frames
+  Effects.continue (const (consumeInput pipeline queue conn vad converter state rest)) result
 
 acceptFrame :: Pipeline -> WS.Connection -> VAD -> Resampler -> TVar TurnState -> BS.ByteString -> IO (Result ())
 acceptFrame pipeline conn vad converter state frame = do
-  now <- nowSeconds
+  now <- Effects.monotonicSeconds
   current <- readTVarIO state
   voiced <- classifyFrame (pipelineRules pipeline) vad current now frame
   actions <- atomically (transitionFrame pipeline state now voiced frame)
-  either (pure . Left) (foldM run (Right ())) actions
-  where
-    run (Left err) _ = pure (Left err)
-    run (Right ()) action = performTurnAction pipeline conn converter action
+  Effects.continue (Effects.runAll (performTurnAction pipeline conn converter)) actions
 
 classifyFrame :: PipelineRules -> VAD -> TurnState -> Double -> BS.ByteString -> IO (Result Bool)
 classifyFrame rules vad state now frame = case state of
   Listening _ _ -> classify
   Recording _ _ -> classify
-  Echo deadline | now >= deadline -> resetVAD vad (pipelineVadMode rules) >>= either (pure . Left) (const classify)
+  Echo deadline | now >= deadline -> resetVAD vad (pipelineVadMode rules) >>= Effects.continue (const classify)
   _ -> pure (Right False)
   where
     classify = isSpeech vad (pipelineInputRate rules) frame
@@ -233,13 +223,13 @@ transitionFrame pipeline state now voiced frame = case voiced of
 performTurnAction :: Pipeline -> WS.Connection -> Resampler -> TurnAction -> IO (Result ())
 performTurnAction pipeline conn converter (Begin bytes) = do
   reset <- resetResampler converter
-  either (pure . Left) (const (performTurnAction pipeline conn converter (Append bytes))) reset
+  Effects.continue (const (performTurnAction pipeline conn converter (Append bytes))) reset
 performTurnAction pipeline conn converter (Append bytes) =
-  resample converter bytes False >>= either (pure . Left) (sendPCM pipeline conn)
+  resample converter bytes False >>= Effects.continue (sendPCM pipeline conn)
 performTurnAction pipeline conn converter Commit = do
   final <- resample converter BS.empty True
-  sent <- either (pure . Left) (sendPCM pipeline conn) final
-  either (pure . Left) (const (sendSTT pipeline conn (object ["type" .= ("input_audio_buffer.commit" :: Text)]))) sent
+  sent <- Effects.continue (sendPCM pipeline conn) final
+  Effects.continue (const (sendSTT pipeline conn (object ["type" .= ("input_audio_buffer.commit" :: Text)]))) sent
 
 sendPCM :: Pipeline -> WS.Connection -> BS.ByteString -> IO (Result ())
 sendPCM _ _ bytes | BS.null bytes = pure (Right ())
@@ -250,8 +240,8 @@ sendPCM pipeline conn bytes = sendSTT pipeline conn command
 
 sendSTT :: Pipeline -> WS.Connection -> Value -> IO (Result ())
 sendSTT pipeline conn value = do
-  sent <- timeout (pipelineTimeout pipeline) (WS.sendTextData conn (encode value))
-  pure (maybe (Left (failure "transcription_send_timeout")) Right sent)
+  let send = Right <$> WS.sendTextData conn (encode value)
+  Effects.within (failure "transcription_send_timeout") (pipelineTimeout pipeline) send
 
 receiveSTT :: WS.Connection -> IO (Result Value)
 receiveSTT conn = do
@@ -268,9 +258,9 @@ validateSTT _ = Left (failure "invalid_transcription_event")
 receiveTurns :: Pipeline -> Media -> WS.Connection -> TVar TurnState -> IORef [Value] -> IO (Result ())
 receiveTurns pipeline transport conn state history = do
   event <- receiveSTT conn
-  accepted <- either (pure . Left) (atomically . acceptTranscript state) event
-  result <- either (pure . Left) (maybe (pure (Right ())) (respondTurn pipeline transport state history)) accepted
-  either (pure . Left) (const (receiveTurns pipeline transport conn state history)) result
+  accepted <- Effects.continue (atomically . acceptTranscript state) event
+  result <- Effects.continue (maybe (pure (Right ())) (respondTurn pipeline transport state history)) accepted
+  Effects.continue (const (receiveTurns pipeline transport conn state history)) result
 
 acceptTranscript :: TVar TurnState -> Value -> STM (Result (Maybe Text))
 acceptTranscript state event = stateTVar state advance
@@ -296,15 +286,16 @@ transcriptStep _ _ = Left (failure "invalid_transcription_event")
 respondTurn :: Pipeline -> Media -> TVar TurnState -> IORef [Value] -> Text -> IO (Result ())
 respondTurn pipeline transport state history text = do
   observeEvent transport (object ["type" .= ("session.input_transcript.delta" :: Text), "delta" .= text])
-  result <- timeout (pipelineResponseMicros (pipelineRules pipeline)) (respond pipeline transport history text)
-  now <- nowSeconds
+  result <- Effects.within (failure "pipeline_response_timeout") (pipelineResponseMicros (pipelineRules pipeline))
+    (respond pipeline transport history text)
+  now <- Effects.monotonicSeconds
   let deadline = now + fromIntegral (pipelineEchoMicros (pipelineRules pipeline)) / 1000000
   atomically (writeTVar state (Echo deadline))
-  pure (fromMaybe (Left (failure "pipeline_response_timeout")) result)
+  pure result
 
 transcriptWatchdog :: Pipeline -> TVar TurnState -> IO (Result ())
 transcriptWatchdog pipeline state = do
-  now <- nowSeconds
+  now <- Effects.monotonicSeconds
   current <- readTVarIO state
   case current of
     Committed started _ | (now - started) * 1000000 > fromIntegral (pipelineTimeout pipeline) ->
@@ -320,7 +311,7 @@ respond pipeline transport history text = do
       play = withResampler (pipelineProviderRate rules) (pipelineInputRate rules) $ \converter ->
         playQueue rules transport converter queue BS.empty
   withAsync produce $ \worker -> do
-    let failed = wait worker >>= either (pure . Left) (const (atomically retry))
+    let failed = wait worker >>= Effects.continue (const (atomically retry))
     result <- race failed play
     pure (either id id result)
   where
@@ -340,7 +331,7 @@ streamReply pipeline transport history text speakText = do
       observeEvent transport (object ["type" .= ("session.output_transcript.delta" :: Text), "delta" .= chatText complete])
       let limit = pipelineHistoryMessages (pipelineRules pipeline)
           updated = finishChat limit (previous ++ [user]) complete result
-      either (pure . Left) (\next -> writeIORef history next >> pure (Right ())) updated
+      Effects.continue (\next -> writeIORef history next >> pure (Right ())) updated
 
 finishChat :: Int -> [Value] -> ChatState -> Result () -> Result [Value]
 finishChat _ _ _ (Left err) = Left err
@@ -355,22 +346,18 @@ consumeChat pipeline parsed speakText bytes = do
   case splitEvents (pending <> bytes) of
     Left err -> pure (Left err)
     Right (events, rest) -> do
-      result <- foldM (advanceChat chunks speakText) (Right state) events
-      either (pure . Left) (\next -> writeIORef parsed (rest, next) >> pure (Right ())) result
+      result <- Effects.foldResults (advanceChat chunks speakText) state events
+      Effects.continue (\next -> writeIORef parsed (rest, next) >> pure (Right ())) result
   where
     rules = pipelineRules pipeline
     chunks = ChunkRules (pipelineChunkChars rules) (pipelineAbbreviations rules)
 
-advanceChat :: ChunkRules -> (Text -> IO (Result ())) -> Result ChatState -> Value -> IO (Result ChatState)
-advanceChat _ _ (Left err) _ = pure (Left err)
-advanceChat chunks speakText (Right current) event = case chatEvent chunks event current of
+advanceChat :: ChunkRules -> (Text -> IO (Result ())) -> ChatState -> Value -> IO (Result ChatState)
+advanceChat chunks speakText current event = case chatEvent chunks event current of
   Left err -> pure (Left err)
   Right (next, pieces) -> do
-    spoken <- foldM speakPiece (Right ()) pieces
+    spoken <- Effects.runAll speakText pieces
     pure (next <$ spoken)
-  where
-    speakPiece :: Result () -> Text -> IO (Result ())
-    speakPiece result piece = either (pure . Left) (const (speakText piece)) result
 
 responseRequest :: Pipeline -> [Value] -> Result Request
 responseRequest pipeline history = do
@@ -403,9 +390,7 @@ speak pipeline enqueue text = pipelineSend pipeline request consume
     rules = pipelineRules pipeline
     request = providerRequest pipeline (pipelineSpeechUrl rules) body (pipelineSpeechBytes rules)
     chunkBytes = pipelineFrameBytes rules * pipelineProviderRate rules `div` pipelineInputRate rules
-    consume bytes = foldM send (Right ()) (sizedChunks chunkBytes bytes)
-    send (Left err) _ = pure (Left err)
-    send (Right ()) bytes = enqueue (Right (Just bytes))
+    consume bytes = Effects.runAll (enqueue . Right . Just) (sizedChunks chunkBytes bytes)
 
 sizedChunks :: Int -> BS.ByteString -> [BS.ByteString]
 sizedChunks _ bytes | BS.null bytes = []
@@ -419,31 +404,26 @@ playQueue rules transport converter queue pending = do
     Right Nothing -> finalAudio rules transport converter pending
     Right (Just bytes) -> do
       converted <- resample converter bytes False
-      result <- either (pure . Left) (playBuffered rules transport pending) converted
-      either (pure . Left) (playQueue rules transport converter queue) result
+      result <- Effects.continue (playBuffered rules transport pending) converted
+      Effects.continue (playQueue rules transport converter queue) result
 
 playBuffered :: PipelineRules -> Media -> BS.ByteString -> BS.ByteString -> IO (Result BS.ByteString)
 playBuffered rules transport pending pcm = do
   let (frames, rest) = splitFrames (pipelineFrameBytes rules) (pending <> pcm)
-  played <- foldM send (Right ()) frames
+  played <- Effects.runAll (playFrame rules transport) frames
   pure (rest <$ played)
-  where
-    send (Left err) _ = pure (Left err)
-    send (Right ()) frame = playFrame rules transport frame
 
 playFrame :: PipelineRules -> Media -> BS.ByteString -> IO (Result ())
 playFrame rules transport frame = do
   started <- getMonotonicTimeNSec
   result <- sendAudio transport frame
-  ended <- getMonotonicTimeNSec
-  let remaining = max 0 (pipelineFrameMicros rules - fromIntegral ((ended - started) `div` 1000))
-  threadDelay remaining
+  paceFrame (pipelineFrameMicros rules) started
   pure (void result)
 
 finalAudio :: PipelineRules -> Media -> Resampler -> BS.ByteString -> IO (Result ())
 finalAudio rules transport converter pending = do
   final <- resample converter BS.empty True
-  either (pure . Left) (playBytes rules transport . padFrames rules . (pending <>)) final
+  Effects.continue (playBytes rules transport . padFrames rules . (pending <>)) final
 
 padFrames :: PipelineRules -> BS.ByteString -> BS.ByteString
 padFrames rules bytes = bytes <> BS.replicate amount 0
@@ -459,10 +439,11 @@ buildGreeting pipeline
   | T.null (T.strip text) = pure (Right BS.empty)
   | otherwise = withResampler (pipelineProviderRate rules) (pipelineInputRate rules) $ \converter -> do
       collected <- newIORef BS.empty
-      generated <- timeout (pipelineTimeout pipeline) (speak pipeline (collectGreeting rules converter collected) text)
+      generated <- Effects.within (failure "greeting_timeout") (pipelineTimeout pipeline)
+        (speak pipeline (collectGreeting rules converter collected) text)
       final <- resample converter BS.empty True
       before <- readIORef collected
-      pure (fromMaybe (Left (failure "greeting_timeout")) generated >> final >>= validateGreeting rules before)
+      pure (generated >> final >>= validateGreeting rules before)
   where
     rules = pipelineRules pipeline
     text = setting (pipelineSettings pipeline) "PHONE_ASSISTANT_GREETING"

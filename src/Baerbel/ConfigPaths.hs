@@ -1,5 +1,6 @@
 module Baerbel.ConfigPaths (validatePaths) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Config (Settings(..), setting, rule, booleanSetting)
 import Baerbel.Error (Result, failure, ioResult)
 import Baerbel.JSON (jsonOptions)
@@ -22,14 +23,14 @@ data PathCheck = PathCheck
   { checkKey :: Text, checkFile :: FilePath, checkExisting :: Bool, checkDistinct :: [FilePath] }
 
 validatePaths :: FilePath -> FilePath -> Settings -> IO (Result Settings)
-validatePaths globalPath userPath settings = either (pure . Left) inspect configured
+validatePaths globalPath userPath settings = Effects.continue inspect configured
   where
     configured = rule settings "validation" "paths"
     inspect :: [PathRule] -> IO (Result Settings)
     inspect rules = do
       home <- getHomeDirectory
       let (prepared, checks) = preparePaths globalPath userPath home settings rules
-          observations = traverse (either (pure . Left) inspectPath) checks
+          observations = traverse (Effects.continue inspectPath) checks
       result <- ioResult "configuration_path_unavailable" observations
       pure (prepared <$ (result >>= sequence_))
 

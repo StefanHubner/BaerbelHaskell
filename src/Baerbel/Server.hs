@@ -3,21 +3,20 @@ module Baerbel.Server
   ( ServerConfig(..), CallHandler, serve, socketMedia, runListener
   ) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Concurrent (raceWorkers)
 import Baerbel.AudioSocket (SocketRules(..), boundedWritePacket, Packet(..), PacketKind(..), readCallId, readPacket)
-import Baerbel.Error (Failure, Result, failure, ioResult)
+import Baerbel.Error (Failure, Result, failure)
 import Baerbel.AudioMetrics (AudioDelivery(Delivered))
 import Baerbel.Live (Media(..))
 import Control.Concurrent (ThreadId, forkIOWithUnmask, killThread, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM
 import Control.Exception (bracket, finally, mask)
-import Control.Monad (join)
 import Data.Aeson (Value)
 import Data.ByteString (ByteString)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Network.Socket
-import System.Timeout (timeout)
 
 type CallHandler = Text -> Socket -> IO (Result ())
 
@@ -39,14 +38,12 @@ serve cfg = withSocketsDo (raceWorkers listeners)
 
 identified :: SocketRules -> CallHandler -> Socket -> IO (Result ())
 identified rules handler client = do
-  result <- timeout (socketIdentityMicros rules) (readPacket client)
-  let identity = maybe (Left (failure "audiosocket_identity_timeout")) (>>= readCallId) result
-  either (pure . Left) (`handler` client) identity
+  result <- Effects.within (failure "audiosocket_identity_timeout") (socketIdentityMicros rules) (readPacket client)
+  let identity = result >>= readCallId
+  Effects.continue (`handler` client) identity
 
 runListener :: ServerConfig -> ServiceName -> (Socket -> IO (Result ())) -> IO (Result ())
-runListener cfg port handler = do
-  result <- ioResult "listener_failed" (openListener cfg port handler)
-  pure (join result)
+runListener cfg port handler = Effects.attempt "listener_failed" (openListener cfg port handler)
 
 openListener :: ServerConfig -> ServiceName -> (Socket -> IO (Result ())) -> IO (Result ())
 openListener cfg port handler = do
@@ -93,8 +90,8 @@ startChild cfg handler client children = do
 
 handleClient :: ServerConfig -> (Socket -> IO (Result ())) -> Socket -> IO ()
 handleClient cfg handler client = do
-  result <- ioResult "call_transport_failed" (handler client)
-  either (reportFailure cfg) (const (pure ())) (join result)
+  result <- Effects.attempt "call_transport_failed" (handler client)
+  either (reportFailure cfg) (const (pure ())) result
 
 socketMedia :: SocketRules -> Socket -> (ByteString -> IO ()) -> (Value -> IO ()) -> Media
 socketMedia rules client keypad observer = Media

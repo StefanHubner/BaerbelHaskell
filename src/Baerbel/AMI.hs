@@ -5,17 +5,19 @@ module Baerbel.AMI
   , field, variable
   ) where
 
+import Baerbel.Concurrent (stateMVar, updateMVar)
+import Baerbel.Effects (attempt, continue, within)
 import Baerbel.JSON (jsonOptions)
 import Data.Aeson (FromJSON(..), genericParseJSON)
 import GHC.Generics (Generic)
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
-import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newEmptyMVar, newMVar, takeMVar, tryPutMVar)
+import Control.Concurrent (MVar, modifyMVar_, newEmptyMVar, newMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Exception (bracketOnError, finally, onException)
-import Control.Monad (join, void, unless)
+import Control.Monad (void, unless)
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
-import Data.Maybe (isJust, isNothing, fromMaybe)
+import Data.Maybe (isJust, isNothing)
 import Data.Char (isAscii, isAlpha, isAlphaNum, isHexDigit, ord)
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
@@ -26,7 +28,6 @@ import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
 import Data.Text.Encoding.Error (lenientDecode)
 import Network.Socket (Socket, Family(AF_INET), SocketType(Stream), SockAddr(SockAddrInet), close, connect, defaultProtocol, socket, tupleToHostAddress)
 import qualified Network.Socket.ByteString as N
-import System.Timeout (timeout)
 
 data AMIRules = AMIRules
   { amiPort :: Int, amiConnectMicros :: Int, amiBannerMicros :: Int
@@ -131,10 +132,10 @@ readNext connection delimiter limit chunks ending size
       Just _ -> readNext connection delimiter limit (byte : chunks) next (size + 1)
 
 readMessage :: AMIRules -> Socket -> IO (Result Message)
-readMessage rules connection = do
-  let bound = amiMessageBytes rules + 4
-  raw <- ioResult "ami_disconnected" (readDelimited connection "\r\n\r\n" bound)
-  pure (parseMessage <$> join raw)
+readMessage rules connection = fmap parseMessage <$> attempt "ami_disconnected" readRaw
+  where
+    bound = amiMessageBytes rules + 4
+    readRaw = readDelimited connection "\r\n\r\n" bound
 
 actionResponse :: AMIRules -> Maybe Text -> [Message] -> Message -> Result (Maybe [Message])
 actionResponse rules complete previous message
@@ -197,10 +198,8 @@ readEvents rules connection requests observe = loop `finally` closed
 
 request :: AMIRules -> Socket -> Requests -> MVar Int -> Text -> [(Text, Text)] -> Maybe Text -> IO (Result [Message])
 request rules connection requests sequenceId action fields complete = do
-  identifier <- modifyMVar sequenceId (pure . nextId)
-  case encodeAction rules action identifier fields of
-    Left problem -> pure (Left problem)
-    Right payload -> submit rules connection requests identifier complete payload
+  identifier <- stateMVar sequenceId nextId
+  continue (submit rules connection requests identifier complete) (encodeAction rules action identifier fields)
   where
     nextId :: Int -> (Int, Text)
     nextId current = (current + 1, T.pack (show current))
@@ -209,21 +208,20 @@ submit :: AMIRules -> Socket -> Requests -> Text -> Maybe Text -> ByteString -> 
 submit rules connection requests identifier complete payload = do
   result <- newEmptyMVar
   let pending = Pending complete [] result
-  modifyMVar_ requests (pure . M.insert identifier pending)
+  updateMVar requests (M.insert identifier pending)
   sendWait result `finally` remove
   where
     uncertain :: Failure
     uncertain = Failure "ami_action_outcome_unknown" True
     sendWait :: MVar (Result [Message]) -> IO (Result [Message])
     sendWait result = do
-      sent <- timeout (amiWriteMicros rules) (ioResult "ami_action_outcome_unknown" (N.sendAll connection payload))
-      maybe (pure (Left uncertain)) (either (pure . Left) (const (await result))) sent
+      let write = ioResult "ami_action_outcome_unknown" (N.sendAll connection payload)
+      sent <- within uncertain (amiWriteMicros rules) write
+      continue (const (await result)) sent
     await :: MVar (Result [Message]) -> IO (Result [Message])
-    await result = do
-      outcome <- timeout (amiActionMicros rules) (takeMVar result)
-      pure (fromMaybe (Left uncertain) outcome)
+    await result = within uncertain (amiActionMicros rules) (takeMVar result)
     remove :: IO ()
-    remove = modifyMVar_ requests (pure . M.delete identifier)
+    remove = updateMVar requests (M.delete identifier)
 
 openSocket :: AMIRules -> IO Socket
 openSocket rules = bracketOnError create close establish
@@ -254,18 +252,19 @@ startAMI rules connection username password observe = do
 
 connectAMI :: AMIRules -> Text -> Text -> (Message -> IO ()) -> IO (Result AMI)
 connectAMI rules username password observe = do
-  connected <- timeout (amiConnectMicros rules) (ioResult "ami_disconnected" (openSocket rules))
-  case connected of
-    Nothing -> pure (Left (failure "ami_connection_timeout"))
-    Just (Left problem) -> pure (Left problem)
-    Just (Right connection) -> verify connection `onException` close connection
+  let deadline = failure "ami_connection_timeout"
+      open = ioResult "ami_disconnected" (openSocket rules)
+  connected <- within deadline (amiConnectMicros rules) open
+  continue (\connection -> verify connection `onException` close connection) connected
   where
     verify :: Socket -> IO (Result AMI)
     verify connection = do
       let bound = amiMessageBytes rules + 1
-      banner <- timeout (amiBannerMicros rules) (ioResult "ami_disconnected" (readDelimited connection "\n" bound))
+          readBanner = attempt "ami_disconnected" (readDelimited connection "\n" bound)
+          deadline = failure "ami_invalid_banner"
+      banner <- within deadline (amiBannerMicros rules) readBanner
       case banner of
-        Just (Right (Right bytes)) | B.isPrefixOf "Asterisk Call Manager/" bytes -> startAMI rules connection username password observe
+        Right bytes | B.isPrefixOf "Asterisk Call Manager/" bytes -> startAMI rules connection username password observe
         _ -> reject connection
     reject :: Socket -> IO (Result AMI)
     reject connection = close connection >> pure (Left (failure "ami_invalid_banner"))

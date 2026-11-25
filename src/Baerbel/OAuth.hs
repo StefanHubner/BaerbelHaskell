@@ -4,10 +4,11 @@ module Baerbel.OAuth
   , tokenSource, tokenSourceWithClock, refreshRequest, validateTokenValue
   ) where
 
-import Baerbel.Error (Failure(..), Result, failure, ioResult)
+import Baerbel.Error (Failure(..), Result, failure)
+import Baerbel.Effects (attempt, continue, mapResult, monotonicSeconds)
 import Baerbel.HTTP (Body(..), Request(..), Send)
 import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
-import Control.Monad (join)
+import Control.Monad ((>=>))
 import Data.Maybe (fromMaybe)
 import Control.Applicative ((<|>))
 import Control.Concurrent.MVar (modifyMVar, newMVar)
@@ -21,7 +22,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Generics (Generic)
 import System.IO (IOMode(ReadMode), withBinaryFile, hFileSize, Handle)
 import Text.Read (readMaybe)
@@ -63,14 +63,14 @@ credentialFields document = do
 type Cached = Maybe (Text, Double)
 
 loadCredentials :: OAuthRules -> Set Text -> Set Text -> FilePath -> IO (Result Credentials)
-loadCredentials rules required allowed path = do
-  raw <- ioResult "credentials_unavailable" (withBinaryFile path ReadMode readBounded)
-  pure (join raw >>= decodeBytes "invalid_credentials" >>= validateCredentials rules required allowed)
+loadCredentials rules required allowed path = mapResult decode readCredentials
   where
+    decode = decodeBytes "invalid_credentials" >=> validateCredentials rules required allowed
+    readCredentials = attempt "credentials_unavailable" (withBinaryFile path ReadMode readBounded)
     readBounded :: Handle -> IO (Result BS.ByteString)
     readBounded handle = do
       size <- hFileSize handle
-      either (pure . Left) (const (readBytes handle)) (credentialSize rules size)
+      continue (const (readBytes handle)) (credentialSize rules size)
     readBytes :: Handle -> IO (Result BS.ByteString)
     readBytes handle = do
       let limit = oauthCredentialBytes rules + 1
@@ -99,9 +99,6 @@ validateCredentials rules required allowed value = decodeValue "invalid_credenti
 
 tokenSource :: Send -> OAuthRules -> Set Text -> Set Text -> Credentials -> IO (IO (Result Text))
 tokenSource sender rules required allowed credentials = tokenSourceWithClock sender rules required allowed credentials monotonicSeconds
-
-monotonicSeconds :: IO Double
-monotonicSeconds = (\value -> fromIntegral value / 1000000000) <$> getMonotonicTimeNSec
 
 tokenSourceWithClock :: Send -> OAuthRules -> Set Text -> Set Text -> Credentials -> IO Double -> IO (IO (Result Text))
 tokenSourceWithClock sender rules required allowed credentials clock = do

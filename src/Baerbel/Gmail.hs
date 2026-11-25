@@ -4,10 +4,11 @@
 module Baerbel.Gmail (GmailRules(..), gmail, gmailSession, mail, sendEnvelope, account, accountRequest, summary, decodeSummaryHeaders, bodyText) where
 
 import Baerbel.Cache (onceSuccess)
+import Baerbel.Effects (continue)
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
 import Baerbel.MIME (Envelope(..), File, render)
 import Baerbel.MailContent (decodeWords, htmlText, decodeCharset)
-import Baerbel.HTTP (Send, Request(..))
+import Baerbel.HTTP (Send, Request(..), requestJSON)
 import Baerbel.GoogleValidation (address, identifier, textValue)
 import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions, decodeValue)
 import Baerbel.Provider
@@ -109,7 +110,7 @@ data ReplyHeaders = ReplyHeaders (Result Text) (Result Text)
 data SummaryHeaders = SummaryHeaders (Result Text) (Result Text) (Result Text) (Result Text) ReplyHeaders
 
 decodeHeader :: GmailRules -> Bool -> Text -> Part -> IO (Result Text)
-decodeHeader rules unique name part = either (pure . Left) decodeWords (rawHeader rules unique name part)
+decodeHeader rules unique name part = continue decodeWords (rawHeader rules unique name part)
 
 header :: GmailRules -> Bool -> Text -> Part -> Decode Text
 header rules unique name = ExceptT . decodeHeader rules unique name
@@ -303,8 +304,8 @@ messageValue rules message = do
 messageContent :: Summary -> MessageBody -> (Value, Bool)
 messageContent headers body = (combine [toJSON headers, toJSON body], bodyTruncated body)
 
-account :: Result Value -> Result Text
-account response = fetch "gmail_invalid_response" response >>= address . accountEmailAddress
+account :: Value -> Result Text
+account response = decodeValue "gmail_invalid_response" response >>= address . accountEmailAddress
 
 accountRequest :: GmailRules -> Request
 accountRequest rules = get (gmailHttp rules) url []
@@ -318,15 +319,15 @@ readMessage rules ident format = get (gmailHttp rules) url params
 
 search :: GmailRules -> Send -> SearchArgs -> IO (Result Value)
 search rules send args = do
-  page <- fmap (fetch "gmail_invalid_response") (send request)
-  either (pure . Left) complete page
+  page <- requestJSON send request (decodeValue "gmail_invalid_response")
+  continue complete page
   where
     url = gmailBase rules <> "/messages"
     count = Text.pack (show (searchLimit args))
     params = [textParam "q" (searchQuery args), textParam "maxResults" count]
       <> maybe [] (pure . textParam "pageToken") (searchPageToken args)
     request = get (gmailHttp rules) url params
-    complete page = either (pure . Left) (summaries page) validatedIds
+    complete page = continue (summaries page) validatedIds
       where
         ids = take (searchLimit args) (fromMaybe [] (pageMessages page))
         validatedIds = traverse validateId ids
@@ -341,14 +342,14 @@ search rules send args = do
 readSummary :: GmailRules -> Send -> MessageId -> IO (Result Summary)
 readSummary rules send ident = runExceptT $ do
   let request = readMessage rules (midId ident) "metadata"
-  message <- ExceptT (fmap (fetch "gmail_invalid_response") (send request))
+  message <- ExceptT (requestJSON send request (decodeValue "gmail_invalid_response"))
   decoded <- lift (decodeSummaryHeaders rules message)
   except (summary rules message decoded)
 
 readMail :: GmailRules -> Send -> ReadArgs -> IO (Result Value)
 readMail rules send args = runExceptT $ do
   let request = readMessage rules (readMessageId args) "full"
-  message <- ExceptT (fmap (fetch "gmail_invalid_response") (send request))
+  message <- ExceptT (requestJSON send request (decodeValue "gmail_invalid_response"))
   (value, _) <- messageValue rules message
   let mark = toJSON (ContentMark "ok" True)
   pure (combine [mark, value])
@@ -359,7 +360,7 @@ internalDate message = maybe (Left (failure "gmail_invalid_response")) Right (me
 readThread :: GmailRules -> Send -> ThreadArgs -> IO (Result Value)
 readThread rules send args = runExceptT $ do
   let request = get (gmailHttp rules) url params
-  thread <- ExceptT (fmap (fetch "gmail_invalid_response") (send request))
+  thread <- ExceptT (requestJSON send request (decodeValue "gmail_invalid_response"))
   finish thread
   where
     ident = argThreadId args
@@ -387,9 +388,9 @@ collectMessages :: GmailRules -> Int -> [Message] -> Decode [(Value, Bool)]
 collectMessages _ _ [] = pure []
 collectMessages rules remaining (message : rest) = do
   item <- messageValue rules message
-  continue item
+  advance item
   where
-    continue item@(value, _)
+    advance item@(value, _)
       | size > remaining = pure []
       | otherwise = (item :) <$> collectMessages rules next rest
       where
@@ -399,15 +400,14 @@ collectMessages rules remaining (message : rest) = do
 sendEnvelope :: GmailRules -> Send -> Envelope -> [File] -> Maybe Text -> IO (Result Value)
 sendEnvelope rules send envelope files thread = do
   rendered <- ioResult "gmail_message_encoding_failed" (render envelope files)
-  either (pure . Left) submit rendered
+  continue submit rendered
   where
     submit bytes = do
       let encoded = Text.decodeUtf8 (URL64.encode bytes)
           resource = SendResource encoded thread
           url = gmailBase rules <> "/messages/send"
           request = post (gmailHttp rules) url [] resource
-      response <- send request
-      pure (response >>= decodeReceipt)
+      requestJSON send request decodeReceipt
     decodeReceipt value = either unknown receipt (decodeValue "gmail_send_response_missing_receipt" value)
     unknown issue = Left issue {failureUncertain = True}
     receipt value = case (identifier (receiptId value), identifier (receiptThreadId value)) of
@@ -459,22 +459,22 @@ validMessageId value = "<" `Text.isPrefixOf` value && ">" `Text.isSuffixOf` valu
 sendMail :: GmailRules -> Send -> IO UTCTime -> Text -> SendArgs -> IO (Result Value)
 sendMail rules send clock requestId args = do
   let request = accountRequest rules
-  sender <- fmap account (send request)
+  sender <- requestJSON send request account
   now <- clock
   let operation origin = mail rules send origin (sendTo args) (sendSubject args) (sendBody args) now requestId Nothing
-  either (pure . Left) operation sender
+  continue operation sender
 
 replyMail :: GmailRules -> Send -> IO UTCTime -> Text -> ReplyArgs -> IO (Result Value)
 replyMail rules send clock requestId args = runExceptT $ do
   let request = readMessage rules (replyMessageId args) "full"
-  parent <- ExceptT (fmap (fetch "gmail_invalid_response") (send request))
+  parent <- ExceptT (requestJSON send request (decodeValue "gmail_invalid_response"))
   let part = fromMaybe emptyPart (messagePayload parent)
   replyHeaders <- lift (decodeReplyHeaders rules part)
   destination <- except (replyAddress replyHeaders)
   original <- header rules True "Subject" part
   subject <- except (replySubject rules original)
   let profileRequest = accountRequest rules
-  sender <- ExceptT (fmap account (send profileRequest))
+  sender <- ExceptT (requestJSON send profileRequest account)
   now <- lift clock
   ExceptT (mail rules send sender [destination] subject (replyBody args) now requestId (Just parent))
 
@@ -522,21 +522,22 @@ parseRequest rules name arguments = case name of
     validateThread args = ThreadArgs <$> identifier (argThreadId args)
 
 gmail :: GmailRules -> Send -> Durable -> IO UTCTime -> Execute
-gmail rules send durable clock name arguments requestId = either (pure . Left) execute (parseRequest rules name arguments)
+gmail rules send durable clock name arguments requestId = continue execute (parseRequest rules name arguments)
   where
-    execute GetProfile = fmap (fmap profile . account) (send (accountRequest rules))
+    execute GetProfile = requestJSON send profileRequest (fmap profile . account)
     execute (SearchMail args) = search rules send args
     execute (ReadMail args) = readMail rules send args
     execute (ReadThread args) = readThread rules send args
     execute (SendMail args) = durable requestId name (toJSON args) (sendMail rules send clock requestId args)
     execute (ReplyMail args) = durable requestId name (toJSON args) (replyMail rules send clock requestId args)
+    profileRequest = accountRequest rules
     profile value = toJSON (ProfileResult "ok" value "gmail_account_profile")
 
 
 gmailSession :: GmailRules -> Send -> Durable -> IO UTCTime -> IO Execute
 gmailSession rules send durable clock = do
   let profileRequest = accountRequest rules
-  cached <- onceSuccess (fmap account (send profileRequest))
+  cached <- onceSuccess (requestJSON send profileRequest account)
   let scoped request
         | requestMethod request == "GET" && requestUrl request == gmailBase rules <> "/profile" = fmap (fmap (toJSON . Account)) cached
         | otherwise = send request

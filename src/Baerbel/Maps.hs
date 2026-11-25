@@ -5,15 +5,17 @@ module Baerbel.Maps (maps, placeDetails) where
 
 import Baerbel.TimeFormat (isoUtc)
 import Baerbel.Cache (insertBounded)
+import Baerbel.Concurrent (stateMVar)
+import Baerbel.Effects (continue)
 import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Request(..), Body(..), Send)
+import Baerbel.HTTP (Request(..), Body(..), Send, requestJSON)
 import Baerbel.JSON (argumentOptions, camelOptions, jsonOptions, decodeValue)
 import Baerbel.OpeningHours (Hours, openingHours, hoursAvailable)
 import Baerbel.MapTypes
 import Baerbel.MapsRoute (route)
 import Baerbel.Provider
 import Baerbel.ProviderConfig (MapsRules(..), RouteRules)
-import Control.Concurrent.MVar (MVar, newMVar, modifyMVar, readMVar)
+import Control.Concurrent.MVar (MVar, newMVar, readMVar)
 import Crypto.Random (getRandomBytes)
 import Data.Aeson hiding (Result)
 import Data.Aeson.Types (parseMaybe)
@@ -111,8 +113,8 @@ geocodeRequest rules query = Request "GET" (mapsGeocodeUrl rules) [] params Empt
   where
     params = [textParam "address" query, textParam "language" (mapsLanguage rules), textParam "region" (mapsGeocodeRegion rules)]
 
-geocode :: Result Value -> Result [Geocode]
-geocode response = fmap (fromMaybe [] . geoResults) (fetch "maps_invalid_place_response" response)
+geocode :: Value -> Result [Geocode]
+geocode response = fmap (fromMaybe [] . geoResults) (decodeValue "maps_invalid_place_response" response)
 
 areaBias :: MapsRules -> Geocode -> Bias
 areaBias rules geo = case geometryViewport geometry of
@@ -179,7 +181,7 @@ saveCandidate rules places (place, candidate) = do
   let ident = "place_" <> Text.decodeUtf8 (Base64.encode bytes)
       result = candidate {candidateRef = ident}
       save current = (current {storedPlaces = insertBounded (mapsReferenceLimit rules) ident place (storedPlaces current)}, result)
-  modifyMVar places (pure . save)
+  stateMVar places save
 
 data AreaResolution = ResolvedArea Geocode | AreaChoices [AreaCandidate]
 
@@ -206,11 +208,11 @@ lookupArea rules redact send state text = do
     Just value -> pure (Right (ResolvedArea value))
     Nothing -> do
       let request = geocodeRequest rules text
-      response <- fmap geocode (send request)
-      either (pure . Left) remember (response >>= resolveArea rules redact)
+      response <- requestJSON send request geocode
+      continue remember (response >>= resolveArea rules redact)
   where
     key = Text.toCaseFold text
-    remember result@(ResolvedArea value) = modifyMVar state (pure . save)
+    remember result@(ResolvedArea value) = stateMVar state save
       where save current = (current {storedAreas = insertBounded (mapsAreaLimit rules) key value (storedAreas current)}, Right result)
     remember result = pure (Right result)
 
@@ -231,7 +233,7 @@ findPlace rules redact send places args = case planFind rules args of
   Right (FindContext result) -> pure (Right (toJSON result))
   Right (FindQuery area query) -> do
     found <- lookupArea rules redact send places area
-    either (pure . Left) (searchArea rules redact send places query) found
+    continue (searchArea rules redact send places query) found
 
 searchRequest :: MapsRules -> Text -> Geocode -> Request
 searchRequest rules query area = Request "POST" (mapsPlacesUrl rules) [("X-Goog-FieldMask", fields)] [] body (mapsHttpBytes rules) (mapsHttpTimeout rules)
@@ -245,13 +247,13 @@ searchArea rules _ _ _ _ (AreaChoices candidates) = pure (Right (toJSON result))
   where result = NeedsContext "error" "needs_context" (mapsAreaPrompt rules) (Just candidates)
 searchArea rules redact send places query (ResolvedArea area) = do
   let request = searchRequest rules query area
-  response <- fmap (fetch "maps_invalid_place_response") (send request)
-  either (pure . Left) resolve (response >>= placeCandidates rules redact)
+  response <- requestJSON send request (decodeValue "maps_invalid_place_response")
+  continue resolve (response >>= placeCandidates rules redact)
   where
     resolve Nothing = do
       let request = geocodeRequest rules query
-      fallback <- fmap geocode (send request)
-      either (pure . Left) save (fallback >>= geocodeCandidates rules redact)
+      fallback <- requestJSON send request geocode
+      continue save (fallback >>= geocodeCandidates rules redact)
     resolve (Just candidates) = save candidates
     save = savePlaces rules redact places area
 
@@ -340,9 +342,9 @@ maps rules routeRules redact send elevation clock = do
 
 execute :: MapsRules -> RouteRules -> (Text -> Text) -> Send -> Bool -> IO UTCTime -> Places -> Execute
 execute rules routeRules redact send elevation clock places name arguments _ = case name of
-  "maps_find_place" -> either (pure . Left) (findPlace rules redact send places) (decodeValue "maps_invalid_arguments" arguments)
-  "maps_place_details" -> either (pure . Left) details (decodeValue "maps_invalid_arguments" arguments)
-  "maps_route" -> either (pure . Left) directions (decodeValue "maps_invalid_arguments" arguments)
+  "maps_find_place" -> continue (findPlace rules redact send places) (decodeValue "maps_invalid_arguments" arguments)
+  "maps_place_details" -> continue details (decodeValue "maps_invalid_arguments" arguments)
+  "maps_route" -> continue directions (decodeValue "maps_invalid_arguments" arguments)
   _ -> pure (Left (failure "maps_unsupported_tool"))
   where
     details args = do
@@ -350,9 +352,9 @@ execute rules routeRules redact send elevation clock places name arguments _ = c
       maybe (pure (Left (failure "maps_unknown_place_reference"))) (retrieve (detailsPlaceRef args)) (Map.lookup (detailsPlaceRef args) known)
     retrieve reference place = do
       let request = detailsRequest rules place
-      response <- send request
+      response <- requestJSON send request (decodeValue "maps_invalid_place_response")
       now <- clock
-      pure (fetch "maps_invalid_place_response" response >>= placeDetails rules redact now reference place)
+      pure (response >>= placeDetails rules redact now reference place)
     directions args = do
       known <- fmap (fst . storedPlaces) (readMVar places)
       let origin = Map.lookup (routeOriginRef args) known
@@ -365,7 +367,7 @@ data ApiEnvelope = ApiEnvelope {apiStatus :: Maybe Value, apiError :: Maybe Valu
 instance FromJSON ApiEnvelope where parseJSON = genericParseJSON (camelOptions 3)
 
 apiSend :: MapsRules -> Send -> Send
-apiSend rules send request = fmap (>>= apiResponse rules) (send request)
+apiSend rules send request = requestJSON send request (apiResponse rules)
 
 apiResponse :: MapsRules -> Value -> Result Value
 apiResponse rules value = do

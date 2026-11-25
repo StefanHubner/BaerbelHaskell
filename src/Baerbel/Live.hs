@@ -5,14 +5,15 @@ module Baerbel.Live
   , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript
   ) where
 
+import Baerbel.JSON (eventDelta, field, textField, numberField)
 import Baerbel.AudioMetrics (AudioDelivery(..), AudioMetrics, AudioNotice, emptyMetrics, recordInputFrame, recordQueueDepth, recordDelivery, noticeValue, summaryValue)
 import Baerbel.WebSocket (withSecureSocket)
-import Baerbel.Concurrent (raceWorkers, awaitReady, hasElapsed)
+import Baerbel.Concurrent (raceWorkers, awaitReady, hasElapsed, paceFrame)
 import Baerbel.Background (BackgroundRules(..), Progress(..), progressStep)
+import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Failure(..), Result, failure)
 import Baerbel.Speech (Resampler, resample, resetResampler, splitFrames, withResampler, audiblePCM)
 import Baerbel.Recording (Timeline, emptyTimeline, addFrame, resetTimeline, sentSamples, transcriptBounds)
-import Data.Scientific (toRealFloat)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Baerbel.Protocol (audioCommand, toolOutputCommand, decodeAudio, startCommand, continueCommand, appendCommand, announcementComplete)
 import Control.Applicative ((<|>))
@@ -21,7 +22,7 @@ import Control.Concurrent.Async (race)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (finally, onException)
-import Control.Monad (foldM, unless, when, void)
+import Control.Monad (unless, when, void)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Aeson (Value(..), decodeStrict', encode, object, (.=))
 import qualified Data.Aeson.Key as Key
@@ -38,7 +39,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import GHC.Clock (getMonotonicTimeNSec)
 import qualified Network.WebSockets as WS
-import System.Timeout (timeout)
 
 data ToolLimits = ToolLimits
   { maxPendingResponses :: Int, maxResponseCalls :: Int
@@ -96,15 +96,6 @@ data ToolState = ToolState
 
 emptyToolState :: ToolState
 emptyToolState = ToolState Map.empty Map.empty Map.empty Map.empty Set.empty Map.empty Set.empty Seq.empty
-
-field :: Text -> Value -> Maybe Value
-field key (Object fields) = KM.lookup (Key.fromText key) fields
-field _ _ = Nothing
-
-textField :: Text -> Value -> Maybe Text
-textField key value = case field key value of
-  Just (String text) -> Just text
-  _ -> Nothing
 
 requiredText :: Int -> Text -> Value -> Result Text
 requiredText limit key value = case textField key value of
@@ -272,11 +263,11 @@ beginSession runtime execute = do
   case sent of
     Left err -> pure (Left err)
     Right () -> do
-      result <- timeout (liveSetupMicros cfg) (awaitStarted runtime)
-      maybe (pure (Left (failure "live_setup_timeout"))) (either (pure . Left) (const (runBridge runtime execute))) result
+      result <- Effects.within (failure "live_setup_timeout") (liveSetupMicros cfg) (awaitStarted runtime)
+      Effects.continue (const (runBridge runtime execute)) result
 
 awaitStarted :: Runtime -> IO (Result ())
-awaitStarted runtime = receiveEvent runtime >>= either (pure . Left) (observeStarted runtime)
+awaitStarted runtime = receiveEvent runtime >>= Effects.continue (observeStarted runtime)
 
 observeStarted :: Runtime -> Value -> IO (Result ())
 observeStarted runtime event = case textField "type" event of
@@ -349,7 +340,7 @@ sendInput :: Runtime -> Resampler -> Bool -> (Int, Int) -> IO (Result ())
 sendInput runtime converter greeted epochs = do
   before <- getMonotonicTimeNSec
   nextEpochs <- resetInputEpoch runtime converter epochs
-  either (pure . Left) (sendInputAt runtime converter greeted before) nextEpochs
+  Effects.continue (sendInputAt runtime converter greeted before) nextEpochs
 
 sendInputAt :: Runtime -> Resampler -> Bool -> Word64 -> (Int, Int) -> IO (Result ())
 sendInputAt runtime converter greeted before nextEpochs = do
@@ -362,12 +353,12 @@ sendInputAt runtime converter greeted before nextEpochs = do
       InputFrame frame recordedAt = selectInput (config runtime) suppressed stamp next
   atomically (modifyTVar' (timeline runtime) (addFrame recordedAt))
   converted <- resample converter frame False
-  result <- either (pure . Left) (sendInputFrame runtime greeted) converted
+  result <- Effects.continue (sendInputFrame runtime greeted) converted
   case result of
     Left err -> pure (Left err)
     Right spoken -> do
       atomically (modifyTVar' (audioMetrics runtime) recordInputFrame)
-      waitFrame runtime before
+      paceFrame (liveFrameMicros (config runtime)) before
       sendInput runtime converter spoken nextEpochs
 
 selectInput :: LiveConfig -> Bool -> Double -> Maybe InputFrame -> InputFrame
@@ -385,21 +376,14 @@ sendInputFrame runtime greeted pcm
   | otherwise = do
       marked <- atomically (recordSent runtime (BS.length pcm `div` 2))
       observeInputAudio (media runtime) pcm
-      sent <- either (pure . Left) (const (sendEvent runtime (audioCommand pcm))) marked
-      either (pure . Left) (const (sendGreeting runtime greeted)) sent
+      sent <- Effects.continue (const (sendEvent runtime (audioCommand pcm))) marked
+      Effects.continue (const (sendGreeting runtime greeted)) sent
 
 sendGreeting :: Runtime -> Bool -> IO (Result Bool)
 sendGreeting runtime False = case liveGreeting (config runtime) of
   Just greeting -> fmap (fmap (const True)) (sendEvent runtime greeting)
   Nothing -> pure (Right True)
 sendGreeting _ True = pure (Right True)
-
-waitFrame :: Runtime -> Word64 -> IO ()
-waitFrame runtime before = do
-  now <- getMonotonicTimeNSec
-  let elapsed = fromIntegral ((now - fromIntegral before) `div` 1000)
-      delay = max 0 (liveFrameMicros (config runtime) - elapsed)
-  threadDelay delay
 
 receiveEvent :: Runtime -> IO (Result Value)
 receiveEvent runtime = do
@@ -428,7 +412,7 @@ receiveOutput runtime converter pending epoch = do
       atomically (readTVar (preview runtime) >>= \active ->
         when (trackInterruption active event) (writeTVar (interrupted runtime) True))
       trackBackground runtime event
-      either (pure . Left) (const (dispatchEvent runtime converter rest current event)) reset
+      Effects.continue (const (dispatchEvent runtime converter rest current event)) reset
 
 dispatchEvent :: Runtime -> Resampler -> BS.ByteString -> Int -> Value -> IO (Result ())
 dispatchEvent runtime converter pending epoch event = case textField "type" event of
@@ -436,11 +420,11 @@ dispatchEvent runtime converter pending epoch event = case textField "type" even
   Just "error" -> do
     observeEvent (media runtime) (object ["type" .= ("phone.provider_error" :: Text), "code" .= ("provider_error" :: Text)])
     recovered <- recoverHandoff runtime event
-    either (pure . Left) (const (receiveOutput runtime converter pending epoch)) recovered
+    Effects.continue (const (receiveOutput runtime converter pending epoch)) recovered
   Just "session.output_audio.delta" -> queueOutput runtime converter pending epoch event
   Just "response.event" -> do
     accepted <- atomically (updateTools runtime event)
-    either (pure . Left) (const (receiveOutput runtime converter pending epoch)) accepted
+    Effects.continue (const (receiveOutput runtime converter pending epoch)) accepted
   _ -> receiveOutput runtime converter pending epoch
 
 queueOutput :: Runtime -> Resampler -> BS.ByteString -> Int -> Value -> IO (Result ())
@@ -448,7 +432,7 @@ queueOutput runtime converter pending epoch event = do
   suppressed <- readTVarIO (preview runtime)
   paused <- mediaPaused (media runtime)
   let convert | suppressed || paused = pure (Right BS.empty)
-              | otherwise = either (pure . Left) (\bytes -> resample converter bytes False) (decodeAudio event)
+              | otherwise = Effects.continue (\bytes -> resample converter bytes False) (decodeAudio event)
   converted <- convert
   case converted of
     Left err -> pure (Left err)
@@ -502,7 +486,7 @@ finishPlayback runtime before frame delivery = do
   let audible = audiblePCM frame
   notices <- atomically (recordPlayed runtime now audible delivery)
   mapM_ (observeEvent (media runtime) . noticeValue) notices
-  unless (delivery == Suppressed) (waitFrame runtime before)
+  unless (delivery == Suppressed) (paceFrame (liveFrameMicros (config runtime)) before)
   playOutput runtime
 
 recordPlayed :: Runtime -> Word64 -> Bool -> AudioDelivery -> STM [AudioNotice]
@@ -533,8 +517,8 @@ reportAudioSummary runtime = do
 runTools :: Runtime -> Execute -> IO (Result ())
 runTools runtime execute = do
   batch <- atomically (readTBQueue (toolQueue runtime))
-  result <- foldM (executeCall runtime execute) (Right ()) (batchCalls batch)
-  either (pure . Left) (const (continueTools runtime execute batch)) result
+  result <- Effects.runAll (executeCall runtime execute) (batchCalls batch)
+  Effects.continue (const (continueTools runtime execute batch)) result
 
 continueTools :: Runtime -> Execute -> ToolBatch -> IO (Result ())
 continueTools runtime execute batch = do
@@ -547,11 +531,10 @@ continueTools runtime execute batch = do
     submit = do
       sent <- sendToolEvent runtime continueCommand
       atomically (modifyTVar' (toolState runtime) (\state -> state {committed = Map.delete (delegationId batch, responseId batch) (committed state)}))
-      either (pure . Left) (const (runTools runtime execute)) sent
+      Effects.continue (const (runTools runtime execute)) sent
 
-executeCall :: Runtime -> Execute -> Result () -> ToolCall -> IO (Result ())
-executeCall _ _ (Left err) _ = pure (Left err)
-executeCall runtime execute (Right ()) call = do
+executeCall :: Runtime -> Execute -> ToolCall -> IO (Result ())
+executeCall runtime execute call = do
   state <- readTVarIO (toolState runtime)
   result <- maybe (invokeTool runtime execute call) (pure . Right) (cachedOutput (toolCallId call) state)
   let output = either (failureOutput (config runtime) (toolName call)) id result
@@ -572,7 +555,7 @@ invokeTool :: Runtime -> Execute -> ToolCall -> IO (Result Value)
 invokeTool runtime execute call = case decodeStrict' (TE.encodeUtf8 (toolArguments call)) of
   Just arguments@(Object _) | advertised -> do
     allowed <- beforeTool (media runtime) (sendEvent runtime) (toolName call)
-    either (pure . Left) (const (boundedTool runtime execute call arguments)) allowed
+    Effects.continue (const (boundedTool runtime execute call arguments)) allowed
   Just (Object _) -> pure (Left (failure "unknown_tool"))
   _ -> pure (Left (failure "invalid_arguments"))
   where
@@ -581,9 +564,9 @@ invokeTool runtime execute call = case decodeStrict' (TE.encodeUtf8 (toolArgumen
 boundedTool :: Runtime -> Execute -> ToolCall -> Value -> IO (Result Value)
 boundedTool runtime execute call arguments = do
   started <- getMonotonicTimeNSec
-  result <- timeout duration (execute name arguments (toolCallId call))
+  result <- Effects.within timedOut duration (execute name arguments (toolCallId call))
   ended <- getMonotonicTimeNSec
-  let checked = maybe timedOut (>>= validateOutput) result
+  let checked = result >>= validateOutput
       output = either (failureOutput cfg name) id checked
       elapsed = fromIntegral (ended - started) / (1000000 :: Double)
   observeEvent (media runtime) (object ["type" .= ("phone.tool" :: Text), "tool" .= name,
@@ -596,7 +579,7 @@ boundedTool runtime execute call arguments = do
     duration | name == "direct_call" = liveDirectMicros cfg
              | name == "voice_test" = liveVoiceMicros cfg
              | otherwise = liveToolMicros cfg
-    timedOut = Left (maybe (failure "tool_failed") (`Failure` True) mutation)
+    timedOut = maybe (failure "tool_failed") (`Failure` True) mutation
     validateOutput value
       | validOutput (maxToolText (liveToolLimits cfg)) value = Right value
       | otherwise = Left (Failure "invalid_tool_result" (isJust mutation))
@@ -624,8 +607,7 @@ sendEvent :: Runtime -> Value -> IO (Result ())
 sendEvent runtime event = withMVar (writeLock runtime) $ \() -> do
   let encoded = encode event
       operation = WS.sendTextData (connection runtime) encoded
-  result <- timeout (liveWriteMicros (config runtime)) operation
-  pure $ maybe (Left (failure "live_write_timeout")) Right result
+  Effects.within (failure "live_write_timeout") (liveWriteMicros (config runtime)) (Right <$> operation)
 
 controls :: Runtime -> LiveControls
 controls runtime = LiveControls (runPreview runtime) pending stop
@@ -644,10 +626,8 @@ waitStopped runtime = atomically $ do
   pure (Right ())
 
 trackInterruption :: Bool -> Value -> Bool
-trackInterruption active event = active && input && spoken
-  where
-    input = textField "type" event == Just "session.input_transcript.delta"
-    spoken = maybe False (not . T.null . T.strip) (textField "delta" event)
+trackInterruption active event = active && maybe False (not . T.null . T.strip) delta
+  where delta = eventDelta "session.input_transcript.delta" event
 
 runPreview :: Runtime -> LiveConfig -> Text -> Int -> Bool -> IO (Result Bool)
 runPreview runtime cfg completion quietMicros interruptible = do
@@ -707,9 +687,8 @@ previewAudio runtime bytes = do
   pure result
 
 appendTranscript :: Value -> Maybe (Text -> Text)
-appendTranscript event = case (textField "type" event, textField "delta" event) of
-  (Just "session.output_transcript.delta", Just delta) -> Just (T.takeEnd 2000 . (<> delta))
-  _ -> Nothing
+appendTranscript event = fmap append (eventDelta "session.output_transcript.delta" event)
+  where append delta = T.takeEnd 2000 . (<> delta)
 
 previewComplete :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int -> Bool -> IO (Result Bool)
 previewComplete runtime transcript lastAudio ending quietMicros interruptible = do
@@ -759,15 +738,11 @@ recordSent runtime count = do
     Right updated -> writeTVar (timeline runtime) updated >> pure (Right ())
 
 annotateTranscript :: Timeline -> Value -> Value
-annotateTranscript clock event@(Object fields) = case (number "start_ms", number "end_ms") of
+annotateTranscript clock event@(Object fields) = case (numberField "start_ms" event, numberField "end_ms" event) of
   (Just first, Just lastTime) -> case transcriptBounds first lastTime clock of
     Just (start, end) -> Object (KM.insert "archive_start" (Number (realToFrac start)) (KM.insert "archive_end" (Number (realToFrac end)) fields))
     Nothing -> event
   _ -> event
-  where
-    number key = case KM.lookup key fields of
-      Just (Number value) -> Just (toRealFloat value :: Double)
-      _ -> Nothing
 annotateTranscript _ event = event
 
 currentGeneration :: Runtime -> IO Int
@@ -801,9 +776,9 @@ trackBackground runtime event = do
   let greeted = textField "type" event == Just "session.instructions.appended" && textField "client_event_id" event == Just "phone_greeting"
   when greeted (observeEvent (media runtime) (object ["type" .= ("phone.greeting_accepted" :: Text)]))
   atomically $ do
-    let transcript = textField "type" event `elem` map Just ["session.input_transcript.delta", "session.output_transcript.delta"]
-        spoken = maybe False (not . T.null . T.strip) (textField "delta" event)
-    unless (not transcript || not spoken) (writeTVar (lastTranscript runtime) now)
+    let delta = eventDelta "session.input_transcript.delta" event <|> eventDelta "session.output_transcript.delta" event
+        spoken = maybe False (not . T.null . T.strip) delta
+    when spoken (writeTVar (lastTranscript runtime) now)
     pending <- readTVar (noticePending runtime)
     unless (textField "type" event /= Just "session.commentary.appended" || textField "client_event_id" event /= pending)
       (writeTVar (noticePending runtime) Nothing)
@@ -820,15 +795,13 @@ reportProgress runtime previous = do
   let suppressed = hidden || paused || any (pendingControl state) (Map.elems (knownCalls state))
       active = not (Set.null (pendingDelegations state))
       (next, messages) = progressStep rules now lastSpeech active suppressed previous
-  sent <- foldM send (Right ()) messages
+  sent <- Effects.runAll (sendToolEvent runtime) messages
   let spoken = any (\message -> textField "type" message == Just "session.commentary.append") messages
   when (sent == Right () && spoken) (observeEvent (media runtime) (object ["type" .= ("phone.background_progress" :: Text),
     "pending_requests" .= Set.size (pendingDelegations state)]))
-  either (pure . Left) (const (reportProgress runtime next)) sent
+  Effects.continue (const (reportProgress runtime next)) sent
   where
     pendingControl state call = toolName call `elem` ["direct_call", "voice_test", "end_call"] && Map.notMember (toolCallId call) (outputs state)
-    send (Left err) _ = pure (Left err)
-    send (Right ()) event = sendToolEvent runtime event
 
 recoverHandoff :: Runtime -> Value -> IO (Result ())
 recoverHandoff runtime event = do
@@ -879,7 +852,7 @@ notifyRecovery runtime = do
     modifyTVar' (noticeIds runtime) (Set.union (Set.fromList ids))
     writeTVar (noticePending runtime) (textField "event_id" commentary)
   first <- sendEvent runtime instructions
-  either (pure . Left) (const (sendEvent runtime commentary)) first
+  Effects.continue (const (sendEvent runtime commentary)) first
 
 
 startedEvent :: Value -> Word64 -> Word64 -> Value

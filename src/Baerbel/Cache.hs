@@ -1,11 +1,12 @@
 module Baerbel.Cache (memoize, onceSuccess, insertBounded) where
 
+import qualified Baerbel.Effects as Effects
+import Baerbel.Concurrent (stateMVar)
 import Baerbel.Error (Result)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import GHC.Clock (getMonotonicTimeNSec)
 
 data Entry a = Entry {createdAt :: Double, accessedAt :: Double, entryValue :: a}
 type Cache key a = Map key (Entry a)
@@ -22,9 +23,6 @@ insertEntry capacity now key value cache = Map.fromList retained
     ordered = sortOn (accessedAt . snd) (Map.toList updated)
     retained = drop (max 0 (length ordered - capacity)) ordered
 
-seconds :: IO Double
-seconds = fmap ((/ 1000000000) . fromIntegral) getMonotonicTimeNSec
-
 memoize :: Ord key => Int -> Double -> (query -> key) -> (query -> IO (Result a)) -> IO (query -> IO (Result a))
 memoize capacity ttl keyOf operation = do
   state <- newMVar Map.empty
@@ -32,17 +30,17 @@ memoize capacity ttl keyOf operation = do
 
 cachedRequest :: Ord key => MVar (Cache key a) -> Int -> Double -> (query -> key) -> (query -> IO (Result a)) -> query -> IO (Result a)
 cachedRequest state capacity ttl keyOf operation query = do
-  now <- seconds
+  now <- Effects.monotonicSeconds
   let key = keyOf query
-  cached <- modifyMVar state (pure . lookupEntry now ttl key)
+  cached <- stateMVar state (lookupEntry now ttl key)
   maybe (loadEntry state capacity key (operation query)) (pure . Right) cached
 
 loadEntry :: Ord key => MVar (Cache key a) -> Int -> key -> IO (Result a) -> IO (Result a)
 loadEntry state capacity key operation = do
   result <- operation
-  now <- seconds
-  let store value = modifyMVar state (\cache -> pure (insertEntry capacity now key value cache, Right value))
-  either (pure . Left) store result
+  now <- Effects.monotonicSeconds
+  let store value = stateMVar state (\cache -> (insertEntry capacity now key value cache, Right value))
+  Effects.continue store result
 
 insertBounded :: Ord key => Int -> key -> value -> (Map key value, [key]) -> (Map key value, [key])
 insertBounded capacity key value (entries, order) = (retained, kept)

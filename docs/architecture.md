@@ -5,7 +5,7 @@ The application passes explicit capabilities to call-scoped handlers. Pure funct
 | Area | Modules | Responsibility |
 |---|---|---|
 | Startup and configuration | Application, CLI, Config, ConfigPaths, Validation, Services | Merge one global file and one private user file, validate external settings, scope resources and construct enabled capabilities. |
-| Shared boundaries | Error, JSON, HTTP, WebSocket, Concurrent, Cache, Logging, AudioMetrics | Explicit error values, typed codecs, bounded transport, cancellation, scoped logs, delivered-frame metrics and reusable scheduling/cache behavior. |
+| Shared boundaries | Error, Effects, JSON, HTTP, WebSocket, Concurrent, Cache, Logging, AudioMetrics | Explicit error values, typed codecs, bounded transport, cancellation, scoped logs, delivered-frame metrics and reusable scheduling/cache behavior. |
 | Live speech | Protocol, Live, Background, Session | Session configuration, completed tool batches, replay handling, background progress, owner call orchestration. |
 | Legacy speech | Chat, Pipeline, Speech, VAD, Ringback | Pure sentence/turn logic with streamed STT, responses and paced TTS; native compatible resampling and VAD. |
 | Telephony | AudioSocket, AMI, Routing, CallState, Telephony, ManagedMedia, PhoneNumber | Frame protocol, native ownership, provider choice, dialing, control-only recovery, media pause and reattachment. |
@@ -39,9 +39,10 @@ The shared HTTP manager disables automatic request replay and environment proxie
 
 ## Shared functionality
 
-- `HTTP` owns TLS managers, authentication headers, JSON/form bodies, response bounds and mutation uncertainty; `Provider.get` and `Provider.post` construct requests purely, `Provider.fetch` decodes an already fetched result, and `boundedMap` runs bounded concurrent effects.
-- `JSON` derives typed record codecs and centralizes strict argument parsing. Protocol envelopes remain in the protocol/runtime boundary; provider modules describe typed data.
-- `Cache` supplies successful-once and bounded memoization functions. Credentials are cached at account scope; provider references and owner addresses are cached at call scope.
+- `HTTP` owns TLS managers, authentication headers, JSON/form bodies, response bounds and mutation uncertainty. Its shared `requestJSON` runner accepts a pure response parser. `Provider.get` and `Provider.post` construct requests purely; provider parsers use `JSON.decodeValue` directly. `boundedMap` runs bounded concurrent effects.
+- `Effects` centralizes failure dispatch, pure result mapping, short-circuit action folds, operational exception boundaries, result-aware resource cleanup and deadline failures. These functions have explicit `IO` types; their supplied parsers and state decisions stay pure. `Concurrent` commits pure MVar transitions and supplies the shared frame-pacing calculation.
+- `JSON` derives typed record codecs and centralizes strict argument parsing and optional event-field extraction. Protocol envelopes remain in the protocol/runtime boundary; provider modules describe typed data.
+- `Cache` supplies successful-once and bounded memoization functions. Credentials are cached at account scope; provider references and owner addresses are cached at call scope. Contacts warm-up reuses the same successful-once cache, including its serialized initialization and retry-after-failure behavior.
 - `Storage` owns private-file and atomic-write mechanics. `Ledger` is reused by Gmail, Calendar and owner notes; `SMS` retains its distinct existing receipt schema.
 - `MIME`, `MailContent` and `Encoder` share message construction, standard charset conversion, HTML extraction and MP3 encoding between ordinary mail and owner notes.
 
@@ -51,6 +52,6 @@ Pure functions handle audio framing, stream preparation, transcript reduction, P
 
 The surrounding I/O coordinators fetch data, read clocks/state and commit the selected changes. Transcript transformations indicate when no update is needed, so unrelated events do not write shared state or wake waiters. Generic codecs and shared result constructors handle routine JSON envelopes.
 
-Functional state transitions return new values and decisions. Their small I/O callers commit the state or execute the selected operation. Library exceptions are converted to typed failures at operational boundaries; asynchronous cancellation retains its resource-cleanup meaning.
+Functional state transitions return new values and decisions. Their small I/O callers commit the state or execute the selected operation. Shared deadline helpers take the complete failure value so uncertainty is preserved. Provider-specific mutation receipts, timestamped forecast caches and timeout recovery retain their own pure interpretation. Library exceptions are converted to typed failures at operational boundaries; asynchronous cancellation retains its resource-cleanup meaning.
 
 The deployment Makefile stages immutable releases and activates one through a removable systemd override. The existing Python unit, environment, virtual environment and shared state remain available for rollback. Installation and activation are separate commands; neither modifies Asterisk configuration. See [the deployment pipeline](deployment.md).

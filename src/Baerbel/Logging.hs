@@ -4,14 +4,13 @@ module Baerbel.Logging
   ) where
 
 import Baerbel.Error (Failure(..), Result, failure, ioResult)
-import Baerbel.JSON (encodeBytes)
+import Baerbel.JSON (encodeBytes, field, textField)
 import Control.Concurrent.MVar (MVar, newMVar, modifyMVar_, readMVar)
 import Control.Exception (IOException, bracket, bracketOnError, try)
 import Control.Monad (void)
 import Data.Maybe (fromMaybe)
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson.Types (Pair)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
@@ -124,7 +123,7 @@ reportProjected owner output identifier event = mapM_ emit (projectEvent owner e
     emit (name, fields) = output name (("call_id" .= identifier) : fields)
 
 projectEvent :: Bool -> Value -> [(Text, [Pair])]
-projectEvent owner value@(Object fields)
+projectEvent owner value@(Object _)
   | owner && kind `elem` ["session.input_transcript.delta", "session.output_transcript.delta"] = transcript kind value
   | owner && kind == "phone.note_rejected" = [("owner_note_rejected", selected ["action", "state", "error"] value)]
   | kind == "session.delegation.created" = [("live_delegation", delegation value)]
@@ -133,7 +132,7 @@ projectEvent owner value@(Object fields)
   | otherwise = []
   where
     kind :: Text
-    kind = case KM.lookup "type" fields of {Just (String text) -> text; _ -> ""}
+    kind = fromMaybe "" (textField "type" value)
 projectEvent _ _ = []
 
 syntheticEvents :: [(Text, (Text, [Text]))]
@@ -152,8 +151,7 @@ selected :: [Text] -> Value -> [Pair]
 selected keys value = [(Key.fromText key, valueAt key value) | key <- keys]
 
 valueAt :: Text -> Value -> Value
-valueAt key (Object fields) = fromMaybe Null (KM.lookup (Key.fromText key) fields)
-valueAt _ _ = Null
+valueAt key = fromMaybe Null . field key
 
 transcript :: Text -> Value -> [(Text, [Pair])]
 transcript kind value = [("live_transcript", ("speaker" .= speaker) : selected ["delta", "start_ms", "end_ms"] value)]

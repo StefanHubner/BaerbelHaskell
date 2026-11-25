@@ -1,5 +1,6 @@
 module Baerbel.Application (checkConfiguration, runApplication) where
 
+import qualified Baerbel.Effects as Effects
 import Baerbel.Config (Settings, setting, rule, booleanSetting)
 import Baerbel.Error (Failure(..), Result, failure)
 import Baerbel.Events (withEvents)
@@ -31,7 +32,7 @@ import System.Posix.Signals (Handler(..), installHandler, sigINT, sigTERM)
 checkConfiguration :: Settings -> IO (Result ())
 checkConfiguration settings = do
   checked <- checkNative settings
-  either (pure . Left) (const (checkServices settings)) checked
+  Effects.continue (const (checkServices settings)) checked
 
 checkNative :: Settings -> IO (Result ())
 checkNative settings = case pinValid of
@@ -43,10 +44,10 @@ checkNative settings = case pinValid of
     | Text.null pin = Right ()
     | otherwise = void (parsePinHash pin)
   silence = Bytes.replicate 320 0
-  checkResampling = either (pure . Left) (const (withResampler 8000 24000 converted))
+  checkResampling = Effects.continue (const (withResampler 8000 24000 converted))
   converted resampler = do
     result <- resample resampler silence True
-    either (pure . Left) (const (checkEncoder settings)) result
+    Effects.continue (const (checkEncoder settings)) result
 
 checkEncoder :: Settings -> IO (Result ())
 checkEncoder settings
@@ -64,13 +65,13 @@ runApplication settings = withLogging logPath (withShutdown . start)
     | otherwise = Just (Text.unpack configuredPath)
   start output = do
     checked <- checkNative settings
-    either (pure . Left) (const (withServices settings (serveConfigured output))) checked
+    Effects.continue (const (withServices settings (serveConfigured output))) checked
   serveConfigured output services = withNotifications settings output (runConfigured settings services output)
 
 withNotifications :: Settings -> Report -> (Maybe Messages -> IO (Result a)) -> IO (Result a)
 withNotifications settings output action
   | booleanSetting settings "INCOMING_SMS_ENABLED" /= Right True = action Nothing
-  | otherwise = either (pure . Left) open configured
+  | otherwise = Effects.continue open configured
   where
   configured = (,,) <$> rule settings "sms" "transport" <*> rule settings "incoming_messages" "service" <*> rule settings "incoming_events" "reader"
   credentials = SMSCredentials (setting settings "PHONE_ASSISTANT_SMS_USERNAME") (setting settings "PHONE_ASSISTANT_SMS_PASSWORD") (setting settings "OWNER_MOBILE_E164")
@@ -82,7 +83,7 @@ withNotifications settings output action
     withSMS smsRules credentials sender (path "PHONE_ASSISTANT_SMS_STATE_FILE") messageService
 
 runConfigured :: Settings -> Services -> Report -> Maybe Messages -> IO (Result ())
-runConfigured settings services output messages = either (pure . Left) start configured
+runConfigured settings services output messages = Effects.continue start configured
   where
   configured = (,,) <$> telephonyConfiguration settings <*> rule settings "runtime" "native_pause_extra_seconds" <*> rule settings "runtime" "socket"
   start (native, extra, sockets) = do
@@ -96,7 +97,7 @@ runConfigured settings services output messages = either (pure . Left) start con
         incoming = incomingSession settings public output publicRegistry handoffs
         owner = ownerSession settings services output ownerRegistry handoffs
     selected <- chooseOwner settings output owner
-    either (pure . Left) (startServer settings output incoming) selected
+    Effects.continue (startServer settings output incoming) selected
 
 chooseOwner :: Settings -> Report -> CallHandler -> IO (Result CallHandler)
 chooseOwner settings output native
