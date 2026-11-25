@@ -15,6 +15,11 @@ cradle:
         cradle:
           stack:
             component: baerbel:exe:phone-assistant-server
+    - path: ./app/AsteriskMain.hs
+      config:
+        cradle:
+          stack:
+            component: baerbel:exe:asteriskconfig
     - path: ./app/AuthMain.hs
       config:
         cradle:
