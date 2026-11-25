@@ -1,12 +1,12 @@
 module MapsSpec (spec) where
 
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Request(..))
-import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
-import Baerbel.MapTypes (Place(..), Point(..))
-import Baerbel.Maps (maps, placeDetails)
-import Baerbel.MapsRoute (route)
-import Baerbel.ProviderConfig (RouteRules, MapsRules)
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Core.HTTP (Request(..))
+import Baerbel.Core.JSON (decodeBytes, decodeValue, jsonOptions)
+import Baerbel.Core.MapTypes (Place(..), Point(..))
+import Baerbel.Runtime.Maps (maps, placeDetails)
+import Baerbel.Runtime.MapsRoute (route)
+import Baerbel.Core.ProviderConfig (RouteRules, MapsRules)
 import Data.Aeson hiding (Result)
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as Bytes

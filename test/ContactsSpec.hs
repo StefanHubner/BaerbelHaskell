@@ -1,9 +1,9 @@
 module ContactsSpec (spec) where
 
-import Baerbel.Contacts (contacts)
-import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Request(..), Send)
-import Baerbel.ProviderConfig (ContactsRules(..))
+import Baerbel.Runtime.Contacts (contacts)
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Runtime.HTTP (Request(..), Send)
+import Baerbel.Core.ProviderConfig (ContactsRules(..))
 import Data.Aeson hiding (Result)
 import Data.ByteString (ByteString)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)

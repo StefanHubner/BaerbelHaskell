@@ -1,26 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LiveSpec (spec) where
 
-import Baerbel.Concurrent (hasElapsed)
-import Baerbel.Background (BackgroundRules(..), Progress(..), progressStep)
+import Baerbel.Core.Concurrent (hasElapsed)
+import Baerbel.Core.Background (BackgroundRules(..), Progress(..), progressStep)
 import qualified Data.Set as Set
-import qualified Baerbel.Pipeline as Pipeline
-import qualified Baerbel.Config as Config
-import qualified Baerbel.Ringback as Ring
+import qualified Baerbel.Runtime.Pipeline as Pipeline
+import qualified Baerbel.Runtime.Config as Config
+import qualified Baerbel.Runtime.Ringback as Ring
 import qualified Data.Map.Strict as Map
-import qualified Baerbel.Pin as Pin
-import qualified Baerbel.EndCall as End
-import qualified Baerbel.Chat as Chat
+import qualified Baerbel.Runtime.Pin as Pin
+import qualified Baerbel.Runtime.EndCall as End
+import qualified Baerbel.Core.Chat as Chat
 import Control.Concurrent.Async (withAsync, wait)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (finally)
 import System.Timeout (timeout)
 import Data.IORef (newIORef, readIORef, writeIORef)
 import qualified Data.Text as T
-import Baerbel.Error (Failure(..), failure)
-import Baerbel.Live
-import Baerbel.Protocol
-import Baerbel.Speech
+import Baerbel.Core.Error (Failure(..), failure)
+import Baerbel.Runtime.Live
+import Baerbel.Core.Protocol
+import Baerbel.Runtime.Speech
 import Data.Aeson (Value(..), object, (.=), eitherDecodeFileStrict')
 import qualified Data.ByteString as BS
 import Data.Either (isLeft)

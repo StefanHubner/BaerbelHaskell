@@ -1,9 +1,9 @@
 module CoreSpec (spec) where
 
-import Baerbel.Config
-import Baerbel.Error (Failure, failure)
-import Baerbel.JSON (camelOptions, decodeBytes)
-import Baerbel.Ledger (fingerprint)
+import Baerbel.Runtime.Config
+import Baerbel.Core.Error (Failure, failure)
+import Baerbel.Core.JSON (camelOptions, decodeBytes)
+import Baerbel.Core.Ledger (fingerprint)
 import Data.Aeson (FromJSON (..), Value, eitherDecodeFileStrict', genericParseJSON)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)

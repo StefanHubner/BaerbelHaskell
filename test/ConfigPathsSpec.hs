@@ -1,8 +1,8 @@
 module ConfigPathsSpec (spec) where
 
-import Baerbel.Config (Global(..), Settings(..), User(..), resolveSettings, setting)
-import Baerbel.ConfigPaths (validatePaths)
-import Baerbel.Error (failure)
+import Baerbel.Core.Config (Global(..), Settings(..), User(..), resolveSettings, setting)
+import Baerbel.Runtime.ConfigPaths (validatePaths)
+import Baerbel.Core.Error (failure)
 import Control.Monad (void)
 import Data.Aeson (Value(..), object, toJSON, (.=))
 import qualified Data.Map.Strict as Map

@@ -1,10 +1,10 @@
 module GmailSpec (spec) where
 
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.Gmail (gmailSession)
-import Baerbel.HTTP (Request(..))
-import Baerbel.JSON (decodeBytes, jsonOptions)
-import Baerbel.ProviderConfig (GmailRules)
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Runtime.Gmail (gmailSession)
+import Baerbel.Core.HTTP (Request(..))
+import Baerbel.Core.JSON (decodeBytes, jsonOptions)
+import Baerbel.Core.ProviderConfig (GmailRules)
 import Data.Aeson hiding (Result)
 import qualified Data.ByteString as Bytes
 import Data.IORef (newIORef, atomicModifyIORef', readIORef)

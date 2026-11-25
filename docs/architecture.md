@@ -1,23 +1,37 @@
-# Functional implementation
+# Functional core and imperative shell
 
-The application passes explicit capabilities to call-scoped handlers. Pure functions decode and normalize data, choose routes, reduce protocol events, select note excerpts and produce commands. Small interpreters perform HTTP, WebSocket, AMI, audio and storage operations. Capabilities are ordinary functions and immutable records; they are not inheritance hierarchies.
+Production modules live under two feature-oriented namespaces: `Baerbel.Core.*` in `src/Baerbel/Core/`, and `Baerbel.Runtime.*` in `src/Baerbel/Runtime/`. Runtime imports Core. Core imports only other Core modules and reviewed external APIs. There is no shared monad or universal command interpreter hiding effects.
 
-| Area | Modules | Responsibility |
+The core receives immutable values: decoded events, state snapshots, settings, timestamps and provider results. It returns new values, failures or decisions. The shell reads external data, owns mutable state and resources, invokes the core, and performs the selected operations. Runtime may re-export a feature's pure symbols for callers; no compatibility modules remain at the old paths.
+
+| Feature | Core responsibility | Runtime responsibility |
 |---|---|---|
-| Startup and configuration | Application, CLI, Config, ConfigPaths, Validation, Services | Merge one global file and one private user file, validate external settings, scope resources and construct enabled capabilities. |
-| Shared boundaries | Error, Effects, JSON, HTTP, WebSocket, Concurrent, Cache, Logging, AudioMetrics | Explicit error values, typed codecs, bounded transport, cancellation, scoped logs, delivered-frame metrics and reusable scheduling/cache behavior. |
-| Live speech | Protocol, Live, Background, Session | Session configuration, completed tool batches, replay handling, background progress, owner call orchestration. |
-| Legacy speech | Chat, Pipeline, Speech, VAD, Ringback | Pure sentence/turn logic with streamed STT, responses and paced TTS; native compatible resampling and VAD. |
-| Telephony | AudioSocket, AMI, Routing, CallState, Telephony, ManagedMedia, PhoneNumber | Frame protocol, native ownership, provider choice, dialing, control-only recovery, media pause and reattachment. |
-| Public calls | Incoming, IncomingSession, Directory, Messages, SMS, Events | Restricted screening, trusted-number lookup, fixed-owner messages, durable SMS deduplication and PBX-event replay. |
-| Personal integrations | Gmail, Calendar, Contacts, Maps, MapsRoute, Windguru, Profile | Typed tool operations and pure provider normalization; limits and prompts are configuration data. |
-| Shared provider details | Provider, ProviderConfig, GoogleValidation, MIME, MailContent, MapTypes, OpeningHours, TimeZones, TimeFormat | Common validators, schemas, MIME/HTML handling, calendar zones and walking-route data. |
-| Notes and hangup | Notes, NoteRuntime, Recording, Encoder, NoteMail, EndCall, Pin | Pure note/end-call decisions with archive reads, MP3 delivery, controlled farewell and keypad authorization. |
-| Persistent state and authorization | Storage, Store, Ledger, OAuth, Authorize | Private files, atomic profile replacement, receipt reservations, one credential boundary, cached refresh and loopback PKCE consent. |
+| Configuration and startup | Settings, rules, validation and service descriptions. | Read the global and private user files, open resources and construct enabled capabilities. |
+| Live speech and legacy pipeline | Protocol envelopes, tool batches, transcript/history reduction and turn decisions. | WebSocket/HTTP streams, queues, native audio processing and paced playback. |
+| Telephony and public screening | AudioSocket/AMI values, routing, ownership decisions, call transitions and restricted session configuration. | Listeners, native channel checks, dialing, media pause/reattachment and restricted session execution. |
+| Personal integrations | Typed requests, provider result parsing, pagination, reference selection and profile transitions. | Authenticated requests, call-local caches and durable side effects. |
+| Notes, messages and call completion | Transcript selection, delivery/result interpretation, note/PIN/end-call decisions and event cursors. | Archive reads, encoding, delivery workers, PIN input, farewell playback and hangup. |
+| Persistence, authorization and shared support | Failure values, JSON codecs, request/receipt types, timestamps and metrics calculations. | Private files, SQLite transactions, token refresh, consent, logging, deadlines and cleanup. |
+
+These are feature modules, not one large core module. For example, `Core.Live` owns `ToolState` and `stepTools`; `Runtime.Live` owns `Media`, connections and queues. `Core.Profile` owns `ProfileState` and `transition`; `Runtime.Profile` owns the `ProfileStore` capability and invokes it. `Core.HTTP` defines request/response values, while `Runtime.HTTP` sends requests. `Core.AMI` defines messages and channels, allowing pure call-state logic to avoid importing the AMI connection implementation.
+
+## Values, capabilities and mutable state
+
+An `IO` field is appropriate in a runtime capability record. The `ProfileStore` field `profileRead :: IO (Result ProfileState)` and the `Media` field `sendAudio :: ByteString -> IO (Result AudioDelivery)` explicitly describe external operations. Constructing those records is pure; executing their fields performs effects. The core receives the resulting profile or audio-delivery values, rather than the capability record.
+
+The distinction also applies to records without an `IO` field. `Runtime.Notes.Cell` contains an `Async` handle, and runtime message jobs contain `TMVar`/`TVar` handles. Those are runtime resource/state holders. `NoteState`, `Transcript`, `ScreeningContext` and `ToolState` are immutable core values. Pure helper functions that assemble capabilities or update resource wrappers remain alongside their runtime owners.
+
+The shell supplies clocks, random identifiers and external results explicitly. Core transitions are applied inside the existing atomic boundaries: a pure transition does not justify moving its state read or write outside an STM transaction or MVar lock. Accepted-note registration remains masked, delivery workers still drain, and unrelated transcript events still request no state write.
+
+## Enforcing the boundary
+
+`test/ArchitectureSpec.hs` checks that production modules are placed in Core or Runtime. For Core it rejects Runtime imports, external imports absent from [the reviewed import list](../architecture/core-imports.txt), effect types and capabilities, mutable/native handles, unsafe effect execution and effect-generating extensions. It also rejects common clock/file/output operations even when their module supplies permitted pure functions. Comments and quoted text are excluded from these source checks.
+
+The import list is an explicit review boundary, not a claim that every export of an allowed package is pure. The source checks complement Haskell's types and code review. `package.yaml` enables `-Werror=missing-signatures`, so a missing top-level signature fails compilation. `make test` runs the architecture checks with the behavioral tests; `make check` also runs HLint, language-server diagnostics and the local configuration check. These checks do not establish production or real-call behavior.
 
 ## Permissions and lifetimes
 
-Owner and public listeners use separate managed-media registries. An incoming socket cannot reuse an owner's paused entry. AMI binding checks native channel ownership before exposing native dialing or recording access. Public sessions receive only their restricted schemas and prompts. A model, transcript, contact, email or provider response cannot choose a recipient for SMS or voice notes, a filesystem path, or a dialplan destination.
+Owner and public listeners use separate managed-media registries. An incoming socket cannot reuse an owner's paused entry. AMI binding checks native channel ownership before exposing native dialing or recording access. Public sessions receive only their restricted schemas and prompts. The runtime may perform a fixed Contacts directory lookup for public screening; this does not expose owner tools to the caller. A model, transcript, contact, email or provider response cannot choose a recipient for SMS or voice notes, a filesystem path, or a dialplan destination.
 
 Owner ingress retains the original loopback/Asterisk trust boundary. It is not new independent caller authentication. The existing keypad PIN applies to the configured protected email tools. Keep this limitation explicit when describing deployments.
 
@@ -31,6 +45,8 @@ The saved profile remains a private JSON document with atomic replacement. Typed
 
 ## Deployment boundary
 
+This repository remains a Haskell candidate. Deployment and real-call validation are explicitly deferred; the existing Python service and Asterisk configuration remain deployed. The Core/Runtime separation changes source organization, not activation or permissions.
+
 GHCup supplies GHC and Stack; Stack drives the build. Cabal is Stack's internal build backend. The small Setup hook resolves native library paths at configure time and introduces no runtime dependency on the build checkout.
 
 The release contains the executable, global configuration and native license notices; the private user file and existing state are provisioned separately. Asterisk remains an external service. Native phone-number/VAD code and ICU codecs are linked into the executable. The system still supplies the standard C/C++ libraries, zlib, GMP and libsoxr; owner-note MP3 encoding requires ffmpeg. Verify the final executable with `ldd` on the target. Matching architecture alone is insufficient to prove compatibility.
@@ -39,12 +55,12 @@ The shared HTTP manager disables automatic request replay and environment proxie
 
 ## Shared functionality
 
-- `HTTP` owns TLS managers, authentication headers, JSON/form bodies, response bounds and mutation uncertainty. Its shared `requestJSON` runner accepts a pure response parser. `Provider.get` and `Provider.post` construct requests purely; provider parsers use `JSON.decodeValue` directly. `boundedMap` runs bounded concurrent effects.
-- `Effects` centralizes failure dispatch, pure result mapping, short-circuit action folds, operational exception boundaries, result-aware resource cleanup and deadline failures. These functions have explicit `IO` types; their supplied parsers and state decisions stay pure. `Concurrent` commits pure MVar transitions and supplies the shared frame-pacing calculation.
-- `JSON` derives typed record codecs and centralizes strict argument parsing and optional event-field extraction. Protocol envelopes remain in the protocol/runtime boundary; provider modules describe typed data.
-- `Cache` supplies successful-once and bounded memoization functions. Credentials are cached at account scope; provider references and owner addresses are cached at call scope. Contacts warm-up reuses the same successful-once cache, including its serialized initialization and retry-after-failure behavior.
-- `Storage` owns private-file and atomic-write mechanics. `Ledger` is reused by Gmail, Calendar and owner notes; `SMS` retains its distinct existing receipt schema.
-- `MIME`, `MailContent` and `Encoder` share message construction, standard charset conversion, HTML extraction and MP3 encoding between ordinary mail and owner notes. Mail header/body preparation selects a decoder purely; valid UTF-8 and literal header text need no converter. Stateful legacy codecs and malformed Unicode replacement remain at the native boundary to preserve their output semantics.
+- `Core.HTTP` holds typed bodies, requests and responses. `Core.Provider.get` and `post` build requests; Core provider modules parse results. `Runtime.HTTP` owns TLS managers, authentication headers, response bounds and mutation uncertainty. Its `requestJSON` runner accepts a pure response parser. `Runtime.Provider.boundedMap` runs bounded concurrent effects.
+- `Runtime.Effects` centralizes failure dispatch, pure result mapping, short-circuit action folds, operational exception boundaries, resource cleanup and deadline failures. Its execution functions retain explicit `IO` types. `Core.Concurrent` supplies pure elapsed-time/frame-delay calculations; `Runtime.Concurrent` owns waits and commits pure MVar transitions.
+- `Core.JSON` centralizes typed codecs, strict argument parsing and optional event-field extraction. `Core.Protocol` builds protocol envelopes. Runtime transport modules serialize and send those values.
+- Core cache rules and projections are distinct from `Runtime.Cache` memoization. Credentials are cached at account scope; provider references and owner addresses are cached at call scope. Contacts warm-up retains serialized initialization and retry-after-failure behavior.
+- Core profile, ledger and SMS functions compute values and reservation decisions. `Runtime.Storage` owns private-file and atomic-write mechanics; runtime ledger/SMS modules retain their existing SQLite transaction boundaries and distinct receipt schemas.
+- Core MIME, mail-content and encoder preparation handle immutable message data. Runtime charset conversion and encoding own native resources and the ffmpeg process. Valid UTF-8 and literal header text need no converter; stateful legacy codecs and malformed Unicode replacement retain their boundary behavior.
 
 Tool payloads are decoded at their input boundary into typed commands and prepared requests. Calendar dates, Maps requests, Windguru windows and recording intervals are prepared once and reused by the effectful steps. Help is a pure value computed when the call's available tools are assembled; it has no internal tool-name or unused-argument checks. Internal direct-call modes, hangup reasons and end-call reasons are algebraic data types.
 

@@ -5,11 +5,15 @@ Physical source lines include comments and blank lines, exclude tests, fixtures,
 | Scope | Files | Lines |
 |---|---:|---:|
 | Preserved Python runtime (`src/phone_assistant`) | 50 | 10,809 |
-| Haskell runtime (`src` and `app`) | 70 | 13,611 |
+| Pure Haskell core (`src/Baerbel/Core`) | 59 | 7,862 |
+| Haskell imperative shell (`src/Baerbel/Runtime`) | 52 | 6,846 |
+| Haskell application entry points (`app`) | 2 | 89 |
 | Haskell build hook, native bridge, Makefile and shell helpers | 10 | 296 |
-| Current production source total | 80 | 13,907 |
+| Current production source total | 123 | 15,093 |
 
-The current purity audit from `abf5ec9` changes nine production files: 78 added lines, 29 removed lines and 81 replaced lines. These counts pair old/new lines within replacement blocks and count only the excess as additions/removals; tests and documentation are excluded. The preceding plumbing consolidation at `abf5ec9` changed 46 production files: 159 added, 170 removed and 412 replaced lines.
+The module separation from `500bcfc` accounts for 4,970 added lines, 3,784 removed lines and 724 replaced lines, with Git rename detection enabled. Split portions still appear as additions/removals when Git can match only one destination to an original file. These counts pair old/new lines within replacement blocks and count only the excess as additions/removals; tests and documentation are excluded. The net source increase is 1,186 lines, primarily module headers, imports and explicit exports for the separated files.
+
+At `500bcfc`, the previous purity audit changed nine production files: 78 added, 29 removed and 81 replaced lines. The preceding plumbing consolidation at `abf5ec9` changed 46 production files: 159 added, 170 removed and 412 replaced lines.
 
 The original Python runtime has zero changed lines. Its repository guideline update added four lines. The port is larger by physical line count; shared transport, codecs, typed preparation and pure state functions are described in [the module overview](architecture.md).
 
@@ -40,11 +44,11 @@ The subsequent consolidation reuses the same small functions throughout startup,
 
 Provider-specific response interpretation, receipt uncertainty and timeout recovery remain explicit. The obsolete `Provider.fetch` adapter and duplicate warm-up, clock, getter and sequencing implementations were removed. Pure functions still receive ordinary values; effect runners retain explicit `IO` types.
 
-## Follow-up effect audit
+## Follow-up effect audit at `500bcfc`
 
 The audit inspected all production modules for pure work behind effectful interfaces. It did not introduce new effect aliases or generalize signatures to conceal `IO`.
 
-| Signature measure | Before (`abf5ec9`) | After audit |
+| Signature measure | Before (`abf5ec9`) | After (`500bcfc`) |
 |---|---:|---:|
 | Top-level effect-returning declarations, including existing capability aliases and `ExceptT … IO` | 502 | 496 |
 | Lines matching `::.*\bIO\b` in `src` and `app` | 654 | 651 |
@@ -54,3 +58,11 @@ The audit inspected all production modules for pure work behind effectful interf
 Pure interfaces now cover profile write/no-write decisions and byte limits, SMS request/receipt construction, Maps reference resolution, Gmail search preparation/results, shared announcement readiness and mail decoder selection. Valid UTF-8 is decoded purely. Malformed UTF-8 still uses ICU because its replacement grouping differs from the standard lenient decoder; native converters remain freshly allocated at the effect boundary.
 
 The remaining effectful functions read or write sockets, HTTP responses, files, databases, clocks or synchronized state; allocate native codecs and call-local caches; or sequence and scope those operations. Scope constructors that allocate mutable state and resource/cancellation coordinators remain effectful. Pure capability assemblers can mention `IO` in their argument or record-field types without executing it, so a textual occurrence count also includes those interfaces.
+
+## Module boundary
+
+All 68 original production modules were relocated or split into 59 Core and 52 Runtime modules. There are no compatibility modules at the old paths. Core modules contain immutable domain/protocol values, parsing, calculations, state transitions, request construction and result interpretation. Runtime modules own effect capabilities, mutable/native handles, resource lifetimes, observations and execution. A runtime module may re-export its feature's core values; each definition still exists in only one place.
+
+Core imports only other Core modules and reviewed external modules from `architecture/core-imports.txt`. The architecture regressions recursively check the source layout and reject runtime imports, effect/native-handle types, unsafe execution, effect-generating extensions and clock reads in Core. Compilation rejects missing top-level signatures. Pure higher-order functions and pure function-valued records remain permitted.
+
+The normal `make test` and `make check` targets both run these boundary regressions. The project `AGENTS.md` and the global `~/agents.md` record the same functional-core/imperative-shell rule. Existing behavior fixtures remain unchanged; this separation does not change the deployment boundary.

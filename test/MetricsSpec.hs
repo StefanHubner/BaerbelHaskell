@@ -1,13 +1,13 @@
 module MetricsSpec (spec) where
 
-import Baerbel.AudioMetrics
-import Baerbel.AudioSocket (SocketRules(..), readPacket, Packet(..), PacketKind(Audio))
-import Baerbel.Error (failure)
-import Baerbel.Config (loadSettings, rule)
-import Baerbel.Live (Media(..))
-import Baerbel.ManagedMedia (newRegistry, withManaged, ManagedCall(..))
-import Baerbel.Ringback (withRingback)
-import Baerbel.Server (socketMedia)
+import Baerbel.Core.AudioMetrics
+import Baerbel.Runtime.AudioSocket (SocketRules(..), readPacket, Packet(..), PacketKind(Audio))
+import Baerbel.Core.Error (failure)
+import Baerbel.Runtime.Config (loadSettings, rule)
+import Baerbel.Runtime.Live (Media(..))
+import Baerbel.Runtime.ManagedMedia (newRegistry, withManaged, ManagedCall(..))
+import Baerbel.Runtime.Ringback (withRingback)
+import Baerbel.Runtime.Server (socketMedia)
 import Control.Exception (bracket)
 import Data.Aeson (object, (.=))
 import qualified Data.ByteString as BS

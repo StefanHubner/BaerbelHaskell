@@ -1,14 +1,14 @@
 module BoundarySpec (spec) where
 
-import Baerbel.Config (Settings, loadSettings, rule)
-import Baerbel.Error (Result)
-import Baerbel.Events (Event(..), EventRules, parseEvent)
-import Baerbel.HTTP (Response(..))
-import Baerbel.JSON (jsonOptions)
-import Baerbel.Ledger (withLedger, durable, lookupExisting)
-import Baerbel.SMS
-import Baerbel.Speech (splitFrames)
-import Baerbel.VAD (withVAD, isSpeech, resetVAD)
+import Baerbel.Runtime.Config (Settings, loadSettings, rule)
+import Baerbel.Core.Error (Result)
+import Baerbel.Core.Events (Event(..), EventRules, parseEvent)
+import Baerbel.Core.HTTP (Response(..))
+import Baerbel.Core.JSON (jsonOptions)
+import Baerbel.Runtime.Ledger (withLedger, durable, lookupExisting)
+import Baerbel.Runtime.SMS
+import Baerbel.Core.Speech (splitFrames)
+import Baerbel.Runtime.VAD (withVAD, isSpeech, resetVAD)
 import Control.Concurrent (newEmptyMVar, takeMVar, putMVar)
 import Control.Concurrent.Async (async, cancel)
 import Data.Aeson (FromJSON(..), Value, object, (.=), genericParseJSON, eitherDecodeFileStrict')

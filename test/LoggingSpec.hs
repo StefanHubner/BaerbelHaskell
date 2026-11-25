@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LoggingSpec (spec) where
 
-import Baerbel.Logging
+import Baerbel.Runtime.Logging
 import Control.Exception (bracket)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
 import qualified Data.Aeson.KeyMap as KM

@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module AuthSpec (spec) where
 
-import Baerbel.Authorize
-import Baerbel.Config (Global, User(..), resolveSettings, rule)
-import Baerbel.Error (Result, failure)
-import Baerbel.HTTP (Request(..), Response(..), Body(..), newRawSender)
-import Baerbel.OAuth
+import Baerbel.Runtime.Authorize
+import Baerbel.Core.Config (Global, User(..), resolveSettings, rule)
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Runtime.HTTP (Request(..), Response(..), Body(..), newRawSender)
+import Baerbel.Runtime.OAuth
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (mapConcurrently, async, wait)
 import Control.Concurrent.MVar (MVar, newMVar, readMVar, modifyMVar_, modifyMVar)

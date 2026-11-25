@@ -1,9 +1,9 @@
 module MessagesSpec (spec) where
 
-import Baerbel.Config (loadSettings, rule)
-import Baerbel.Incoming (Decision(..))
-import Baerbel.Messages (Messages(..), MessageRules(..), Context, withMessages)
-import Baerbel.SMS (Receipt(..), Delivery(Sent, Failed), Kind(Message, Outcome))
+import Baerbel.Runtime.Config (loadSettings, rule)
+import Baerbel.Core.Incoming (Decision(..))
+import Baerbel.Runtime.Messages (Messages(..), MessageRules(..), Context, withMessages)
+import Baerbel.Runtime.SMS (Receipt(..), Delivery(Sent, Failed), Kind(Message, Outcome))
 import Control.Concurrent.MVar (newMVar, modifyMVar_, readMVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (withAsync, wait, cancel)
 import Control.Monad (when)

@@ -1,12 +1,12 @@
 {-# LANGUAGE TupleSections #-}
 module EventsSpec (spec) where
 
-import Baerbel.Events
-import Baerbel.Error (failure)
-import Baerbel.Logging (Report)
-import Baerbel.Messages (Messages(..))
-import Baerbel.SMS (Receipt(..), Delivery(..))
-import Baerbel.Storage (withDatabase)
+import Baerbel.Runtime.Events
+import Baerbel.Core.Error (failure)
+import Baerbel.Runtime.Logging (Report)
+import Baerbel.Runtime.Messages (Messages(..))
+import Baerbel.Core.SMS (Receipt(..), Delivery(..))
+import Baerbel.Runtime.Storage (withDatabase)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as Bytes
 import Data.IORef

@@ -1,7 +1,7 @@
 module EffectsSpec (spec) where
 
-import Baerbel.Effects (attempt, continue, runAll, withResult, within)
-import Baerbel.Error (Failure(..), Result, failure)
+import Baerbel.Runtime.Effects (attempt, continue, runAll, withResult, within)
+import Baerbel.Core.Error (Failure(..), Result, failure)
 import Control.Concurrent.Async (withAsync, cancel, waitCatch)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Data.Either (isLeft)

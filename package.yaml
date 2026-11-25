@@ -17,6 +17,7 @@ extra-source-files:
 - scripts/*.sh
 - deploy/*
 - architecture/*.dot
+- architecture/core-imports.txt
 - architecture/render.sh
 dependencies:
 - base >= 4.20
@@ -68,6 +69,7 @@ ghc-options:
 - -Wall
 - -Wcompat
 - -Wmissing-signatures
+- -Werror=missing-signatures
 - -Wincomplete-uni-patterns
 - -Wincomplete-record-updates
 library:

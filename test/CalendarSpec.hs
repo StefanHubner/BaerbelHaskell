@@ -1,12 +1,12 @@
 module CalendarSpec (spec) where
 
-import Baerbel.Calendar (calendar)
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Body(..), Request(..))
-import Baerbel.JSON (decodeBytes, jsonOptions)
-import Baerbel.Provider (combine)
-import Baerbel.ProviderConfig (CalendarRules(..))
-import Baerbel.TimeZones (timeZones)
+import Baerbel.Runtime.Calendar (calendar)
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Core.HTTP (Body(..), Request(..))
+import Baerbel.Core.JSON (decodeBytes, jsonOptions)
+import Baerbel.Core.Provider (combine)
+import Baerbel.Core.ProviderConfig (CalendarRules(..))
+import Baerbel.Core.TimeZones (timeZones)
 import Data.Aeson hiding (Result)
 import qualified Data.ByteString as Bytes
 import qualified Data.Aeson.KeyMap as KeyMap

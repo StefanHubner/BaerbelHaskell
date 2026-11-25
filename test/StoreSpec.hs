@@ -1,14 +1,14 @@
 module StoreSpec (spec) where
 
-import Baerbel.Worker (withWorker)
+import Baerbel.Runtime.Worker (withWorker)
 import Control.Concurrent.Async (Async, withAsync, async, cancel, wait)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import System.Timeout (timeout)
-import Baerbel.Config (Settings, loadSettings, rule)
-import Baerbel.Error (Result, failure)
-import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile)
-import Baerbel.Store (StoreRules(..), profileStore, validateProfileFile)
-import Baerbel.JSON (encodeBytes, decodeUnique)
+import Baerbel.Runtime.Config (Settings, loadSettings, rule)
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Runtime.Profile (ProfileState(..), ProfileStore(..), emptyProfile)
+import Baerbel.Runtime.Store (StoreRules(..), profileStore, validateProfileFile)
+import Baerbel.Core.JSON (encodeBytes, decodeUnique)
 import Data.Aeson (Value, object)
 import qualified Data.ByteString as Bytes
 import qualified Data.Map.Strict as Map

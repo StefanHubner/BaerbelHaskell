@@ -21,7 +21,7 @@ build: native
 test: native
 	stack test
 
-check: build
+check: test
 	@test -n "$(USER_CONFIG)" || { printf 'Set USER_CONFIG to a private JSON file outside the repository.\n' >&2; exit 2; }
 	.tools/hlint src app test Setup.hs
 	haskell-language-server-wrapper typecheck src app test Setup.hs --cwd "$(CURDIR)"

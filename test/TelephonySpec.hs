@@ -1,19 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module TelephonySpec (spec) where
 
-import qualified Baerbel.AMI as A
-import Baerbel.AudioSocket
-import Baerbel.CallState
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.Incoming
-import Baerbel.IncomingSession (restrictedSettings)
-import Baerbel.Config (Global, User(..), Settings(..), resolveSettings)
-import Baerbel.Live (LiveConfig(..), Media(receiveAudio))
-import Baerbel.ManagedMedia (ManagedCall(..), newRegistry, withManaged)
-import Baerbel.PhoneNumber (validateNumber)
-import Baerbel.Recording
-import qualified Baerbel.Telephony as Native
-import Baerbel.Routing
+import qualified Baerbel.Runtime.AMI as A
+import Baerbel.Runtime.AudioSocket
+import Baerbel.Core.CallState
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Core.Incoming
+import Baerbel.Core.IncomingSession (restrictedSettings)
+import Baerbel.Core.Config (Global, User(..), Settings(..), resolveSettings)
+import Baerbel.Runtime.Live (LiveConfig(..), Media(receiveAudio))
+import Baerbel.Runtime.ManagedMedia (ManagedCall(..), newRegistry, withManaged)
+import Baerbel.Runtime.PhoneNumber (validateNumber)
+import Baerbel.Runtime.Recording
+import qualified Baerbel.Runtime.Telephony as Native
+import Baerbel.Core.Routing
 import Control.Concurrent (MVar, newMVar, readMVar, modifyMVar_, newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (withAsync)
 import Control.Monad (forever, unless, void)

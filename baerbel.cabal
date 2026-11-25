@@ -53,6 +53,7 @@ extra-source-files:
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service
     architecture/BAERBEL_SYSTEM_ARCHITECTURE.dot
+    architecture/core-imports.txt
     architecture/render.sh
 
 custom-setup
@@ -64,74 +65,117 @@ custom-setup
 
 library
   exposed-modules:
-      Baerbel.AMI
-      Baerbel.Application
-      Baerbel.AudioMetrics
-      Baerbel.AudioSocket
-      Baerbel.Authorize
-      Baerbel.Background
-      Baerbel.Cache
-      Baerbel.Calendar
-      Baerbel.CallState
-      Baerbel.Chat
-      Baerbel.CLI
-      Baerbel.Concurrent
-      Baerbel.Config
-      Baerbel.ConfigPaths
-      Baerbel.Contacts
-      Baerbel.Directory
-      Baerbel.Effects
-      Baerbel.Encoder
-      Baerbel.EndCall
-      Baerbel.Error
-      Baerbel.Events
-      Baerbel.Gmail
-      Baerbel.GoogleValidation
-      Baerbel.HTTP
-      Baerbel.Incoming
-      Baerbel.IncomingSession
-      Baerbel.JSON
-      Baerbel.Ledger
-      Baerbel.Live
-      Baerbel.Logging
-      Baerbel.MailContent
-      Baerbel.ManagedMedia
-      Baerbel.Maps
-      Baerbel.MapsRoute
-      Baerbel.MapTypes
-      Baerbel.Messages
-      Baerbel.MIME
-      Baerbel.NoteMail
-      Baerbel.NoteRuntime
-      Baerbel.Notes
-      Baerbel.OAuth
-      Baerbel.OpeningHours
-      Baerbel.PhoneNumber
-      Baerbel.Pin
-      Baerbel.Pipeline
-      Baerbel.Profile
-      Baerbel.Protocol
-      Baerbel.Provider
-      Baerbel.ProviderConfig
-      Baerbel.Recording
-      Baerbel.Ringback
-      Baerbel.Routing
-      Baerbel.Server
-      Baerbel.Services
-      Baerbel.Session
-      Baerbel.SMS
-      Baerbel.Speech
-      Baerbel.Storage
-      Baerbel.Store
-      Baerbel.Telephony
-      Baerbel.TimeFormat
-      Baerbel.TimeZones
-      Baerbel.Tools
-      Baerbel.VAD
-      Baerbel.Validation
-      Baerbel.WebSocket
-      Baerbel.Windguru
-      Baerbel.Worker
+      Baerbel.Core.AMI
+      Baerbel.Core.AudioMetrics
+      Baerbel.Core.AudioSocket
+      Baerbel.Core.Authorize
+      Baerbel.Core.Background
+      Baerbel.Core.Cache
+      Baerbel.Core.Calendar
+      Baerbel.Core.CallState
+      Baerbel.Core.Chat
+      Baerbel.Core.Concurrent
+      Baerbel.Core.Config
+      Baerbel.Core.ConfigPaths
+      Baerbel.Core.Contacts
+      Baerbel.Core.Directory
+      Baerbel.Core.Encoder
+      Baerbel.Core.EndCall
+      Baerbel.Core.Error
+      Baerbel.Core.Events
+      Baerbel.Core.Gmail
+      Baerbel.Core.GoogleValidation
+      Baerbel.Core.HTTP
+      Baerbel.Core.Incoming
+      Baerbel.Core.IncomingSession
+      Baerbel.Core.JSON
+      Baerbel.Core.Ledger
+      Baerbel.Core.Live
+      Baerbel.Core.Logging
+      Baerbel.Core.MailContent
+      Baerbel.Core.ManagedMedia
+      Baerbel.Core.Maps
+      Baerbel.Core.MapsRoute
+      Baerbel.Core.MapTypes
+      Baerbel.Core.Messages
+      Baerbel.Core.MIME
+      Baerbel.Core.NoteMail
+      Baerbel.Core.NoteRuntime
+      Baerbel.Core.Notes
+      Baerbel.Core.OAuth
+      Baerbel.Core.OpeningHours
+      Baerbel.Core.Pin
+      Baerbel.Core.Pipeline
+      Baerbel.Core.Profile
+      Baerbel.Core.Protocol
+      Baerbel.Core.Provider
+      Baerbel.Core.ProviderConfig
+      Baerbel.Core.Recording
+      Baerbel.Core.Ringback
+      Baerbel.Core.Routing
+      Baerbel.Core.Services
+      Baerbel.Core.Session
+      Baerbel.Core.SMS
+      Baerbel.Core.Speech
+      Baerbel.Core.Store
+      Baerbel.Core.Telephony
+      Baerbel.Core.TimeFormat
+      Baerbel.Core.TimeZones
+      Baerbel.Core.Tools
+      Baerbel.Core.Validation
+      Baerbel.Core.Windguru
+      Baerbel.Runtime.AMI
+      Baerbel.Runtime.Application
+      Baerbel.Runtime.AudioSocket
+      Baerbel.Runtime.Authorize
+      Baerbel.Runtime.Cache
+      Baerbel.Runtime.Calendar
+      Baerbel.Runtime.CLI
+      Baerbel.Runtime.Concurrent
+      Baerbel.Runtime.Config
+      Baerbel.Runtime.ConfigPaths
+      Baerbel.Runtime.Contacts
+      Baerbel.Runtime.Directory
+      Baerbel.Runtime.Effects
+      Baerbel.Runtime.Encoder
+      Baerbel.Runtime.EndCall
+      Baerbel.Runtime.Error
+      Baerbel.Runtime.Events
+      Baerbel.Runtime.Gmail
+      Baerbel.Runtime.HTTP
+      Baerbel.Runtime.IncomingSession
+      Baerbel.Runtime.Ledger
+      Baerbel.Runtime.Live
+      Baerbel.Runtime.Logging
+      Baerbel.Runtime.MailContent
+      Baerbel.Runtime.ManagedMedia
+      Baerbel.Runtime.Maps
+      Baerbel.Runtime.MapsRoute
+      Baerbel.Runtime.Messages
+      Baerbel.Runtime.MIME
+      Baerbel.Runtime.NoteMail
+      Baerbel.Runtime.NoteRuntime
+      Baerbel.Runtime.Notes
+      Baerbel.Runtime.OAuth
+      Baerbel.Runtime.PhoneNumber
+      Baerbel.Runtime.Pin
+      Baerbel.Runtime.Pipeline
+      Baerbel.Runtime.Profile
+      Baerbel.Runtime.Provider
+      Baerbel.Runtime.Recording
+      Baerbel.Runtime.Ringback
+      Baerbel.Runtime.Server
+      Baerbel.Runtime.Services
+      Baerbel.Runtime.Session
+      Baerbel.Runtime.SMS
+      Baerbel.Runtime.Speech
+      Baerbel.Runtime.Storage
+      Baerbel.Runtime.Store
+      Baerbel.Runtime.Telephony
+      Baerbel.Runtime.VAD
+      Baerbel.Runtime.WebSocket
+      Baerbel.Runtime.Windguru
+      Baerbel.Runtime.Worker
   other-modules:
       Paths_baerbel
   autogen-modules:
@@ -141,7 +185,7 @@ library
   default-extensions:
       OverloadedStrings
       DeriveGeneric
-  ghc-options: -Wall -Wcompat -Wmissing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates
   extra-libraries:
       baerbel-phone
       baerbel-vad
@@ -199,7 +243,7 @@ executable phone-assistant-gmail-auth
   default-extensions:
       OverloadedStrings
       DeriveGeneric
-  ghc-options: -Wall -Wcompat -Wmissing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts
   build-depends:
       aeson >=2.2
     , async >=2.2
@@ -253,7 +297,7 @@ executable phone-assistant-server
   default-extensions:
       OverloadedStrings
       DeriveGeneric
-  ghc-options: -Wall -Wcompat -Wmissing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson >=2.2
     , async >=2.2
@@ -304,6 +348,7 @@ test-suite baerbel-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ArchitectureSpec
       AuthSpec
       BoundarySpec
       CalendarSpec
@@ -335,7 +380,7 @@ test-suite baerbel-test
   default-extensions:
       OverloadedStrings
       DeriveGeneric
-  ghc-options: -Wall -Wcompat -Wmissing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts
   build-depends:
       QuickCheck
     , aeson >=2.2

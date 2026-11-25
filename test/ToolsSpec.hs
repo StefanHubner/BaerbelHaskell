@@ -1,17 +1,17 @@
 module ToolsSpec (spec) where
 
-import Baerbel.Cache (memoize)
-import Baerbel.Contacts (candidate)
-import Baerbel.Error (Result, failure)
-import Baerbel.Gmail (bodyText, gmail, summary, decodeSummaryHeaders)
-import Baerbel.HTTP (Request(..))
-import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
-import Baerbel.MapTypes (Point(..))
-import Baerbel.MapsRoute (heading, gainLoss, samplePath)
-import Baerbel.Notes
-import qualified Baerbel.Profile as Profile
-import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile, transition, parseCommand, profile)
-import Baerbel.ProviderConfig (ContactsRules, GmailRules, ProfileRules, RouteRules)
+import Baerbel.Runtime.Cache (memoize)
+import Baerbel.Runtime.Contacts (candidate)
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Runtime.Gmail (bodyText, gmail, summary, decodeSummaryHeaders)
+import Baerbel.Core.HTTP (Request(..))
+import Baerbel.Core.JSON (decodeBytes, decodeValue, jsonOptions)
+import Baerbel.Core.MapTypes (Point(..))
+import Baerbel.Runtime.MapsRoute (heading, gainLoss, samplePath)
+import Baerbel.Runtime.Notes
+import qualified Baerbel.Runtime.Profile as Profile
+import Baerbel.Runtime.Profile (ProfileState(..), ProfileStore(..), emptyProfile, transition, parseCommand, profile)
+import Baerbel.Core.ProviderConfig (ContactsRules, GmailRules, ProfileRules, RouteRules)
 import qualified Control.Concurrent.Async as Async
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)

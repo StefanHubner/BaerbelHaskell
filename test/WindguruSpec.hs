@@ -1,12 +1,12 @@
 module WindguruSpec (spec) where
 
-import Baerbel.Calendar (TimeZones(..))
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Request(..))
-import Baerbel.JSON (decodeBytes, decodeValue, jsonOptions)
-import Baerbel.ProviderConfig (WindguruRules(..))
-import Baerbel.TimeZones (timeZones)
-import Baerbel.Windguru (windguru)
+import Baerbel.Core.Calendar (TimeZones(..))
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Core.HTTP (Request(..))
+import Baerbel.Core.JSON (decodeBytes, decodeValue, jsonOptions)
+import Baerbel.Core.ProviderConfig (WindguruRules(..))
+import Baerbel.Core.TimeZones (timeZones)
+import Baerbel.Runtime.Windguru (windguru)
 import Data.Aeson hiding (Result)
 import qualified Data.ByteString as Bytes
 import Data.IORef (newIORef, atomicModifyIORef', readIORef, writeIORef)

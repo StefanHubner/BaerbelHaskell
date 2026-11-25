@@ -1,12 +1,12 @@
 module Main (main) where
 
-import qualified Baerbel.Effects as Effects
-import Baerbel.CLI (runProgram, rejected)
-import Baerbel.Authorize
-import Baerbel.Config (Global, User(..), Settings, resolveSettings, rule)
-import Baerbel.Error (Result, ioResult)
-import Baerbel.HTTP (newRawSender)
-import Baerbel.JSON (decodeBytes)
+import qualified Baerbel.Runtime.Effects as Effects
+import Baerbel.Runtime.CLI (runProgram, rejected)
+import Baerbel.Runtime.Authorize
+import Baerbel.Core.Config (Global, User(..), Settings, resolveSettings, rule)
+import Baerbel.Runtime.Error (Result, ioResult)
+import Baerbel.Runtime.HTTP (newRawSender)
+import Baerbel.Core.JSON (decodeBytes)
 import Control.Monad (void)
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map

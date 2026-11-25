@@ -1,8 +1,8 @@
 module NotesSpec (spec) where
 
-import Baerbel.Error (Result, failure)
-import Baerbel.JSON (decodeBytes, jsonOptions)
-import Baerbel.Notes
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Core.JSON (decodeBytes, jsonOptions)
+import Baerbel.Runtime.Notes
 import Control.Concurrent.Async (async, cancel)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Data.Aeson hiding (Result)

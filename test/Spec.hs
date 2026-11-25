@@ -1,5 +1,6 @@
 module Main (main) where
 
+import qualified ArchitectureSpec
 import qualified EffectsSpec
 import qualified NotesSpec
 import qualified MailContentSpec
@@ -22,6 +23,7 @@ import Test.Hspec (hspec)
 
 main :: IO ()
 main = hspec $ do
+  ArchitectureSpec.spec
   EffectsSpec.spec
   NotesSpec.spec
   MetricsSpec.spec

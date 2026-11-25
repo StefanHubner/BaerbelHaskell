@@ -1,8 +1,8 @@
 module MailContentSpec (spec) where
 
-import Baerbel.Error (Result, failure)
-import Baerbel.JSON (decodeBytes, jsonOptions)
-import Baerbel.MailContent (decodeCharset, decodeWords)
+import Baerbel.Core.Error (Result, failure)
+import Baerbel.Core.JSON (decodeBytes, jsonOptions)
+import Baerbel.Runtime.MailContent (decodeCharset, decodeWords)
 import Control.Concurrent.Async (mapConcurrently)
 import Data.Aeson hiding (Result)
 import qualified Data.ByteString as Bytes

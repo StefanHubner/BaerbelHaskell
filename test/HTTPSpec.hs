@@ -7,8 +7,8 @@ import qualified Network.Socket as Socket
 import qualified Network.Socket.ByteString as Socket
 import qualified Data.ByteString as Bytes
 import System.Environment (lookupEnv, setEnv, unsetEnv)
-import Baerbel.Error (Failure(..), failure)
-import Baerbel.HTTP
+import Baerbel.Core.Error (Failure(..), failure)
+import Baerbel.Runtime.HTTP
 import qualified Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy

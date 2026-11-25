@@ -1,10 +1,10 @@
 module NoteMailSpec (spec) where
 
-import Baerbel.Error (Failure(..), Result, failure)
-import Baerbel.HTTP (Request(..), Send)
-import Baerbel.Ledger (durable, withLedger)
-import Baerbel.NoteMail
-import Baerbel.ProviderConfig (GmailRules)
+import Baerbel.Core.Error (Failure(..), Result, failure)
+import Baerbel.Runtime.HTTP (Request(..), Send)
+import Baerbel.Runtime.Ledger (durable, withLedger)
+import Baerbel.Runtime.NoteMail
+import Baerbel.Core.ProviderConfig (GmailRules)
 import Data.Aeson (Value, object, (.=))
 import Data.ByteString (ByteString)
 import Data.IORef

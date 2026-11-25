@@ -1,13 +1,13 @@
 module Main (main) where
 
-import qualified Baerbel.Effects as Effects
-import Baerbel.CLI (runProgram, rejected)
+import qualified Baerbel.Runtime.Effects as Effects
+import Baerbel.Runtime.CLI (runProgram, rejected)
 import Control.Monad ((>=>))
-import Baerbel.ConfigPaths (validatePaths)
-import Baerbel.Validation (validateSettings)
-import Baerbel.Application (checkConfiguration, runApplication)
-import Baerbel.Config (Settings, loadSettings)
-import Baerbel.Error (Result)
+import Baerbel.Runtime.ConfigPaths (validatePaths)
+import Baerbel.Core.Validation (validateSettings)
+import Baerbel.Runtime.Application (checkConfiguration, runApplication)
+import Baerbel.Runtime.Config (Settings, loadSettings)
+import Baerbel.Core.Error (Result)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 

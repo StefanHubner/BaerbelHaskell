@@ -5,3 +5,11 @@ Use explicit Haskell types and Stack with GHCup. Keep functions short and self-c
 Run Stack tests, GHC warnings, HLint and Haskell Language Server diagnostics. Report code line changes and the main-function diff. Never replace the running Python service until Haskell behaviour has been verified; list incomplete parity explicitly.
 
 Keep pure values and Either results out of IO unless the operation performs a real effect. Prefer pattern matching and guards to if-then-else. Use automatic derived instances where their representation matches the required format; keep codec options shared and custom parsing limited to actual wire-format differences. Keep the implementation simple and avoid introducing an abstraction framework.
+
+## Functional core and imperative shell
+
+Keep pure feature modules in `src/Baerbel/Core/` (`Baerbel.Core.*`) and environment-facing modules in `src/Baerbel/Runtime/` (`Baerbel.Runtime.*`). Runtime may import Core; Core must never import Runtime. Shared protocol, configuration and failure values belong in Core.
+
+Core accepts and returns ordinary values, including explicit state, events, commands and `Either`/`Maybe` results. Supply time and other observations as values. Core types must not contain `IO`, mutable handles, native resource pointers or effectful callbacks. Capability records such as stores and media interfaces belong in Runtime, even when constructing them is pure. Do not hide effects behind type aliases, polymorphic monad constraints or unsafe execution.
+
+Runtime owns transport, files/databases, clocks, mutable state, concurrency, native codecs, resource lifetimes and effect execution. Keep the underlying business decisions in Core. Preserve atomic updates, cancellation and effect ordering when moving code. Use cohesive feature modules and ordinary data/functions; do not introduce a universal effect framework. Run the core-boundary checks with the normal tests and checks. Keep external Core imports in the reviewed `architecture/core-imports.txt` list; review additions for pure APIs. Missing top-level signatures are compiler errors, so inferred effect bindings cannot bypass the explicit type boundary.

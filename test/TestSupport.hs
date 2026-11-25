@@ -1,8 +1,8 @@
 module TestSupport (withRule, withRules) where
 
-import Baerbel.Config (Global, User(..), resolveSettings, rule)
-import Baerbel.Error (Result)
-import Baerbel.JSON (decodeBytes)
+import Baerbel.Core.Config (Global, User(..), resolveSettings, rule)
+import Baerbel.Core.Error (Result)
+import Baerbel.Core.JSON (decodeBytes)
 import Data.Aeson (FromJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.Map.Strict as Map
