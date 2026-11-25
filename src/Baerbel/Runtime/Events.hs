@@ -1,11 +1,11 @@
-module Baerbel.Runtime.Events (EventRules(..), Event(..), parseEvent, withEvents, pollEvents) where
+module Baerbel.Runtime.Events (EventRules(..), Event(..), parseEvent, withEvents, withAccountEvents, pollEvents) where
 
 import Baerbel.Core.Error ( Result, failure )
 import Baerbel.Core.Events
 import Baerbel.Runtime.Logging ( Report )
 import Baerbel.Runtime.Messages ( Messages(..) )
 import Baerbel.Runtime.SMS ( Receipt(..) )
-import Baerbel.Runtime.Storage ( databaseResult, withDatabase )
+import Baerbel.Runtime.Storage ( AccountStore(..), databaseResult, withDatabase, withAccountDatabase )
 import Control.Concurrent ( threadDelay )
 import Control.Concurrent.Async ( withAsync )
 import Control.Exception ( bracket )
@@ -37,31 +37,61 @@ withEvents rules output messages source database action = withDatabase "incoming
   where
   opened connection = do
     execute_ connection "CREATE TABLE IF NOT EXISTS incoming_event_cursors (file_key TEXT PRIMARY KEY, position INTEGER NOT NULL, anchor_length INTEGER NOT NULL, anchor TEXT NOT NULL)"
-    withAsync (forever (poll connection >> threadDelay (eventPollMicros rules))) (const action)
-  poll connection = do
-    result <- pollEvents rules output messages source connection
-    either (const (output "incoming_events_unavailable" [])) (const (pure ())) result
+    withPolling rules output messages source (localCursors connection) action
+
+withAccountEvents :: EventRules -> Report -> Messages -> FilePath -> AccountStore -> IO (Result a) -> IO (Result a)
+withAccountEvents rules output messages source store action = withAccountDatabase "incoming_cursor_unavailable" store open
+  where
+    open connection = withPolling rules output messages source (scopedCursors connection (accountStoreId store)) action
+
+data Cursors = Cursors
+  { loadCursor :: Text -> IO [(Integer, Int, Text)]
+  , saveCursor :: Cursor -> IO () }
+
+localCursors :: Connection -> Cursors
+localCursors connection = Cursors load save
+  where
+    load key = query connection "SELECT position, anchor_length, anchor FROM incoming_event_cursors WHERE file_key=?" (Only key)
+    save cursor = execute connection "INSERT OR REPLACE INTO incoming_event_cursors VALUES (?, ?, ?, ?)"
+      (cursorKey cursor, cursorPosition cursor, cursorLength cursor, cursorAnchor cursor)
+
+scopedCursors :: Connection -> Text -> Cursors
+scopedCursors connection user = Cursors load save
+  where
+    load key = query connection "SELECT position, anchor_length, anchor FROM event_cursors WHERE user_id=? AND file_key=?" (user, key)
+    save cursor = execute connection "INSERT OR REPLACE INTO event_cursors VALUES (?, ?, ?, ?, ?)"
+      (user, cursorKey cursor, cursorPosition cursor, cursorLength cursor, cursorAnchor cursor)
+
+withPolling :: EventRules -> Report -> Messages -> FilePath -> Cursors -> IO (Result a) -> IO (Result a)
+withPolling rules output messages source cursors action = withAsync (forever (poll >> threadDelay (eventPollMicros rules))) (const action)
+  where
+    poll = do
+      result <- pollSource rules output messages source cursors
+      either (const (output "incoming_events_unavailable" [])) (const (pure ())) result
 
 pollEvents :: EventRules -> Report -> Messages -> FilePath -> Connection -> IO (Result Int)
-pollEvents rules output messages source connection = Effects.mapResult id (databaseResult "incoming_events_unavailable" (visit 0 paths))
+pollEvents rules output messages source = pollSource rules output messages source . localCursors
+
+pollSource :: EventRules -> Report -> Messages -> FilePath -> Cursors -> IO (Result Int)
+pollSource rules output messages source cursors = Effects.mapResult id (databaseResult "incoming_events_unavailable" (visit 0 paths))
   where
   paths = [source ++ "." ++ show number | number <- [eventRotations rules, eventRotations rules - 1 .. 1]] ++ [source]
   visit count [] = pure (Right count)
   visit count (path : rest) = do
     exists <- doesFileExist path
-    let readPresent | exists = readBatch rules connection path
+    let readPresent | exists = readBatch rules cursors path
                     | otherwise = pure (Right [])
     batch <- readPresent
     Effects.continue (consumeBatch count rest) batch
   consumeBatch count remaining rows = do
-    result <- consumeRows output messages connection count rows
+    result <- consumeRows output messages cursors count rows
     case result of
       Left err -> pure (Left err)
       Right (done, True) -> visit done remaining
       Right (done, False) -> pure (Right done)
 
-readBatch :: EventRules -> Connection -> FilePath -> IO (Result [Row])
-readBatch rules connection path = Effects.mapResult (either unavailable id) operation
+readBatch :: EventRules -> Cursors -> FilePath -> IO (Result [Row])
+readBatch rules cursors path = Effects.mapResult (either unavailable id) operation
   where
   operation = databaseResult "incoming_events_unavailable" (tryIOError opened)
   unavailable err
@@ -71,12 +101,12 @@ readBatch rules connection path = Effects.mapResult (either unavailable id) oper
   opened = bracket (openFd path ReadOnly flags) closeFd inspect
   inspect descriptor = getFdStatus descriptor >>= readRegular descriptor
   readRegular descriptor metadata
-    | isRegularFile metadata = readSource rules connection descriptor metadata
+    | isRegularFile metadata = readSource rules cursors descriptor metadata
     | otherwise = pure (Left (failure "incoming_events_invalid_source"))
 
-readSource :: EventRules -> Connection -> System.Posix.Types.Fd -> System.Posix.Files.FileStatus -> IO (Result [Row])
-readSource rules connection descriptor metadata = do
-  rows <- query connection "SELECT position, anchor_length, anchor FROM incoming_event_cursors WHERE file_key=?" (Only key)
+readSource :: EventRules -> Cursors -> System.Posix.Types.Fd -> System.Posix.Files.FileStatus -> IO (Result [Row])
+readSource rules cursors descriptor metadata = do
+  rows <- loadCursor cursors key
   copied <- System.Posix.IO.dup descriptor
   bracket (fdToHandle copied) hClose (readFrom rows)
   where
@@ -115,9 +145,9 @@ readRows rules key handle remaining rows = do
     Nothing | Bytes.length bytes <= eventMaximumLine rules -> pure (Right (reverse rows))
     _ -> pure (Left (failure "incoming_event_record_too_large"))
 
-consumeRows :: Report -> Messages -> Connection -> Int -> [Row] -> IO (Result (Int, Bool))
+consumeRows :: Report -> Messages -> Cursors -> Int -> [Row] -> IO (Result (Int, Bool))
 consumeRows _ _ _ count [] = pure (Right (count, True))
-consumeRows output messages connection count (Row event cursor : rows) = do
+consumeRows output messages cursors count (Row event cursor : rows) = do
   receipt <- maybe invalid (fmap Just . deliver) event
   case receipt >>= receiptRetryable of
     Just True -> pure (Right (count, False))
@@ -126,10 +156,6 @@ consumeRows output messages connection count (Row event cursor : rows) = do
   invalid = output "incoming_event_invalid" [] >> pure Nothing
   deliver value = deliverOutcome messages (eventIdentifier value) (eventReason value) (eventCallback value) (eventAnswered value)
   advance = do
-    saved <- databaseResult "incoming_cursor_unavailable" (checkpoint connection cursor)
+    saved <- databaseResult "incoming_cursor_unavailable" (saveCursor cursors cursor)
     let next = count + maybe 0 (const 1) event
-    Effects.continue (const (consumeRows output messages connection next rows)) saved
-
-checkpoint :: Connection -> Cursor -> IO ()
-checkpoint connection cursor = execute connection "INSERT OR REPLACE INTO incoming_event_cursors VALUES (?, ?, ?, ?)"
-  (cursorKey cursor, cursorPosition cursor, cursorLength cursor, cursorAnchor cursor)
+    Effects.continue (const (consumeRows output messages cursors next rows)) saved

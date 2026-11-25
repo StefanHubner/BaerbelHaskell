@@ -22,7 +22,7 @@ configured :: Value -> [(Text, Text)] -> Settings
 configured rule values = resolveSettings global (User (Map.fromList values))
   where
     sections = Map.singleton "validation" (Map.singleton "paths" (toJSON [rule]))
-    global = Global Map.empty sections Map.empty
+    global = Global Map.empty sections Map.empty Nothing
 
 expandedPath :: Expectation
 expandedPath = do

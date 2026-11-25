@@ -11,6 +11,7 @@ license:        NONE
 build-type:     Custom
 extra-source-files:
     config/global.json
+    config/users.sql
     config/phone-numbers.json
     test/live/config.json
     config/user.example.json
@@ -48,6 +49,7 @@ extra-source-files:
     scripts/prepare-build.sh
     scripts/remote-deploy.sh
     scripts/account-incident.py
+    scripts/migrate-users.py
     scripts/prepare-user-config.py
     scripts/render-asterisk-accounts.py
     scripts/render-bristol-sip.py
@@ -176,6 +178,7 @@ library
       Baerbel.Runtime.Storage
       Baerbel.Runtime.Store
       Baerbel.Runtime.Telephony
+      Baerbel.Runtime.UserDatabase
       Baerbel.Runtime.VAD
       Baerbel.Runtime.WebSocket
       Baerbel.Runtime.Windguru

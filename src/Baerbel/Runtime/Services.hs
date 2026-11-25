@@ -4,6 +4,7 @@ module Baerbel.Runtime.Services
 import Baerbel.Core.Services
     ( AccountSpec(..),
       accounts,
+      googleRequirements,
       mutationPolicy,
       prefixErrors,
       mapsAuthorization,
@@ -20,10 +21,13 @@ import Baerbel.Runtime.Gmail ( gmailSession )
 import Baerbel.Runtime.HTTP
     ( Send, newSender, newSenderWith, authenticated )
 import Baerbel.Runtime.Ledger
-    ( Ledger, withLedger, durable, lookupExisting )
+    ( Ledger, withLedger, withAccountLedger, durable, lookupExisting )
 import Baerbel.Runtime.Maps ( maps )
 import Baerbel.Runtime.NoteMail ( NoteDelivery, noteSession )
 import Baerbel.Runtime.OAuth ( loadCredentials, tokenSource )
+import Baerbel.Core.OAuth ( checkCredentials )
+import Baerbel.Runtime.Storage ( AccountStore )
+import Baerbel.Runtime.UserDatabase ( accountMemory, googleCredentials )
 import Baerbel.Runtime.Profile
     ( ProfileStore(profileRead), profile )
 import Baerbel.Runtime.Provider ( Execute )
@@ -33,12 +37,12 @@ import Baerbel.Runtime.Worker ( withWorker )
 import Control.Monad ( void )
 import Data.Aeson ( Value )
 import Data.Map.Strict ( Map )
+import Data.Maybe ( catMaybes )
 import Data.Text ( Text )
 import Data.Time ( getCurrentTime )
-import qualified Baerbel.Runtime.Effects as Effects ( continue )
+import qualified Baerbel.Runtime.Effects as Effects ( continue, mapResult )
 import qualified Data.Map.Strict as Map
     ( lookup, member, fromList )
-import qualified Data.Set as Set ( fromList )
 import qualified Data.Text as Text
     ( isPrefixOf, null, replace, unpack )
 
@@ -62,50 +66,53 @@ scopedService :: Text -> [Value] -> IO Execute -> Factory
 scopedService name schemas prepare = Scoped (Service name schemas <$> prepare)
 type Accounts = Map Text Send
 
-withServices :: Settings -> (Services -> IO (Result a)) -> IO (Result a)
-withServices settings action = Effects.continue prepare policy
+withServices :: Maybe AccountStore -> Settings -> (Services -> IO (Result a)) -> IO (Result a)
+withServices store settings action = Effects.continue prepare policy
   where
   policy = rule settings "http" "mutations"
   prepare mutations = do
     sender <- newSenderWith (mutationPolicy mutations)
-    prepared <- prepareAccounts settings sender
-    Effects.continue (bindGoogle settings sender action) prepared
+    prepared <- prepareAccounts store settings sender
+    Effects.continue (bindGoogle store settings sender action) prepared
 
-prepareAccounts :: Settings -> Send -> IO (Result Accounts)
-prepareAccounts settings sender = do
-  results <- traverse prepare enabled
-  pure (Map.fromList <$> sequence results)
+prepareAccounts :: Maybe AccountStore -> Settings -> Send -> IO (Result Accounts)
+prepareAccounts store settings sender = do
+  results <- traverse (prepareAccount store settings sender) accounts
+  pure (sequence results >>= requireNoteConnection . Map.fromList . catMaybes)
   where
-  enabled = filter configured accounts
-  configured (AccountSpec _ key _) = not (Text.null (setting settings key))
-  prepare = prepareAccount settings sender
+    requireNoteConnection prepared
+      | booleanSetting settings "PHONE_ASSISTANT_OWNER_NOTES" == Right True && not (Map.member "gmail" prepared) =
+          Left (failure "owner_notes_require_gmail")
+      | otherwise = Right prepared
 
-prepareAccount :: Settings -> Send -> AccountSpec -> IO (Result (Text, Send))
-prepareAccount settings sender (AccountSpec name key scopes) =
-  Effects.continue prepare requirements
+prepareAccount :: Maybe AccountStore -> Settings -> Send -> AccountSpec -> IO (Result (Maybe (Text, Send)))
+prepareAccount store settings sender spec@(AccountSpec name key _) = Effects.continue prepare requirements
   where
-  requirements = (,,) <$> rule settings "oauth" "refresh"
-    <*> rule settings "oauth" scopes <*> rule settings "oauth" "allowed"
-  prepare (endpoint, required, allowed) = do
-    loaded <- loadCredentials endpoint (Set.fromList required) (Set.fromList allowed) path
-    Effects.continue (bind endpoint required allowed) loaded
-  bind endpoint required allowed credentials = do
-    source <- tokenSource sender endpoint (Set.fromList required) (Set.fromList allowed) credentials
-    let authorized request = prefixErrors name <$> authenticated source sender request
-    pure (Right (name, authorized))
-  path = Text.unpack (setting settings key)
+    requirements = googleRequirements settings spec
+    prepare (endpoint, required, allowed) = do
+      loaded <- readCredentials endpoint required allowed
+      Effects.continue (fmap sequenceA . traverse (bind endpoint required allowed)) loaded
+    readCredentials endpoint required allowed = case store of
+      Just scoped -> Effects.mapResult (traverse (checkCredentials endpoint required allowed)) (googleCredentials scoped name)
+      Nothing | Text.null path -> pure (Right Nothing)
+      Nothing -> fmap (fmap Just) (loadCredentials endpoint required allowed (Text.unpack path))
+    bind endpoint required allowed credentials = do
+      source <- tokenSource sender endpoint required allowed credentials
+      let authorized request = prefixErrors name <$> authenticated source sender request
+      pure (Right (name, authorized))
+    path = setting settings key
 
-bindGoogle :: Settings -> Send -> (Services -> IO (Result a)) -> Accounts -> IO (Result a)
-bindGoogle settings sender action prepared = withOptionalLedger gmailPath withMail
+bindGoogle :: Maybe AccountStore -> Settings -> Send -> (Services -> IO (Result a)) -> Accounts -> IO (Result a)
+bindGoogle store settings sender action prepared = openLedger "gmail" "PHONE_ASSISTANT_GMAIL_STATE_FILE" withMail
   where
-    gmailPath = enabledPath "gmail" "PHONE_ASSISTANT_GMAIL_STATE_FILE"
-    calendarPath = enabledPath "calendar" "PHONE_ASSISTANT_CALENDAR_STATE_FILE"
-    enabledPath name key
-      | Map.member name prepared = Just (Text.unpack (setting settings key))
-      | otherwise = Nothing
-    withMail mailLedger = withOptionalLedger calendarPath (withCalendar mailLedger)
+    openLedger name key next
+      | not (Map.member name prepared) = next Nothing
+      | otherwise = case store of
+        Just scoped -> withAccountLedger scoped name (next . Just)
+        Nothing -> withLedger (Text.unpack (setting settings key)) (next . Just)
+    withMail mailLedger = openLedger "calendar" "PHONE_ASSISTANT_CALENDAR_STATE_FILE" (withCalendar mailLedger)
     withCalendar mailLedger calendarLedger = do
-      stored <- optionalProfileStore settings
+      stored <- optionalProfileStore store settings
       let assembled = stored >>= assembleServices settings sender prepared mailLedger calendarLedger
       Effects.continue bindDirectory assembled
     bindDirectory services = Effects.continue withLookup directoryRules
@@ -130,10 +137,6 @@ noteDelivery settings prepared mailLedger = case (Map.lookup "gmail" prepared, m
     mailRules <- rule settings "providers" "gmail"
     Right (Just (noteSession rules mailRules authorized (durable ledger) getCurrentTime))
   _ -> Right Nothing
-
-withOptionalLedger :: Maybe FilePath -> (Maybe Ledger -> IO (Result a)) -> IO (Result a)
-withOptionalLedger Nothing action = action Nothing
-withOptionalLedger (Just path) action = withLedger path (action . Just)
 
 googleServices :: Settings -> Accounts -> Maybe Ledger -> Maybe Ledger -> Result Factories
 googleServices settings prepared mailLedger calendarLedger = do
@@ -221,16 +224,20 @@ windServices settings sender store
     schemas = toolDefinitions settings "WINDGURU_TOOLS" ++ setSchemas
     setSchemas = maybe [] (const (toolDefinitions settings "WINDGURU_SET_TOOL")) store
 
-optionalProfileStore :: Settings -> IO (Result (Maybe ProfileStore))
-optionalProfileStore settings
-  | Text.null (setting settings "PHONE_ASSISTANT_PROFILE_FILE") = pure (Right Nothing)
-  | otherwise = fmap (Just <$>) (prepareProfileStore settings)
-
-prepareProfileStore :: Settings -> IO (Result ProfileStore)
-prepareProfileStore settings = Effects.continue prepare rules
+optionalProfileStore :: Maybe AccountStore -> Settings -> IO (Result (Maybe ProfileStore))
+optionalProfileStore (Just scoped) settings = Effects.continue prepare (rule settings "profile" "store")
   where
-  rules = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
-  prepare (profileRules, storeRules) = profileStore profileRules storeRules (Text.unpack (setting settings "PHONE_ASSISTANT_PROFILE_FILE"))
+    prepare rules = do
+      let store = accountMemory rules scoped
+      checked <- profileRead store
+      pure (Just store <$ checked)
+optionalProfileStore Nothing settings
+  | Text.null path = pure (Right Nothing)
+  | otherwise = Effects.continue prepare rules
+  where
+    path = setting settings "PHONE_ASSISTANT_PROFILE_FILE"
+    rules = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
+    prepare (profileRules, storeRules) = fmap (fmap Just) (profileStore profileRules storeRules (Text.unpack path))
 
 profileContext :: Settings -> Maybe ProfileStore -> Result (Maybe (IO (Result Text)))
 profileContext _ Nothing = Right Nothing
@@ -239,9 +246,9 @@ profileContext settings (Just store) = do
   prefix <- rule settings "profile" "contextPrefix"
   Right (Just (Right . renderProfileContext rules prefix <$> profileRead store))
 
-checkServices :: Settings -> IO (Result ())
-checkServices settings = do
+checkServices :: Maybe AccountStore -> Settings -> IO (Result ())
+checkServices store settings = do
   sender <- newSender
-  accountsResult <- prepareAccounts settings sender
-  profileResult <- optionalProfileStore settings
+  accountsResult <- prepareAccounts store settings sender
+  profileResult <- optionalProfileStore store settings
   pure (void accountsResult <* profileResult)

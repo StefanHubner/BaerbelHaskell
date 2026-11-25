@@ -6,9 +6,12 @@ prefix=/home/stefan/apps/baerbel
 service=phone-assistant.service
 override=/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf
 user_config=/etc/phone-assistant/user.json
+global_config=/etc/phone-assistant/global.json
+user_database=/var/lib/phone-assistant/users.sqlite3
 
 prepare_release() {
   local digest release stage
+  local -a config
   digest=$(sha256sum "$work/release.tar.gz")
   digest=${digest%% *}
   release="$prefix/releases/$digest"
@@ -21,14 +24,26 @@ prepare_release() {
   fi
   prepare_config "$release/config/global.json"
   env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server"
-  "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/user.json"
+  if [[ -f "$work/global.json" && -f "$release/deploy/migrate-users.py" ]]; then
+    config=("$work/global.json")
+  else
+    config=("$release/config/global.json" "$work/user.json")
+  fi
+  "$release/bin/phone-assistant-server" --check "${config[@]}"
   ln -sfn "releases/$digest" "$prefix/staged"
   printf 'Prepared and checked release: %s\nThe running service has not changed.\n' "$release"
 }
 
 prepare_config() {
-  local global=$1
-  if [[ -f "$user_config" ]]; then
+  local global=$1 migration
+  migration=$(dirname "$global")/../deploy/migrate-users.py
+  if [[ -f "$global_config" ]]; then
+    install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
+    python3 "$migration" merge "$global" "$global_config" "$work/global.json"
+  elif [[ -f "$user_config" && -f "$migration" ]]; then
+    install -m 0644 "$(dirname "$global")/phone-numbers.json" "$work/phone-numbers.json"
+    python3 "$migration" prepare "$global" "$user_config" "$work/global.json" "$user_database"
+  elif [[ -f "$user_config" ]]; then
     install -m 0600 "$user_config" "$work/user.json"
   else
     /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" /etc/phone-assistant/assistant.env "$work/user.json" "$global"
@@ -44,25 +59,69 @@ require_idle() {
 
 activate_release() {
   local release service_user unit
-  local prepared_user=${1:-"$work/user.json"}
+  local -a config active_config
+  local prepared_user=${1:-"$work/user.json"} target_config=${2:-"$user_config"}
   require_idle || return
   release=$(readlink -e "$prefix/staged") || return
   service_user=$(systemctl show "$service" --property=User --value) || return
-  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$prepared_user" || return
-  install -m 0600 -o "$service_user" -g "$service_user" "$prepared_user" "$user_config" || return
+  if [[ "$target_config" == "$global_config" ]]; then
+    config=("$prepared_user")
+    active_config=("$target_config")
+    install -m 0644 "$release/config/phone-numbers.json" "$(dirname "$global_config")/phone-numbers.json" || return
+  else
+    config=("$release/config/global.json" "$prepared_user")
+    active_config=("$release/config/global.json" "$target_config")
+  fi
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "${config[@]}" || return
+  install -m 0600 -o "$service_user" -g "$service_user" "$prepared_user" "$target_config" || return
   unit=$(mktemp) || return
   cat > "$unit" <<UNIT
 # Managed by Bärbel Haskell deployment; remove this file to restore Python.
 [Service]
 WorkingDirectory=$release
 ExecStart=
-ExecStart=$release/bin/phone-assistant-server $release/config/global.json $user_config
+ExecStart=$release/bin/phone-assistant-server ${active_config[*]}
 UNIT
   install -D -m 0644 "$unit" "$override" || return
   rm "$unit"
   systemctl daemon-reload || return
   systemctl restart "$service" || return
   verify_service "$release/bin/phone-assistant-server"
+}
+
+activate_prepared() {
+  local release
+  release=$(readlink -e "$prefix/staged") || return
+  if [[ -f "$global_config" ]]; then
+    activate_release "$work/global.json" "$global_config"
+  elif [[ -f "$user_database" && -f "$release/deploy/migrate-users.py" ]]; then
+    activate_user_database "$release"
+  else
+    activate_release
+  fi
+}
+
+activate_user_database() {
+  local release=$1 service_user backup
+  require_idle || return
+  service_user=$(systemctl show "$service" --property=User --value) || return
+  runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.json" || return
+  backup=$(mktemp -d /var/backups/phone-assistant-users.XXXXXXXX) || return
+  cp -a "$override" "$user_config" "$backup/" || return
+  systemctl stop "$service" || return
+  if runuser -u "$service_user" -- python3 "$release/deploy/migrate-users.py" refresh \
+    "$release/config/global.json" "$user_config" "$work/global.json" &&
+    activate_release "$work/global.json" "$global_config"; then
+    rm "$user_config" || printf 'The old account JSON is still available beside the global configuration.\n' >&2
+    printf 'User database active. Previous private configuration and unit saved at %s.\n' "$backup"
+    return
+  fi
+  cp -a "$backup/zz-baerbel-haskell.conf" "$override"
+  rm -f "$global_config"
+  systemctl daemon-reload
+  systemctl restart "$service"
+  printf 'User database activation stopped; the previous service is running.\n' >&2
+  return 1
 }
 
 activate_accounts() {
@@ -217,7 +276,7 @@ verify_running() {
 
 case "$action" in
   prepare) prepare_release ;;
-  activate) activate_release ;;
+  activate) activate_prepared ;;
   activate-accounts) activate_accounts ;;
   install-account-routing) install_account_routing ;;
   rollback-accounts) rollback_accounts ;;

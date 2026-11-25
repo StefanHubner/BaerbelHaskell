@@ -1,4 +1,4 @@
-module Baerbel.Runtime.Storage (databaseResult, withDatabase, privateFile, atomicWrite) where
+module Baerbel.Runtime.Storage (AccountStore(..), databaseResult, withDatabase, withUserDatabase, withAccountDatabase, privateFile, atomicWrite) where
 
 import Baerbel.Runtime.Error
     ( Failure(..), Result, failure, ioResult )
@@ -10,6 +10,7 @@ import Database.SQLite.Simple
 import System.Directory
     ( createDirectoryIfMissing,
       doesDirectoryExist,
+      doesFileExist,
       renameFile,
       removeFile )
 import System.FilePath ( takeDirectory )
@@ -33,6 +34,22 @@ import System.Posix.User ( getEffectiveUserID )
 import qualified Data.ByteString as Bytes ( ByteString, hPut )
 import qualified Baerbel.Runtime.Effects as Effects
     ( continue, mapResult, attempt )
+
+data AccountStore = AccountStore {accountStorePath :: FilePath, accountStoreId :: Text}
+
+withUserDatabase :: Text -> FilePath -> (Connection -> IO (Result a)) -> IO (Result a)
+withUserDatabase code path action = do
+  present <- ioResult code (doesFileExist path)
+  Effects.continue openExisting present
+  where
+    openExisting False = pure (Left (failure code))
+    openExisting True = withDatabase code path (\connection -> do
+      execute_ connection "PRAGMA foreign_keys=ON"
+      execute_ connection "PRAGMA synchronous=FULL"
+      action connection)
+
+withAccountDatabase :: Text -> AccountStore -> (Connection -> IO (Result a)) -> IO (Result a)
+withAccountDatabase code = withUserDatabase code . accountStorePath
 
 -- Filesystem and SQL exceptions end at this boundary; cancellation passes through.
 databaseResult :: Text -> IO a -> IO (Result a)

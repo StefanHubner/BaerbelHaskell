@@ -7,6 +7,7 @@ license: NONE
 synopsis: Functional telephone assistant
 extra-source-files:
 - config/global.json
+- config/users.sql
 - config/phone-numbers.json
 - test/live/config.json
 - config/user.example.json

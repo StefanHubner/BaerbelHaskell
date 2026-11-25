@@ -8,7 +8,7 @@ Type=simple
 User=stefan
 Group=stefan
 WorkingDirectory=/opt/baerbel
-ExecStart=/opt/baerbel/bin/phone-assistant-server /opt/baerbel/config/global.json /etc/phone-assistant/user.json
+ExecStart=/opt/baerbel/bin/phone-assistant-server /etc/phone-assistant/global.json
 Restart=on-failure
 RestartSec=3s
 # Allow an explicitly completed owner note's bounded delivery to drain.

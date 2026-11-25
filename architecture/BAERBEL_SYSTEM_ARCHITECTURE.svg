@@ -104,7 +104,7 @@
 <g id="node2" class="node">
 <title>status</title>
 <text text-anchor="middle" x="851.5" y="-1276" font-family="DejaVu Sans" font-size="15.00">Haskell active · live&#45;only speech · gpt&#45;6.2&#45;sol / low / priority</text>
-<text text-anchor="middle" x="851.5" y="-1259" font-family="DejaVu Sans" font-size="15.00">Current release: separate SIP accounts active · Bristol owner call verified</text>
+<text text-anchor="middle" x="851.5" y="-1259" font-family="DejaVu Sans" font-size="15.00">Separate SIP accounts active · Bristol owner call verified</text>
 <text text-anchor="middle" x="851.5" y="-1242" font-family="DejaVu Sans" font-size="15.00">Earlier owner Gmail + known&#45;caller ringing verified · forwarded caller ended before answer</text>
 </g>
 <!-- phones -->
@@ -186,18 +186,17 @@
 <g id="node12" class="node">
 <title>state</title>
 <path fill="#f3f4f6" stroke="#728397" stroke-width="1.4" d="M1080.5,-214C1080.5,-214 622.5,-214 622.5,-214 616.5,-214 610.5,-208 610.5,-202 610.5,-202 610.5,-153 610.5,-153 610.5,-147 616.5,-141 622.5,-141 622.5,-141 1080.5,-141 1080.5,-141 1086.5,-141 1092.5,-147 1092.5,-153 1092.5,-153 1092.5,-202 1092.5,-202 1092.5,-208 1086.5,-214 1080.5,-214"/>
-<text text-anchor="middle" x="851.5" y="-191" font-family="DejaVu Sans" font-size="15.00">Durable external state</text>
-<text text-anchor="middle" x="851.5" y="-174" font-family="DejaVu Sans" font-size="15.00">Gmail/Calendar/SMS receipts · PBX event cursor</text>
-<text text-anchor="middle" x="851.5" y="-157" font-family="DejaVu Sans" font-size="15.00">Private profile · existing call archive</text>
+<text text-anchor="middle" x="851.5" y="-191" font-family="DejaVu Sans" font-size="15.00">Private SQLite user database</text>
+<text text-anchor="middle" x="851.5" y="-174" font-family="DejaVu Sans" font-size="15.00">Users and types · Google grants and scopes</text>
+<text text-anchor="middle" x="851.5" y="-157" font-family="DejaVu Sans" font-size="15.00">Memory · delivery receipts · PBX event cursors</text>
 </g>
 <!-- config -->
 <g id="node13" class="node">
 <title>config</title>
-<path fill="#f3f4f6" stroke="#728397" stroke-width="1.4" d="M1906.5,-912.5C1906.5,-912.5 1656.5,-912.5 1656.5,-912.5 1650.5,-912.5 1644.5,-906.5 1644.5,-900.5 1644.5,-900.5 1644.5,-834.5 1644.5,-834.5 1644.5,-828.5 1650.5,-822.5 1656.5,-822.5 1656.5,-822.5 1906.5,-822.5 1906.5,-822.5 1912.5,-822.5 1918.5,-828.5 1918.5,-834.5 1918.5,-834.5 1918.5,-900.5 1918.5,-900.5 1918.5,-906.5 1912.5,-912.5 1906.5,-912.5"/>
-<text text-anchor="middle" x="1781.5" y="-889.5" font-family="DejaVu Sans" font-size="15.00">Configuration files</text>
-<text text-anchor="middle" x="1781.5" y="-872.5" font-family="DejaVu Sans" font-size="15.00">Shared: global.json</text>
-<text text-anchor="middle" x="1781.5" y="-855.5" font-family="DejaVu Sans" font-size="15.00">Reference: phone&#45;numbers.json</text>
-<text text-anchor="middle" x="1781.5" y="-838.5" font-family="DejaVu Sans" font-size="15.00">Private: user.json / accounts</text>
+<path fill="#f3f4f6" stroke="#728397" stroke-width="1.4" d="M1906.5,-904C1906.5,-904 1656.5,-904 1656.5,-904 1650.5,-904 1644.5,-898 1644.5,-892 1644.5,-892 1644.5,-843 1644.5,-843 1644.5,-837 1650.5,-831 1656.5,-831 1656.5,-831 1906.5,-831 1906.5,-831 1912.5,-831 1918.5,-837 1918.5,-843 1918.5,-843 1918.5,-892 1918.5,-892 1918.5,-898 1912.5,-904 1906.5,-904"/>
+<text text-anchor="middle" x="1781.5" y="-881" font-family="DejaVu Sans" font-size="15.00">Private global.json</text>
+<text text-anchor="middle" x="1781.5" y="-864" font-family="DejaVu Sans" font-size="15.00">Shared rules and credentials</text>
+<text text-anchor="middle" x="1781.5" y="-847" font-family="DejaVu Sans" font-size="15.00">Reference: phone&#45;numbers.json</text>
 </g>
 <!-- permissions -->
 <g id="node14" class="node">

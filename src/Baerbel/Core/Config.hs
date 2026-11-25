@@ -2,23 +2,31 @@ module Baerbel.Core.Config where
 
 import Baerbel.Core.Error ( Result, failure )
 import Baerbel.Core.JSON ( camelOptions, decodeValue )
-import Data.Aeson ( FromJSON(..), Value, genericParseJSON, toJSON )
+import Data.Aeson ( FromJSON(..), Options(rejectUnknownFields), Value, genericParseJSON, toJSON )
 import Data.Map.Strict ( Map )
 import Data.Text ( Text )
 import GHC.Generics ( Generic )
 import Text.Read ( readMaybe )
 import qualified Data.Map.Strict as Map
-    ( empty, insert, lookup, union, findWithDefault )
-import qualified Data.Text as Text ( toLower, unpack )
+    ( empty, insert, lookup, union, findWithDefault, adjust )
+import qualified Data.Text as Text ( toLower, unpack, replace, null )
 
 data Global = Global
   { globalDefaults :: Map Text Text
   , globalRules :: Map Text (Map Text Value)
   , globalTools :: Map Text [Value]
-  } deriving (Show, Generic)
+  , globalInstallation :: Maybe Installation
+  } deriving (Generic)
 
 instance FromJSON Global where
-  parseJSON = genericParseJSON (camelOptions 6)
+  parseJSON = genericParseJSON ((camelOptions 6) {rejectUnknownFields = True})
+
+data Installation = Installation
+  { installationEnvironment :: Map Text Text, installationDatabase :: FilePath }
+  deriving (Generic)
+
+instance FromJSON Installation where
+  parseJSON = genericParseJSON ((camelOptions 12) {rejectUnknownFields = True})
 
 newtype User = User { userEnvironment :: Map Text Text }
   deriving (Generic)
@@ -37,7 +45,16 @@ withPhoneNumbers phones global = global {globalRules = Map.insert "phone_numbers
 resolveSettings :: Global -> User -> Settings
 resolveSettings global user = Settings global values
   where
-  values = Map.union (userEnvironment user) (globalDefaults global)
+  values = foldr (Map.adjust (renderOwnerName (Settings global scoped))) scoped templates
+  scoped = Map.union (userEnvironment user) (globalDefaults global)
+  templates = ["PHONE_ASSISTANT_GREETING", "PHONE_ASSISTANT_LIVE_INSTRUCTIONS"]
+
+renderOwnerName :: Settings -> Text -> Text
+renderOwnerName settings = Text.replace "{{owner_name}}" name
+  where
+    configured = setting settings "INCOMING_OWNER_NAME"
+    name | Text.null configured = "there"
+         | otherwise = configured
 
 setting :: Settings -> Text -> Text
 setting settings key = Map.findWithDefault "" key (settingsValues settings)

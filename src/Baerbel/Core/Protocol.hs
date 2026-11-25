@@ -8,7 +8,7 @@ module Baerbel.Core.Protocol
 
 import Baerbel.Core.Error (Result, failure)
 import Baerbel.Core.Concurrent (hasElapsed)
-import Baerbel.Core.Config (Settings, rule, setting, integerSetting, booleanSetting)
+import Baerbel.Core.Config (Settings, renderOwnerName, rule, setting, integerSetting, booleanSetting)
 import Baerbel.Core.JSON (camelOptions, textField)
 import Control.Monad (foldM)
 import Data.Char (isAlphaNum, generalCategory, GeneralCategory(..))
@@ -175,7 +175,7 @@ voiceIdentity settings = do
   let selected = setting settings "PHONE_ASSISTANT_VOICE_PRESET"
       voice = setting settings "OPENAI_LIVE_VOICE"
       preset = Map.lookup selected presets
-  pure (identityFor active selected voice legacy friendly normal preset)
+  pure (renderOwnerName settings (identityFor active selected voice legacy friendly normal preset))
 
 identityFor :: Text -> Text -> Text -> Text -> Text -> Text -> Maybe VoicePreset -> Text
 identityFor active selected voice legacy friendly normal preset = case preset of
@@ -191,7 +191,7 @@ identityFor active selected voice legacy friendly normal preset = case preset of
 
 configuredInstruction :: Settings -> Text -> Text -> Result Text
 configuredInstruction settings key fallback
-  | T.null custom = rule settings "settings" fallback
+  | T.null custom = renderOwnerName settings <$> rule settings "settings" fallback
   | otherwise = Right custom
   where
     custom = setting settings key
@@ -207,7 +207,7 @@ prependBoth text (voice, backend) = (text <> "\n\n" <> voice, text <> "\n\n" <> 
 
 applyRule :: Settings -> Bool -> (Text -> Instructions -> Instructions) -> Text -> Instructions -> Result Instructions
 applyRule _ False _ _ current = Right current
-applyRule settings True transform key current = (`transform` current) <$> rule settings "live" key
+applyRule settings True transform key current = (\text -> transform (renderOwnerName settings text) current) <$> rule settings "live" key
 
 data IntegrationSpec = IntegrationSpec Text Text Text Text Text Text Text
 

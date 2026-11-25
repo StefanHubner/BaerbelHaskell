@@ -1,9 +1,8 @@
-module Baerbel.Runtime.Accounts (loadInstallation, AccountIngress(..), accountIngress, issuePin) where
+module Baerbel.Runtime.Accounts (loadInstallation, AccountIngress(..), accountIngress, issuePin, connectGoogle) where
 
 import Baerbel.Core.Accounts
-import Baerbel.Core.Config (Global, Settings, User(..), resolveSettings, rule, setting)
+import Baerbel.Core.Config (Global(..), Installation(..), Settings, User(..), resolveSettings, rule, setting)
 import Baerbel.Core.Error (Failure(..), Result, failure)
-import Baerbel.Core.JSON (encodeBytes)
 import Baerbel.Core.Pin (encodePinHash)
 import Baerbel.Core.Telephony (TelephonyConfig(..), TelephonyRules(..))
 import Baerbel.Runtime.AMI (AMI(..), connectAMI, field, incomingMatch, ownerMatch, variable)
@@ -12,70 +11,47 @@ import Baerbel.Runtime.ConfigPaths (validatePaths)
 import Baerbel.Runtime.Effects (continue, mapResult, withResult)
 import Baerbel.Runtime.HTTP (newRawSender)
 import Baerbel.Core.SMS (SMSCredentials(..), Delivery(Sent, Uncertain), classify, smsRequest)
-import Baerbel.Runtime.Storage (atomicWrite)
+import Baerbel.Runtime.OAuth (loadCredentials)
+import Baerbel.Runtime.Storage (AccountStore(..))
+import Baerbel.Runtime.UserDatabase (readAccounts, saveGoogleCredentials, updatePin)
+import Baerbel.Core.Services (googleAccount, googleRequirements)
+
 import Baerbel.Runtime.Telephony (agiCommand, agiSession, routeHome)
 import Baerbel.Core.Routing (NumberValidator, homeEnabled)
 import Baerbel.Core.Session (telephonyConfiguration)
 import Baerbel.Core.Validation (validateSettings)
-import Control.Monad (unless)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import Crypto.Random (getRandomBytes)
 import qualified Data.ByteString as Bytes
 import Data.Map.Strict (Map)
-import Data.Maybe (fromMaybe)
-import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as Text
 import Network.Socket (Socket)
-import System.Directory (canonicalizePath)
-import Baerbel.Runtime.Error (ioResult)
 
-loadInstallation :: FilePath -> FilePath -> IO (Result (Either Settings (Settings, Map Text Subscriber)))
-loadInstallation globalPath path = do
-  global <- loadGlobal globalPath
-  config <- readConfig "user_config" path
-  continue check ((,) <$> global <*> config)
+loadInstallation :: FilePath -> Maybe FilePath -> IO (Result (Either Settings (Settings, FilePath, Map Text Subscriber)))
+loadInstallation path local = do
+  global <- loadGlobal path
+  continue configure global
   where
-    check (global, config) = case installationAccounts config of
-      Nothing -> fmap (fmap Left) (validate (baseSettings global config))
-      Just _ -> continue (prepare (baseSettings global config)) (accountSettings global config)
-    validate settings = continue (validatePaths globalPath path) (validateSettings settings)
-    prepare shared accounts = runExceptT $ do
-      ready <- ExceptT (fmap sequenceA (traverse prepareUser accounts))
-      ExceptT (isolated ready)
-      pure (Right (shared, ready))
-    prepareUser sub = fmap (fmap (\settings -> sub {subscriberSettings = settings})) (validate (subscriberSettings sub))
-
-baseSettings :: Global -> Installation -> Settings
-baseSettings global = resolveSettings global . User . installationEnvironment
-
-isolated :: Map Text Subscriber -> IO (Result ())
-isolated accounts = mapResult (validateBindings accounts) paths
-  where
-    paths = ioResult "account_storage_unavailable" (traverse canonicalPaths accounts)
-    canonicalPaths = traverse canonicalizePath . statePaths . subscriberSettings
-
-statePaths :: Settings -> [FilePath]
-statePaths settings = [T.unpack path | key <- accountStateKeys, let path = setting settings key, not (T.null path), active key]
-  where
-    active "PHONE_ASSISTANT_GMAIL_STATE_FILE" = configured "PHONE_ASSISTANT_GMAIL_TOKEN_FILE"
-    active "PHONE_ASSISTANT_CALENDAR_STATE_FILE" = configured "PHONE_ASSISTANT_CALENDAR_TOKEN_FILE"
-    active key | key `elem` ["PHONE_ASSISTANT_SMS_STATE_FILE", "INCOMING_EVENTS_FILE", "INCOMING_EVENTS_STATE_FILE"] =
-      setting settings "INCOMING_SMS_ENABLED" `elem` ["true", "1"]
-    active _ = True
-    configured key = not (T.null (setting settings key))
-
-validateBindings :: Map Text Subscriber -> Map Text [FilePath] -> Result ()
-validateBindings accounts paths = unless (unique belonging && one "HOME_PHONE_ENABLED" && one "INCOMING_SMS_ENABLED") invalid
-  where
-    belonging = concatMap distinct (Map.elems paths)
-    distinct = Set.toList . Set.fromList
-    one key = length (filter (enabled key) (Map.elems accounts)) <= 1
-    enabled key sub = setting (subscriberSettings sub) key `elem` ["true", "1"]
-    invalid = Left (failure "account_resources_overlap")
+    configure global = case (globalInstallation global, local) of
+      (Just installation, Nothing) -> configureAccounts (global {globalInstallation = Nothing}) installation
+      (Nothing, Just config) -> fmap (fmap Left) (configureLocal global config)
+      _ -> pure (Left (failure "invalid_configuration_scope"))
+    configureLocal global config = do
+      user <- readConfig "user_config" config
+      continue (validate config . resolveSettings global) user
+    configureAccounts global installation = runExceptT $ do
+      let database = installationDatabase installation
+          values = installationEnvironment installation
+      accounts <- ExceptT (readAccounts database)
+      subscribers <- except (accountSettings global values accounts)
+      ready <- ExceptT (fmap sequenceA (traverse prepare subscribers))
+      pure (Right (resolveSettings global (User values), database, ready))
+    validate config settings = continue (validatePaths path config) (validateSettings settings)
+    prepare sub = fmap (fmap (\settings -> sub {subscriberSettings = settings})) (validate path (subscriberSettings sub))
 
 data AccountIngress = AccountIngress
   { identifyAccount :: Bool -> Text -> IO (Result Text)
@@ -135,22 +111,35 @@ callerAccount accounts headers = case Map.lookup "agi_context" headers of
 denied :: Result a
 denied = Left (failure "account_authentication_failed")
 
-issuePin :: FilePath -> FilePath -> Text -> IO (Result ())
-issuePin globalPath path ident = runExceptT $ do
-  global <- ExceptT (loadGlobal globalPath)
-  config <- ExceptT (readConfig "user_config" path)
-  let accounts = fromMaybe Map.empty (installationAccounts config)
-  account <- except (maybe (Left (failure "unknown_account")) Right (Map.lookup ident accounts))
-  digits <- lift (randomDigits 4)
-  salt <- lift (getRandomBytes 16)
-  let encoded = encodePinHash salt digits
-      values = Map.insert "PHONE_ASSISTANT_PRIVATE_PIN_HASH" encoded (accountEnvironment account)
-      updated = account {accountEnvironment = values}
-      prepared = config {installationAccounts = Just (Map.insert ident updated accounts)}
-  subscribers <- except (accountSettings global prepared)
-  subscriber <- except (maybe (Left (failure "unknown_account")) Right (Map.lookup ident subscribers))
-  let content = encodeBytes prepared
-  ExceptT (sendPin path content (subscriberSettings subscriber) (accountPhone account) digits)
+withAccount :: FilePath -> Text -> (AccountStore -> Subscriber -> IO (Result ())) -> IO (Result ())
+withAccount globalPath ident action = do
+  loaded <- loadInstallation globalPath Nothing
+  continue (uncurry action) (loaded >>= selected)
+  where
+    selected (Right (_, database, subscribers)) = case Map.lookup ident subscribers of
+      Just sub -> Right (AccountStore database ident, sub)
+      Nothing -> Left (failure "unknown_account")
+    selected (Left _) = Left (failure "user_database_required")
+
+issuePin :: FilePath -> Text -> IO (Result ())
+issuePin globalPath ident = withAccount globalPath ident issue
+  where
+    issue store sub = do
+      digits <- randomDigits 4
+      salt <- getRandomBytes 16
+      let encoded = encodePinHash salt digits
+          phone = accountPhone (subscriberAccount sub)
+          save = updatePin store encoded
+      sendPin save (subscriberSettings sub) phone digits
+
+connectGoogle :: FilePath -> Text -> Text -> FilePath -> IO (Result ())
+connectGoogle globalPath ident service token = withAccount globalPath ident connect
+  where
+    connect store sub = continue load (googleAccount service >>= googleRequirements (subscriberSettings sub))
+      where
+        load (rules, required, allowed) = do
+          credentials <- loadCredentials rules required allowed token
+          continue (saveGoogleCredentials store service) credentials
 
 randomDigits :: Int -> IO Bytes.ByteString
 randomDigits count = do
@@ -161,8 +150,8 @@ randomDigits count = do
     0 -> pure uniform
     _ -> (uniform <>) <$> randomDigits missing
 
-sendPin :: FilePath -> Bytes.ByteString -> Settings -> Text -> Bytes.ByteString -> IO (Result ())
-sendPin path content settings phone digits = continue deliver request
+sendPin :: IO (Result ()) -> Settings -> Text -> Bytes.ByteString -> IO (Result ())
+sendPin save settings phone digits = continue deliver request
   where
     username = setting settings "PHONE_ASSISTANT_SMS_USERNAME"
     password = setting settings "PHONE_ASSISTANT_SMS_PASSWORD"
@@ -175,7 +164,7 @@ sendPin path content settings phone digits = continue deliver request
     deliver rules = runExceptT $ do
       let message = smsRequest rules credentials body
       sender <- lift newRawSender
-      ExceptT (atomicWrite path content)
+      ExceptT save
       result <- lift (sender message)
       except (delivery (either (const Uncertain) (classify rules) result))
     delivery result = case result of

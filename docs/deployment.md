@@ -24,9 +24,13 @@ Packaging requires committed source and writes `release/baerbel-linux-x86_64.tar
 make install
 ```
 
-This uploads the existing archive and preparation helpers over SSH to `/home/stefan/.cache/baerbel-hs/deploy`, then installs the checksum release directly under `/home/stefan/apps/baerbel/releases/`. It prepares `user.json` with mode `0600` in the private deployment workspace. An existing `/etc/phone-assistant/user.json` is copied; otherwise the server's Python environment parses the readable `/etc/phone-assistant/assistant.env`. The configuration stays on the server, retains existing credential and state paths, and is never printed.
-
-The helper runs `ldd` and the staged Haskell executable's `--check` as `stefan`, the current service user, before selecting `/home/stefan/apps/baerbel/staged`. It prepares the target binary and configuration without sudo, changing the running service, or opening its listeners. Missing dependencies or a failed preflight stop preparation. Asterisk, libsoxr and ffmpeg remain supplied by the server.
+This uploads the archive and helpers over SSH and installs the checksum release under
+`~/apps/baerbel/releases/`. It combines the release template with the private
+installation section, stages `global.json` with mode `0600`, and runs the
+target library and offline executable checks. On the first database
+migration it imports the prior account configuration, memory, Google
+connections, receipts and cursors into `/var/lib/phone-assistant/users.sqlite3`.
+All private data stays on the miniserver.
 
 Remote installation, target library/configuration/native checks and activation passed on 2026-11-25. Post-activation checks confirmed the installed Haskell executable, zero restarts, all three loopback listeners and active Asterisk. The previous Python process exited. See [migration.md](migration.md) for the artifact, timings and verification limits.
 
@@ -36,7 +40,12 @@ Remote installation, target library/configuration/native checks and activation p
 make activate
 ```
 
-This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the prepared private configuration at `/etc/phone-assistant/user.json`, then repeats the executable's `--check` as the service user.
+This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the combined configuration at
+`/etc/phone-assistant/global.json` and repeats the executable's `--check` as
+the service user. The first migration stops the assistant before refreshing
+the imported state so the database captures completed writes. The former account JSON is archived under
+`/var/backups/phone-assistant-users.*`; the source state files are retained
+for recovery. The database release reads user state from SQLite.
 
 Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf`, reloads systemd and restarts the existing `phone-assistant.service`. Systemd stops the previous assistant before starting the selected release; no second assistant service is installed. The helper verifies both assistant and Asterisk are active, checks `/proc/MainPID/exe` against the installed executable, waits three seconds and verifies the same PID again. It reports the executable and effective command.
 
@@ -44,7 +53,7 @@ The Python application under `/home/stefan/apps/assistant`, its virtual environm
 
 ## Activate the two account routes
 
-After staging the account release, run `make activate-accounts` from the
+The original JSON account cutover used `make activate-accounts` from the
 workstation. This command uses sudo on the miniserver. It checks the staged
 private account file and confirms Asterisk is idle before replacing the managed
 entry dialplan. It backs up the existing dialplan, private settings and service

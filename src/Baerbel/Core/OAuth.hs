@@ -61,16 +61,17 @@ credentialSize rules size
   | otherwise = Right ()
 
 validateCredentials :: OAuthRules -> Set Text -> Set Text -> Value -> Result Credentials
-validateCredentials rules required allowed value = decodeValue "invalid_credentials" value >>= validate
+validateCredentials rules required allowed value = decodeValue "invalid_credentials" value >>= checkCredentials rules required allowed
+
+checkCredentials :: OAuthRules -> Set Text -> Set Text -> Credentials -> Result Credentials
+checkCredentials rules required allowed credentials
+  | Set.null required || not (required `Set.isSubsetOf` allowed) = Left (failure "invalid_required_scopes")
+  | not (required `Set.isSubsetOf` grantedScopes credentials && grantedScopes credentials `Set.isSubsetOf` allowed) = Left (failure "invalid_scopes")
+  | credentialType credentials /= "authorized_user" = Left (failure "invalid_credentials")
+  | maybe False (/= oauthEndpoint rules) (credentialEndpoint credentials) = Left (failure "invalid_credentials")
+  | any invalid [clientId credentials, clientSecret credentials, refreshToken credentials] = Left (failure "invalid_credentials")
+  | otherwise = Right credentials
   where
-    validate :: Credentials -> Result Credentials
-    validate credentials
-      | Set.null required || not (required `Set.isSubsetOf` allowed) = Left (failure "invalid_required_scopes")
-      | not (required `Set.isSubsetOf` grantedScopes credentials && grantedScopes credentials `Set.isSubsetOf` allowed) = Left (failure "invalid_scopes")
-      | credentialType credentials /= "authorized_user" = Left (failure "invalid_credentials")
-      | maybe False (/= oauthEndpoint rules) (credentialEndpoint credentials) = Left (failure "invalid_credentials")
-      | any invalid [clientId credentials, clientSecret credentials, refreshToken credentials] = Left (failure "invalid_credentials")
-      | otherwise = Right credentials
     invalid :: Text -> Bool
     invalid field = Text.null field || Text.length field > oauthFieldChars rules
 

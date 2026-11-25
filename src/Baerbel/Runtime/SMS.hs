@@ -1,6 +1,6 @@
 module Baerbel.Runtime.SMS
   ( SMSRules(..), SMSCredentials(..), Delivery(..), Kind(..), Receipt(..)
-  , SMS, boundedSMS, classify, withSMS
+  , SMS, boundedSMS, classify, withSMS, withAccountSMS
   ) where
 
 import Baerbel.Core.SMS
@@ -18,7 +18,7 @@ import Baerbel.Core.SMS
       savedReceipt )
 import Baerbel.Runtime.Error ( Result )
 import Baerbel.Runtime.HTTP ( RawSend )
-import Baerbel.Runtime.Storage ( databaseResult, withDatabase )
+import Baerbel.Runtime.Storage ( AccountStore(..), databaseResult, withDatabase, withAccountDatabase )
 import Control.Concurrent.MVar ( newMVar, withMVar )
 import Control.Monad ( unless )
 import Crypto.Hash ( Digest, SHA256, hash )
@@ -42,10 +42,20 @@ withSMS rules credentials sender path action = withDatabase "sms_state_unavailab
   where
   opened connection = do
     initialize connection
-    gate <- newMVar ()
-    let reserve ident text kind = withMVar gate (const (databaseResult "sms_state_unavailable" (reserveSMS connection ident text kind)))
-        remember ident status = withMVar gate (const (databaseResult "sms_state_unavailable" (rememberSMS connection ident status)))
-    action (deliver rules credentials sender reserve remember)
+    withReceipts rules credentials sender (localReceipts connection) action
+
+withAccountSMS :: SMSRules -> SMSCredentials -> RawSend -> AccountStore -> (SMS -> IO (Result a)) -> IO (Result a)
+withAccountSMS rules credentials sender store action = withAccountDatabase "sms_state_unavailable" store open
+  where
+    open connection = withReceipts rules credentials sender (scopedReceipts connection (accountStoreId store)) action
+
+withReceipts :: SMSRules -> SMSCredentials -> RawSend -> SMSReceipts -> (SMS -> IO (Result a)) -> IO (Result a)
+withReceipts rules credentials sender receipts action = do
+  gate <- newMVar ()
+  let db operation = withMVar gate (const (databaseResult "sms_state_unavailable" operation))
+      reserve ident text kind = db (reserveSMS receipts ident text kind)
+      remember ident status = db (writeSMS receipts ident (deliveryText status))
+  action (deliver rules credentials sender reserve remember)
 
 initialize :: Connection -> IO ()
 initialize connection = do
@@ -56,27 +66,52 @@ initialize connection = do
   unless ("kind" `elem` names) (execute_ connection "ALTER TABLE sms_sends ADD COLUMN kind TEXT NOT NULL DEFAULT 'notification'")
   unless ("fallback" `elem` names) (execute_ connection "ALTER TABLE sms_sends ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0")
 
-reserveSMS :: Connection -> Text -> Text -> Kind -> IO (Maybe Delivery)
-reserveSMS connection ident body kind = withTransaction connection reserve
+data SMSReceipts = SMSReceipts
+  { smsConnection :: Connection
+  , insertSMS :: Text -> Text -> Text -> IO ()
+  , readSMS :: Text -> IO [(Text, Text, Int)]
+  , fallbackSMS :: Text -> Text -> IO ()
+  , writeSMS :: Text -> Text -> IO () }
+
+localReceipts :: Connection -> SMSReceipts
+localReceipts connection = SMSReceipts connection insert readPrevious fallback update
   where
+    insert ident digest kind = execute connection
+      "INSERT OR IGNORE INTO sms_sends VALUES (?, ?, 'uncertain', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 0)" (ident, digest, kind)
+    readPrevious ident = query connection "SELECT status, kind, fallback FROM sms_sends WHERE request_id=?" (Only ident)
+    fallback ident digest = execute connection
+      "UPDATE sms_sends SET status='uncertain', kind='outcome', fallback=1, fingerprint=? WHERE request_id=?" (digest, ident)
+    update ident status = execute connection "UPDATE sms_sends SET status=? WHERE request_id=?" (status, ident)
+
+scopedReceipts :: Connection -> Text -> SMSReceipts
+scopedReceipts connection user = SMSReceipts connection insert readPrevious fallback update
+  where
+    insert ident digest kind = execute connection
+      "INSERT OR IGNORE INTO sms_receipts VALUES (?, ?, ?, 'uncertain', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 0)" (user, ident, digest, kind)
+    readPrevious ident = query connection "SELECT status, kind, fallback FROM sms_receipts WHERE user_id=? AND request_id=?" (user, ident)
+    fallback ident digest = execute connection
+      "UPDATE sms_receipts SET status='uncertain', kind='outcome', fallback=1, fingerprint=? WHERE user_id=? AND request_id=?" (digest, user, ident)
+    update ident status = execute connection "UPDATE sms_receipts SET status=? WHERE user_id=? AND request_id=?" (status, user, ident)
+
+reserveSMS :: SMSReceipts -> Text -> Text -> Kind -> IO (Maybe Delivery)
+reserveSMS receipts ident body kind = withTransaction connection reserve
+  where
+  connection = smsConnection receipts
   digest = Text.pack (show (hash (Text.encodeUtf8 body) :: Digest SHA256))
   reserve = do
-    execute connection "INSERT OR IGNORE INTO sms_sends VALUES (?, ?, 'uncertain', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 0)" (ident, digest, kindText kind)
+    insertSMS receipts ident digest (kindText kind)
     inserted <- changes connection
     reserved inserted
   reserved count
     | count > 0 = pure Nothing
     | otherwise = previous
   previous = do
-    rows <- query connection "SELECT status, kind, fallback FROM sms_sends WHERE request_id=?" (Only ident)
+    rows <- readSMS receipts ident
     let delivery = resumeReservation kind rows
     case delivery of
-      Nothing -> execute connection "UPDATE sms_sends SET status='uncertain', kind='outcome', fallback=1, fingerprint=? WHERE request_id=?" (digest, ident)
+      Nothing -> fallbackSMS receipts ident digest
       Just _ -> pure ()
     pure delivery
-
-rememberSMS :: Connection -> Text -> Delivery -> IO ()
-rememberSMS connection ident status = execute connection "UPDATE sms_sends SET status=? WHERE request_id=?" (deliveryText status, ident)
 
 type Reserve = Text -> Text -> Kind -> IO (Result (Maybe Delivery))
 type Remember = Text -> Delivery -> IO (Result ())

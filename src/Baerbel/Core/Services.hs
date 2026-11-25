@@ -1,5 +1,7 @@
 module Baerbel.Core.Services where
 
+import Baerbel.Core.Config (Settings, rule)
+import Baerbel.Core.OAuth (OAuthRules)
 import Baerbel.Core.Error ( Failure(..), Result, failure )
 import Baerbel.Core.HTTP ( Request(..) )
 import Baerbel.Core.Profile ( ProfileState(..), snapshot )
@@ -7,6 +9,8 @@ import Baerbel.Core.ProviderConfig ( ProfileRules )
 import Data.Aeson
     ( toJSON, FromJSON(..), ToJSON, genericParseJSON, genericToJSON )
 import Data.List ( find )
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text ( Text )
 import GHC.Generics ( Generic )
 import qualified Baerbel.Core.JSON ( jsonOptions, encodeReference )
@@ -20,6 +24,18 @@ accounts :: [AccountSpec]
 accounts = [AccountSpec "gmail" "PHONE_ASSISTANT_GMAIL_TOKEN_FILE" "gmail",
             AccountSpec "calendar" "PHONE_ASSISTANT_CALENDAR_TOKEN_FILE" "calendar",
             AccountSpec "contacts" "PHONE_ASSISTANT_CONTACTS_TOKEN_FILE" "contacts"]
+
+googleAccount :: Text -> Result AccountSpec
+googleAccount service = maybe missing Right (find matches accounts)
+  where
+    matches (AccountSpec name _ _) = name == service
+    missing = Left (failure "unknown_google_service")
+
+googleRequirements :: Settings -> AccountSpec -> Result (OAuthRules, Set Text, Set Text)
+googleRequirements settings (AccountSpec _ _ scopes) = (,,)
+  <$> rule settings "oauth" "refresh"
+  <*> (Set.fromList <$> rule settings "oauth" scopes)
+  <*> (Set.fromList <$> rule settings "oauth" "allowed")
 
 data Mutation = Mutation
   { mutationMethod :: Text, mutationUrl :: Text, mutationDefiniteMinimum :: Int

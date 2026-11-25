@@ -6,7 +6,7 @@ import Baerbel.Runtime.Accounts (AccountIngress(..), accountIngress)
 import Baerbel.Runtime.Config
     ( setting, rule, booleanSetting )
 import Baerbel.Runtime.Error ( Failure(..), Result, failure )
-import Baerbel.Runtime.Events ( withEvents )
+import Baerbel.Runtime.Events ( withEvents, withAccountEvents )
 import Baerbel.Runtime.HTTP ( newRawSender )
 import Baerbel.Runtime.IncomingSession
     ( IncomingServices(..), incomingSession )
@@ -16,13 +16,14 @@ import Baerbel.Runtime.Messages ( Messages, withMessages )
 import Baerbel.Core.PhoneNumber ( numberValidator )
 import Baerbel.Core.Routing ( NumberValidator )
 import Baerbel.Runtime.Pin ( parsePinHash )
-import Baerbel.Runtime.SMS ( SMSCredentials(..), withSMS )
+import Baerbel.Runtime.SMS ( SMSCredentials(..), withSMS, withAccountSMS )
 import Baerbel.Runtime.Server
     ( ServerConfig(..), CallHandler, serve )
 import Baerbel.Runtime.Services
     ( Services(..), withServices, checkServices )
 import Baerbel.Runtime.Session
     ( ownerSession, telephonyConfiguration )
+import Baerbel.Runtime.Storage (AccountStore(..))
 import Baerbel.Runtime.Speech ( withResampler, resample )
 import Baerbel.Runtime.Telephony
     ( newHandoffs,
@@ -48,11 +49,14 @@ import qualified Baerbel.Runtime.Effects as Effects ( continue, runAll )
 import qualified Data.Text as Text ( null, unpack )
 
 checkConfiguration :: Settings -> IO (Result ())
-checkConfiguration settings = Effects.continue check (numberValidator settings)
+checkConfiguration = checkConfigured Nothing
+
+checkConfigured :: Maybe AccountStore -> Settings -> IO (Result ())
+checkConfigured store settings = Effects.continue check (numberValidator settings)
   where
   check _ = do
     checked <- checkNative settings
-    Effects.continue (const (checkServices settings)) checked
+    Effects.continue (const (checkServices store settings)) checked
 
 checkNative :: Settings -> IO (Result ())
 checkNative settings = case pinValid of
@@ -86,11 +90,11 @@ runApplication settings = withLogging logPath (withShutdown . start)
   start output = Effects.continue (startValidated output) (numberValidator settings)
   startValidated output validate = do
     checked <- checkNative settings
-    Effects.continue (const (withServices settings (serveConfigured output validate))) checked
-  serveConfigured output validate services = withNotifications settings output (runConfigured settings validate services output)
+    Effects.continue (const (withServices Nothing settings (serveConfigured output validate))) checked
+  serveConfigured output validate services = withNotifications Nothing settings output (runConfigured settings validate services output)
 
-withNotifications :: Settings -> Report -> (Maybe Messages -> IO (Result a)) -> IO (Result a)
-withNotifications settings output action
+withNotifications :: Maybe AccountStore -> Settings -> Report -> (Maybe Messages -> IO (Result a)) -> IO (Result a)
+withNotifications store settings output action
   | booleanSetting settings "INCOMING_SMS_ENABLED" /= Right True = action Nothing
   | otherwise = Effects.continue open configured
   where
@@ -99,9 +103,14 @@ withNotifications settings output action
   path key = Text.unpack (setting settings key)
   open (smsRules, messageRules, eventRules) = do
     sender <- newRawSender
-    let events messages = withEvents eventRules output messages (path "INCOMING_EVENTS_FILE") (path "INCOMING_EVENTS_STATE_FILE") (action (Just messages))
+    let source = path "INCOMING_EVENTS_FILE"
+        events messages = case store of
+          Just scoped -> withAccountEvents eventRules output messages source scoped (action (Just messages))
+          Nothing -> withEvents eventRules output messages source (path "INCOMING_EVENTS_STATE_FILE") (action (Just messages))
         messageService sms = withMessages messageRules output sms events
-    withSMS smsRules credentials sender (path "PHONE_ASSISTANT_SMS_STATE_FILE") messageService
+    case store of
+      Just scoped -> withAccountSMS smsRules credentials sender scoped messageService
+      Nothing -> withSMS smsRules credentials sender (path "PHONE_ASSISTANT_SMS_STATE_FILE") messageService
 
 runConfigured :: Settings -> NumberValidator -> Services -> Report -> Maybe Messages -> IO (Result ())
 runConfigured settings validate services output messages =
@@ -123,13 +132,14 @@ withHandlers settings validate services output messages action = Effects.continu
         owner = ownerSession settings validate services output ownerRegistry handoffs
     action incoming owner
 
-checkAccounts :: Map Text Subscriber -> IO (Result ())
-checkAccounts = Effects.runAll (checkConfiguration . subscriberSettings) . Map.elems
+checkAccounts :: FilePath -> Map Text Subscriber -> IO (Result ())
+checkAccounts database = Effects.runAll check . Map.toList
+  where check (ident, sub) = checkConfigured (Just (AccountStore database ident)) (subscriberSettings sub)
 
 data AccountCalls = AccountCalls {ownerCall :: CallHandler, publicCall :: Maybe CallHandler}
 
-runAccounts :: Settings -> Map Text Subscriber -> IO (Result ())
-runAccounts shared accounts = withLogging logPath (withShutdown . start)
+runAccounts :: Settings -> FilePath -> Map Text Subscriber -> IO (Result ())
+runAccounts shared database accounts = withLogging logPath (withShutdown . start)
   where
     path = setting shared "PHONE_ASSISTANT_LOG_FILE"
     logPath | Text.null path = Nothing
@@ -137,17 +147,18 @@ runAccounts shared accounts = withLogging logPath (withShutdown . start)
     start output = Effects.continue (open output) (numberValidator shared)
     open output validate = Effects.continue run (accountIngress shared accounts validate)
       where
-      run entry = withAccounts validate output (Map.toList accounts) Map.empty (startAccounts shared validate output entry)
+      run entry = withAccounts database validate output (Map.toList accounts) Map.empty (startAccounts shared validate output entry)
 
-withAccounts :: NumberValidator -> Report -> [(Text, Subscriber)] -> Map Text AccountCalls -> (Map Text AccountCalls -> IO (Result ())) -> IO (Result ())
-withAccounts _ _ [] prepared action = action prepared
-withAccounts validate output ((ident, sub) : rest) prepared action =
-  withServices settings withNotificationsFor
+withAccounts :: FilePath -> NumberValidator -> Report -> [(Text, Subscriber)] -> Map Text AccountCalls -> (Map Text AccountCalls -> IO (Result ())) -> IO (Result ())
+withAccounts _ _ _ [] prepared action = action prepared
+withAccounts database validate output ((ident, sub) : rest) prepared action =
+  withServices store settings withNotificationsFor
   where
     settings = subscriberSettings sub
-    withNotificationsFor services = withNotifications settings output (handlers services)
+    store = Just (AccountStore database ident)
+    withNotificationsFor services = withNotifications store settings output (handlers services)
     handlers services messages = withHandlers settings validate services output messages register
-    register incoming owner = withAccounts validate output rest updated action
+    register incoming owner = withAccounts database validate output rest updated action
       where
       calls = AccountCalls owner (publicHandler incoming)
       updated = Map.insert ident calls prepared

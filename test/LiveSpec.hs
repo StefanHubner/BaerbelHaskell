@@ -258,7 +258,7 @@ spec = do
       original <- eitherDecodeFileStrict' "test/fixtures/live-session.json" :: IO (Either String Value)
       case (global, original) of
         (Right values, Right expected) -> do
-          let settings = Config.resolveSettings values (Config.User Map.empty)
+          let settings = Config.resolveSettings values (Config.User (Map.singleton "INCOMING_OWNER_NAME" "Stefan"))
               tools = Config.toolDefinitions settings "WEB_SEARCH_TOOLS" ++ Config.toolDefinitions settings "HELP_TOOLS"
               day = fromGregorian 2026 11 19
               time = secondsToDiffTime 43200
@@ -286,7 +286,7 @@ integratedSession global = do
   sessionConfig <$> buildSessionWithProfile settings now "PROFILE CONTEXT" tools
   where
     pin = "pbkdf2_sha256:600000:" <> T.replicate 32 "0" <> ":" <> T.replicate 64 "0"
-    user = Config.User (Map.singleton "PHONE_ASSISTANT_PRIVATE_PIN_HASH" pin)
+    user = Config.User (Map.fromList [("PHONE_ASSISTANT_PRIVATE_PIN_HASH", pin), ("INCOMING_OWNER_NAME", "Stefan")])
     settings = Config.resolveSettings global user
 
 exercisePin :: Pin.PinGate -> IO (Either Failure ())
