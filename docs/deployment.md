@@ -26,7 +26,7 @@ This uploads the existing archive and preparation helpers over SSH to `/home/ste
 
 The helper runs `ldd` and the staged Haskell executable's `--check` as `stefan`, the current service user, before selecting `/home/stefan/apps/baerbel/staged`. It prepares the target binary and configuration without sudo, changing the running service, or opening its listeners. Missing dependencies or a failed preflight stop preparation. Asterisk, libsoxr and ffmpeg remain supplied by the server.
 
-Remote preparation has not yet been recorded as complete; the workflow itself is not evidence that these checks passed. Local packaging and mocked deployment checks are recorded separately in [migration.md](migration.md).
+Remote installation and preparation passed on 2026-11-25: the actual miniserver resolved every linked library and passed configuration/native audio checks using its existing settings. The activation attempt stopped at `sudo: a password is required`; Python remains active. Only `make activate` with sudo authentication remains. See [migration.md](migration.md) for the installed artifact and evidence.
 
 ## Activate with sudo
 
