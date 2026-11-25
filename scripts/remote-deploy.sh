@@ -104,6 +104,7 @@ activate_prepared() {
 activate_user_database() {
   local release=$1 service_user backup
   require_idle || return
+  asterisk -rx 'dialplan show baerbel-account-entry' | grep -F 'agi://127.0.0.1:4573/account' >/dev/null || return
   service_user=$(systemctl show "$service" --property=User --value) || return
   runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$work/global.json" || return
   backup=$(mktemp -d /var/backups/phone-assistant-users.XXXXXXXX) || return

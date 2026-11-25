@@ -96,6 +96,28 @@ def copy_account(db: sqlite3.Connection, user: str, account: Account, defaults: 
     copy_receipts(db, user, account, resolved)
 
 
+def copy_accounts(db: sqlite3.Connection, accounts: dict[str, Account], defaults: dict[str, str]) -> None:
+    db.execute("PRAGMA foreign_keys = ON")
+    with db:
+        for user, account in accounts.items():
+            copy_account(db, user, account, defaults)
+
+
+def import_connections(binary: Path, config_path: Path, user: str, account: Account) -> bool:
+    for service in ("gmail", "calendar", "contacts"):
+        key = f"PHONE_ASSISTANT_{service.upper()}_TOKEN_FILE"
+        path = account["environment"].get(key, "")
+        if not path:
+            continue
+        status = subprocess.run(
+            [str(binary), "--connect-google", str(config_path), user, service,
+             str(Path(path).expanduser())], stdout=subprocess.DEVNULL, check=False,
+        )
+        if status.returncode:
+            return False
+    return True
+
+
 def migrate(global_path: Path, legacy_path: Path, config_path: Path, database: Path, create: bool) -> int:
     legacy = cast(Legacy, json.loads(legacy_path.read_text()))
     defaults: dict[str, str] = json.loads(global_path.read_text())["defaults"]
@@ -105,26 +127,13 @@ def migrate(global_path: Path, legacy_path: Path, config_path: Path, database: P
         with closing(sqlite3.connect(database)) as db:
             db.executescript(global_path.with_name("users.sql").read_text())
     with closing(sqlite3.connect(database)) as db:
-        db.execute("PRAGMA foreign_keys = ON")
-        with db:
-            for user, account in legacy["accounts"].items():
-                copy_account(db, user, account, defaults)
+        copy_accounts(db, legacy["accounts"], defaults)
     if create:
         installation: dict[str, object] = {"environment": legacy["environment"], "database": str(database)}
         write_global_config(global_path, config_path, installation)
     binary = global_path.parent.parent / "bin" / "phone-assistant-server"
-    for user, account in legacy["accounts"].items():
-        for service in ("gmail", "calendar", "contacts"):
-            key = f"PHONE_ASSISTANT_{service.upper()}_TOKEN_FILE"
-            path = account["environment"].get(key, "")
-            if path:
-                status = subprocess.run(
-                    [str(binary), "--connect-google", str(config_path), user, service,
-                     str(Path(path).expanduser())], stdout=subprocess.DEVNULL, check=False,
-                )
-                if status.returncode:
-                    return 1
-    return 0
+    return int(not all(import_connections(binary, config_path, user, account)
+                       for user, account in legacy["accounts"].items()))
 
 
 def write_global_config(template: Path, target: Path, installation: dict[str, object]) -> None:
