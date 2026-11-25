@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Baerbel.Runtime.Asterisk (adopt, preview, install, restore) where
 
 import Baerbel.Core.Accounts (validId)
@@ -8,10 +9,11 @@ import Baerbel.Runtime.Error (ioResult)
 import Baerbel.Runtime.Storage (atomicWrite, databaseResult)
 import Control.Monad (unless, void, when)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
+import Data.Char (isDigit)
 import Data.List (isSuffixOf)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (isNothing, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -41,12 +43,13 @@ legacyRoutes input = case Text.words input of
 
 validPhone :: Text -> Bool
 validPhone phone = Text.length phone == 13 && Text.isPrefixOf "+44" phone
-  && Text.all (\char -> char >= '0' && char <= '9') (Text.drop 3 phone)
+  && Text.all isDigit (Text.drop 3 phone)
 
 readManaged :: FilePath -> [FilePath] -> IO (Map FilePath Text)
 readManaged root names = Map.traverseWithKey (const Text.readFile) sources
   where
-    selected name = fmap (\path -> (path, root </> name)) (managedName name)
+    selected name = fmap (,source) (managedName name)
+      where source = root </> name
     sources = Map.fromList (mapMaybe selected (filter (isSuffixOf ".conf") names))
 
 writeSip :: FilePath -> Text -> Sip -> Sip -> IO (Result ())
@@ -134,7 +137,7 @@ applyPlan backup pbx files = runExceptT $ do
 readParents :: FilePath -> [FilePath] -> IO (Map FilePath Text)
 readParents root names = do
   paths <- listDirectory root
-  let parents = filter (\name -> isSuffixOf ".conf" name && managedName name == Nothing) paths
+  let parents = filter (\name -> isSuffixOf ".conf" name && isNothing (managedName name)) paths
       sources = Map.fromList [(path, root </> path) | path <- parents]
   original <- Map.traverseWithKey (const Text.readFile) sources
   pure (Map.mapMaybe changed original)

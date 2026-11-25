@@ -30,7 +30,7 @@ prepare_release() {
     rmdir "$stage"
   fi
   prepare_config "$release/config/global.yaml"
-  env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server"
+  env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server" "$release/bin/asteriskconfig"
   if [[ -f "$work/global.yaml" && -f "$release/deploy/migrate-users.py" ]]; then
     config=("$work/global.yaml")
   else
