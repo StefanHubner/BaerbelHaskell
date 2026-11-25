@@ -5,6 +5,8 @@ dist-newstyle/
 *.dyn_hi
 *.dyn_o
 config/user.json
+/config/asterisk.yaml
+/config/.asterisk-source.*
 *.sqlite3*
 *.wav
 *.mp3

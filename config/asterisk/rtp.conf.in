@@ -1,0 +1,5 @@
+; Included immediately AFTER the [general] header in /etc/asterisk/rtp.conf.
+; These keys must precede existing values: Asterisk reads the FIRST occurrence.
+rtpstart=@@network.rtpStart@@
+rtpend=@@network.rtpEnd@@
+strictrtp=yes

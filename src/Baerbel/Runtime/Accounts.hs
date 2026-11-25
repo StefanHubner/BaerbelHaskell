@@ -6,7 +6,7 @@ import Baerbel.Core.Error (Failure(..), Result, failure)
 import Baerbel.Core.Pin (encodePinHash)
 import Baerbel.Core.Telephony (TelephonyConfig(..), TelephonyRules(..))
 import Baerbel.Runtime.AMI (AMI(..), connectAMI, field, incomingMatch, ownerMatch, variable)
-import Baerbel.Runtime.Config (loadGlobal, readConfig)
+import Baerbel.Runtime.Config (loadFileSettings, loadGlobal)
 import Baerbel.Runtime.ConfigPaths (validatePaths)
 import Baerbel.Runtime.Effects (continue, mapResult, withResult)
 import Baerbel.Runtime.HTTP (newRawSender)
@@ -40,9 +40,7 @@ loadInstallation path local = do
       (Just installation, Nothing) -> configureAccounts (global {globalInstallation = Nothing}) installation
       (Nothing, Just config) -> fmap (fmap Left) (configureLocal global config)
       _ -> pure (Left (failure "invalid_configuration_scope"))
-    configureLocal global config = do
-      user <- readConfig "user_config" config
-      continue (validate config . resolveSettings global) user
+    configureLocal global config = loadFileSettings path config global >>= continue (validate config)
     configureAccounts global installation = runExceptT $ do
       let database = installationDatabase installation
           values = installationEnvironment installation

@@ -26,4 +26,4 @@ The account deployment adds a shared Standard entry number and a dedicated Pro r
 
 The Bristol correction gives the shared number and dedicated Pro number separate Asterisk SIP credentials. The routing trace records only the selected route and outcome.
 
-The `asteriskconfig` installer combines private Asterisk YAML with the shared and dedicated SIP accounts in SQLite. It places generated module configuration in one `phone-assistant/` directory.
+The `asteriskconfig` installer combines the private site YAML, checked-in Asterisk templates and SIP account rows in SQLite. It applies generated files and module includes to an existing or stock Asterisk installation. The site YAML and shared assistant instructions are installed beside `global.yaml` under `/etc/phone-assistant/`.

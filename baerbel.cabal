@@ -11,6 +11,21 @@ license:        NONE
 build-type:     Custom
 extra-source-files:
     config/global.yaml
+    config/instructions.yaml
+    config/asterisk/extensions.conf.in
+    config/asterisk/forwarding-cdr-options.conf.in
+    config/asterisk/forwarding-cdr.conf.in
+    config/asterisk/manager.conf.in
+    config/asterisk/options.conf.in
+    config/asterisk/outbound.conf.in
+    config/asterisk/pjsip.conf.in
+    config/asterisk/pro-pjsip.conf.in
+    config/asterisk/routing.conf.in
+    config/asterisk/rtp.conf.in
+    config/asterisk/telematica-cdr-custom.conf.in
+    config/asterisk/telematica-cdr.conf.in
+    config/asterisk/telematica-extensions.conf.in
+    config/asterisk/telematica-pjsip.conf.in
     config/users.sql
     config/phone-numbers.json
     test/live/config.json
@@ -55,6 +70,7 @@ extra-source-files:
     scripts/render-bristol-sip.py
     scripts/trace-carrier.py
     scripts/update-phone-metadata.py
+    deploy/file-storage.yaml
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service
     deploy/asterisk/account-entry.conf.in

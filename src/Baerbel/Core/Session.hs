@@ -1,8 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Baerbel.Core.Session where
 
-import Baerbel.Core.JSON (jsonOptions)
-import GHC.Generics (Generic)
 import Baerbel.Core.Config (Settings, setting, rule, booleanSetting, integerSetting, numericSetting, toolDefinitions)
 import Baerbel.Core.EndCall (EndConfig(..))
 import Baerbel.Core.Telephony (TelephonyConfig(..))
@@ -12,7 +10,7 @@ import qualified Baerbel.Core.Pin as Pin
 import Baerbel.Core.Error (Result, failure)
 import Baerbel.Core.Live (LiveConfig(..), ToolLimits(..))
 import Baerbel.Core.Protocol (SessionRole(..), SessionSettings(..), sessionConfig, voiceIdentity, greetingCommand)
-import Data.Aeson (Value, FromJSON(..), genericParseJSON, object, (.=))
+import Data.Aeson (Value, FromJSON)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -40,7 +38,7 @@ liveConfiguration settings session greeting = do
     <*> runtime "frame_bytes" <*> runtime "frame_micros"
     <*> runtime "input_rate" <*> runtime "provider_rate" <*> runtime "queue_frames"
     <*> runtime "startup_frames" <*> pure limits <*> pure ordinaryMicros
-    <*> runtime "voice_test_micros" <*> pure callMicros <*> rule settings "live" "mutation_errors"
+    <*> pure callMicros <*> rule settings "live" "mutation_errors"
     <*> rule settings "live" "background" <*> runtime "websocket_message_bytes"
     <*> rule settings "live" "error_fields"
 
@@ -104,35 +102,3 @@ hostedTools :: Settings -> [Value]
 hostedTools settings
   | booleanSetting settings "PHONE_ASSISTANT_WEB_SEARCH" == Right True = toolDefinitions settings "WEB_SEARCH_TOOLS"
   | otherwise = []
-
-data VoiceSample = VoiceSample
-  { sampleVoice :: Text, sampleLabel :: Text, samplePreset :: Text
-  , sampleText :: Text, sampleInstructions :: Text
-  } deriving (Eq, Show, Generic)
-instance FromJSON VoiceSample where parseJSON = genericParseJSON (jsonOptions 6)
-
-voiceSamples :: Settings -> Result [VoiceSample]
-voiceSamples settings = do
-  model <- rule settings "voice_audition" "MODEL"
-  samples model
-  where
-    samples model
-      | setting settings "OPENAI_LIVE_MODEL" == model = rule settings "voice_audition" "samples"
-      | otherwise = Left (failure "voice_test_requires_current_live_model")
-
-sampleResult :: Settings -> [VoiceSample] -> Result () -> Result Value
-sampleResult settings samples result = result >> Right output
-  where
-    output = object ["status" .= ("ok" :: Text), "played" .= map sampleLabel samples,
-      "model" .= setting settings "OPENAI_LIVE_MODEL", "mode" .= ("live" :: Text), "preference_saved" .= False]
-
-sampleConfiguration :: Settings -> VoiceSample -> Result (LiveConfig, Int, Int, Int)
-sampleConfiguration settings sample = do
-  instructions <- rule settings "voice_audition" "sampleInstructions"
-  rate <- rule settings "runtime" "provider_rate"
-  let content = instructions <> sampleInstructions sample <> "\nLine: " <> sampleText sample
-      session = SessionSettings Announcement (setting settings "OPENAI_LIVE_MODEL")
-        (sampleVoice sample) content "" "" "" "" 0 [] rate
-  cfg <- liveConfiguration settings session (sampleText sample)
-  (,,,) cfg <$> rule settings "voice_audition" "sampleQuietMicros"
-    <*> rule settings "voice_audition" "sampleMicros" <*> rule settings "voice_audition" "sampleGapMicros"

@@ -521,7 +521,6 @@ boundedTool runtime execute call arguments = do
     name = toolName call
     mutation = Map.lookup name (liveMutationErrors cfg)
     duration | name == "direct_call" = liveDirectMicros cfg
-             | name == "voice_test" = liveVoiceMicros cfg
              | otherwise = liveToolMicros cfg
     timedOut = maybe (failure "tool_failed") (`Failure` True) mutation
     validateOutput value
@@ -696,7 +695,7 @@ reportProgress runtime previous = do
     "pending_requests" .= Set.size (pendingDelegations state)]))
   Effects.continue (const (reportProgress runtime next)) sent
   where
-    pendingControl state call = toolName call `elem` ["direct_call", "voice_test", "end_call"] && Map.notMember (toolCallId call) (outputs state)
+    pendingControl state call = toolName call `elem` ["direct_call", "end_call"] && Map.notMember (toolCallId call) (outputs state)
 
 recoverHandoff :: Runtime -> Value -> IO (Result ())
 recoverHandoff runtime event = do

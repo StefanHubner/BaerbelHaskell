@@ -2,13 +2,14 @@ module Baerbel.Core.Config where
 
 import Baerbel.Core.Error ( Result, failure )
 import Baerbel.Core.JSON ( camelOptions, decodeValue )
-import Data.Aeson ( FromJSON(..), Options(rejectUnknownFields), Value, genericParseJSON, toJSON )
+import Data.Aeson ( FromJSON(..), Options(rejectUnknownFields), Value(..), genericParseJSON, toJSON )
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Map.Strict ( Map )
 import Data.Text ( Text )
 import GHC.Generics ( Generic )
 import Text.Read ( readMaybe )
 import qualified Data.Map.Strict as Map
-    ( empty, insert, lookup, union, findWithDefault, adjust )
+    ( empty, insert, lookup, union, unionWith, findWithDefault, adjust )
 import qualified Data.Text as Text ( toLower, unpack, replace, null )
 
 data Global = Global
@@ -19,7 +20,28 @@ data Global = Global
   } deriving (Generic)
 
 instance FromJSON Global where
-  parseJSON = genericParseJSON ((camelOptions 6) {rejectUnknownFields = True})
+  parseJSON = genericParseJSON ((camelOptions 6) {rejectUnknownFields = True}) . addToolDefault
+    where
+      addToolDefault (Object fields) = Object (KeyMap.union fields (KeyMap.singleton "tools" (Object KeyMap.empty)))
+      addToolDefault value = value
+
+data Instructions = Instructions
+  { instructionsDefaults :: Map Text Text
+  , instructionsRules :: Map Text (Map Text Value)
+  , instructionsTools :: Map Text [Value]
+  } deriving (Generic)
+
+instance FromJSON Instructions where
+  parseJSON = genericParseJSON ((camelOptions 12) {rejectUnknownFields = True})
+
+withInstructions :: Global -> Instructions -> Global
+withInstructions global content = global {globalDefaults = defaults, globalRules = rules, globalTools = tools}
+  where
+    defaults = Map.union (instructionsDefaults content) (globalDefaults global)
+    rules = Map.unionWith (Map.unionWith mergeRule) (instructionsRules content) (globalRules global)
+    tools = Map.union (instructionsTools content) (globalTools global)
+    mergeRule (Object prompt) (Object policy) = Object (KeyMap.unionWith mergeRule prompt policy)
+    mergeRule prompt _ = prompt
 
 data Installation = Installation
   { installationEnvironment :: Map Text Text, installationDatabase :: FilePath }
@@ -33,6 +55,20 @@ newtype User = User { userEnvironment :: Map Text Text }
 
 instance FromJSON User where
   parseJSON = genericParseJSON (camelOptions 4)
+
+data FileStorage = FileStorage
+  { fileStorageDefaults :: Map Text Text, fileStoragePaths :: [Value] }
+  deriving (Generic)
+
+instance FromJSON FileStorage where
+  parseJSON = genericParseJSON ((camelOptions 11) {rejectUnknownFields = True})
+
+withFileStorage :: Global -> FileStorage -> Global
+withFileStorage global storage = global {globalDefaults = defaults, globalRules = rules}
+  where
+    defaults = Map.union (globalDefaults global) (fileStorageDefaults storage)
+    paths = Map.insert "paths" (toJSON (fileStoragePaths storage))
+    rules = Map.adjust paths "validation" (globalRules global)
 
 data Settings = Settings
   { settingsGlobal :: Global

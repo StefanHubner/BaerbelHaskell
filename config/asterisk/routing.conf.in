@@ -1,0 +1,16 @@
+; Generated private routing settings.
+[globals]
+PA_OWNER_MOBILE=@@LOCAL_PHONE@@
+PA_AA_DID=@@SHARED_DID@@
+PA_AA_CONTACT=@@routing.sharedContact@@
+PA_FORWARD_ENABLED=@@routing.forwardEnabled@@
+PA_INCOMING_SCREENING_ENABLED=@@routing.screeningEnabled@@
+PA_HOME_PHONE_ENABLED=@@routing.handsetEnabled@@
+PA_INCOMING_MESSAGES_ENABLED=@@routing.messagesEnabled@@
+PA_INCOMING_SMS_ENABLED=@@routing.smsEnabled@@
+PA_INCOMING_EVENTS_PATH=/var/lib/phone-assistant-incoming-events/calls.csv
+PA_FORWARD_TIMEOUT=@@routing.forwardTimeout@@
+PA_FORWARD_LIMIT=@@routing.forwardLimit@@
+PA_TELEMATICA_OUTBOUND_ENABLED=@@routing.telematicaOutboundEnabled@@
+PA_TELEMATICA_CLI=
+@@telematica.callerId@@

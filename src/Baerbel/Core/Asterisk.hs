@@ -1,5 +1,6 @@
 module Baerbel.Core.Asterisk
-  ( Pbx(..), Sip(..), Roster(..), capture, render, managedName, includePaths ) where
+  ( Pbx(..), Site(..), Sip(..), ProLine(..), Roster(..), capture, render, renderSite
+  , managedName, includePaths, wireModules, moduleNames, templateNames, proEndpoint ) where
 
 import Baerbel.Core.Error (Result, failure)
 import Baerbel.Core.JSON (camelOptions)
@@ -17,8 +18,14 @@ data Pbx = Pbx
 instance FromJSON Pbx where parseJSON = genericParseJSON ((camelOptions 3) {rejectUnknownFields = True})
 instance ToJSON Pbx where toJSON = genericToJSON (camelOptions 3)
 
+data Site = Site
+  { siteDirectory :: FilePath, siteLocalAccount :: Text, siteSettings :: Map Text (Map Text Text) }
+  deriving (Generic)
+instance FromJSON Site where parseJSON = genericParseJSON ((camelOptions 4) {rejectUnknownFields = True})
+
 data Sip = Sip {sipNumber :: Text, sipUser :: Text, sipPassword :: Text}
-data Roster = Roster {standardSip :: Sip, proSip :: Map Text Sip}
+data ProLine = ProLine {proLineSip :: Sip, proLinePhone :: Text}
+data Roster = Roster {standardSip :: Sip, proSip :: Map Text ProLine}
 
 managedName :: FilePath -> Maybe FilePath
 managedName name = stripPrefix "phone-assistant-" name >>= valid
@@ -40,10 +47,10 @@ capture root previous primary shared dedicated files = do
 
 render :: Pbx -> Roster -> Result (Map FilePath Text)
 render pbx roster = do
-  primary <- required (pbxPrimaryPro pbx) (proSip roster)
+  primary <- proLineSip <$> required (pbxPrimaryPro pbx) (proSip roster)
   source <- required "bristol-pjsip.conf" (pbxFiles pbx)
   dialplan <- required "extensions.conf" (pbxFiles pbx)
-  let others = Map.delete (pbxPrimaryPro pbx) (proSip roster)
+  let others = Map.map proLineSip (Map.delete (pbxPrimaryPro pbx) (proSip roster))
   routes <- extendRoutes dialplan others
   let shared = standardSip roster
       replacements = sipFields "SHARED" shared ++ sipFields "PRO" primary ++ [("@@PRIMARY_PRO@@", pbxPrimaryPro pbx)]
@@ -52,9 +59,52 @@ render pbx roster = do
       sip = replaceAll replacements source <> Text.concat (Map.elems additional)
       filled = Map.insert "extensions.conf" (replaceAll replacements routes) prepared
       files = Map.insert "bristol-pjsip.conf" sip filled
-  case all validFile (Map.toList files) of
-    True -> Right (Map.map (includePaths (Map.keys files)) files)
-    False -> Left (failure "invalid_asterisk_templates")
+  finishFiles files
+
+renderSite :: Site -> Roster -> Map FilePath Text -> Result (Map FilePath Text)
+renderSite site roster templates = do
+  local <- required account linesByUser
+  proTemplate <- required "pro-pjsip.conf" templates
+  carrier <- required "telematica" (siteSettings site)
+  carrierDid <- required "number" carrier
+  let extras = Map.keys (Map.delete account linesByUser)
+      plan = localFields local ++ proRoutes account extras ++ siteFields site
+      fields = plan ++ sipFields "SHARED" (standardSip roster) ++ [("@@TELEMATICA_DIGITS@@", Text.drop 1 carrierDid)]
+      files = Map.map (replaceAll fields) templates
+      pro = Map.elems (Map.mapWithKey (renderPro fields proTemplate) linesByUser)
+  finishFiles (Map.insert "pro-pjsip.conf" (Text.intercalate "\n" pro) files)
+  where
+    account = siteLocalAccount site
+    linesByUser = proSip roster
+    localFields local = [("@@LOCAL_ACCOUNT@@", account), ("@@LOCAL_PHONE@@", proLinePhone local)
+      , ("@@LOCAL_DID@@", sipNumber (proLineSip local))]
+
+siteFields :: Site -> [(Text, Text)]
+siteFields = concatMap fields . Map.toList . siteSettings
+  where fields (group, values) = [("@@" <> group <> "." <> key <> "@@", value) | (key, value) <- Map.toList values]
+
+renderPro :: [(Text, Text)] -> Text -> Text -> ProLine -> Text
+renderPro fields source ident line = replaceAll replacements source
+  where replacements = ("@@ENDPOINT@@", proEndpoint ident) : sipFields "SIP" (proLineSip line) ++ fields
+
+proEndpoint :: Text -> Text
+proEndpoint ident = "phone-assistant-aa-pro-" <> ident
+
+proRoutes :: Text -> [Text] -> [(Text, Text)]
+proRoutes local extra = [("@@PRO_ENTRIES@@", entry local "dedicated" <> entries), ("@@PRO_CONTEXTS@@", contexts)]
+  where
+    entries = Text.concat [entry ident ("baerbel-pro-" <> ident <> ",s,1") | ident <- extra]
+    contexts = Text.concat (map proContext extra)
+    entry ident target = " same => n,GotoIf($[\"${CHANNEL(endpoint)}\"=\"" <> proEndpoint ident <> "\"]?" <> target <> ")\n"
+
+proContext :: Text -> Text
+proContext ident = "\n[baerbel-pro-" <> ident <> "]\nexten => s,1,Set(PA_ENTRY=" <> ident <> ")\n"
+  <> " same => n,Set(PA_TRACE_ROUTE=pro-" <> ident <> ")\n same => n,Goto(baerbel-account-entry,s,1)\n"
+
+finishFiles :: Map FilePath Text -> Result (Map FilePath Text)
+finishFiles files
+  | all validFile (Map.toList files) = Right (Map.map (includePaths (Map.keys files)) files)
+  | otherwise = Left (failure "invalid_asterisk_templates")
 
 validFile :: (FilePath, Text) -> Bool
 validFile (path, content) = managedName ("phone-assistant-" <> path) == Just path
@@ -111,7 +161,7 @@ replaceAll fields source = foldl' replace source fields
 extraSip :: Text -> Text -> Sip -> Text
 extraSip source ident sip = "\n" <> replaceAll fields source
   where
-    endpoint = "phone-assistant-aa-pro-" <> ident
+    endpoint = proEndpoint ident
     fields = ("phone-assistant-aa-bristol", endpoint) : sipFields "PRO" sip
 
 extendRoutes :: Text -> Map Text Sip -> Result Text
@@ -125,9 +175,7 @@ extendRoutes source extra
     preface = "exten => s,1,NoOp(Baerbel SIP account)\n"
     matches = Text.concat (map select (Map.keys extra))
     select ident = " same => n,GotoIf($[\"${CHANNEL(endpoint)}\"=\"phone-assistant-aa-pro-" <> ident <> "\"]?baerbel-pro-" <> ident <> ",s,1)\n"
-    contexts = Text.concat (map context (Map.keys extra))
-    context ident = "\n[baerbel-pro-" <> ident <> "]\nexten => s,1,Set(PA_ENTRY=" <> ident <> ")\n"
-      <> " same => n,Set(PA_TRACE_ROUTE=pro-" <> ident <> ")\n same => n,Goto(baerbel-account-entry,s,1)\n"
+    contexts = Text.concat (map proContext (Map.keys extra))
 
 includePaths :: [FilePath] -> Text -> Text
 includePaths paths source = Text.intercalate "\n" (map change rows)
@@ -136,5 +184,100 @@ includePaths paths source = Text.intercalate "\n" (map change rows)
     fields = map relocation paths
     relocation name = ("phone-assistant-" <> Text.pack name, "phone-assistant/" <> Text.pack name)
     change line
-      | any (\prefix -> Text.isPrefixOf prefix (Text.stripStart line)) ["#include", "#tryinclude"] = replaceAll fields line
+      | includeDirective line = replaceAll fields line
       | otherwise = line
+
+includeDirective :: Text -> Bool
+includeDirective line = any prefix ["#include", "#tryinclude"]
+  where prefix value = Text.isPrefixOf value (Text.stripStart line)
+
+data Placement = Append | Start Text | End Text
+
+modules :: Map FilePath (Placement, [FilePath])
+modules = Map.fromList
+  [ ("asterisk.conf", (Append, ["options.conf"]))
+  , ("pjsip.conf", (Append, ["pjsip.conf", "outbound.conf", "pro-pjsip.conf", "telematica-pjsip.conf"]))
+  , ("extensions.conf", (Append, ["extensions.conf", "routing.conf", "telematica-extensions.conf"]))
+  , ("manager.conf", (Append, ["manager.conf"]))
+  , ("rtp.conf", (Start "general", ["rtp.conf"]))
+  , ("cdr.conf", (Start "general", ["telematica-cdr.conf", "forwarding-cdr-options.conf"]))
+  , ("cdr_custom.conf", (End "mappings", ["telematica-cdr-custom.conf", "forwarding-cdr.conf"])) ]
+
+moduleNames :: [FilePath]
+moduleNames = Map.keys modules
+
+templateNames :: [FilePath]
+templateNames = concatMap snd (Map.elems modules)
+
+wireModules :: [FilePath] -> FilePath -> Text -> Text
+wireModules names name source = case Map.lookup name modules of
+  Just (placement, fragments) -> wire placement (filter (`elem` names) fragments)
+  Nothing -> source
+  where
+    paths = includePaths names (Text.replace "phone-assistant/bristol-pjsip.conf" "phone-assistant/pro-pjsip.conf" source)
+    ordered = case name of
+      "pjsip.conf" -> preferHeaders paths
+      _ -> paths
+    wire placement fragments = insertIncludes placement missing ordered
+      where
+        existing = map includeTarget (Text.lines ordered)
+        missing = ["#include " <> target | fragment <- fragments
+          , let target = "phone-assistant/" <> Text.pack fragment, Just target `notElem` existing]
+
+includeTarget :: Text -> Maybe Text
+includeTarget line
+  | includeDirective line = Just target
+  | otherwise = Nothing
+  where
+    value = Text.takeWhile (/= ';') (Text.dropWhile (/= ' ') (Text.replace "\t" " " (Text.stripStart line)))
+    target = Text.dropAround (`elem` (" \"<>" :: String)) value
+
+insertIncludes :: Placement -> [Text] -> Text -> Text
+insertIncludes _ [] source = source
+insertIncludes Append includes source = Text.stripEnd source <> "\n\n" <> Text.unlines includes
+insertIncludes (Start category) includes source = insertCategory (const 0) category includes source
+insertIncludes (End category) includes source = insertCategory (length . takeWhile (not . sectionLine)) category includes source
+
+insertCategory :: ([Text] -> Int) -> Text -> [Text] -> Text -> Text
+insertCategory position category includes source = Text.unlines updated
+  where
+    header = "[" <> category <> "]"
+    isHeader = (== header) . Text.strip . Text.takeWhile (/= ';')
+    updated = case break isHeader (Text.lines source) of
+      (before, []) -> before ++ ["", header] ++ includes
+      (before, start : body) -> before ++ [start] ++ insert body
+    insert body = a ++ includes ++ b
+      where (a, b) = splitAt (position body) body
+
+preferHeaders :: Text -> Text
+preferHeaders source = case Text.splitOn "," <$> identifierOrder source of
+  Just order | "ip" `elem` drop 1 (dropWhile (/= "header") (map Text.strip order)) -> source
+  _ -> useIdentifierOrder "header,ip,username,anonymous" source
+
+identifierOrder :: Text -> Maybe Text
+identifierOrder source = case filter orderLine (Text.lines source) of
+  line : _ -> Just (orderValue line)
+  [] -> Nothing
+
+useIdentifierOrder :: Text -> Text -> Text
+useIdentifierOrder order source
+  | identifierOrder source == Just order = source
+  | otherwise = Text.intercalate "\n" updated
+  where
+    rows = Text.splitOn "\n" source
+    setting = "endpoint_identifier_order=" <> order
+    updated = case break orderLine rows of
+      (before, _ : after) -> before ++ [setting] ++ after
+      _ -> insertGlobal setting rows
+
+insertGlobal :: Text -> [Text] -> [Text]
+insertGlobal setting rows = case break global rows of
+  (before, kind : after) -> before ++ [kind, setting] ++ after
+  _ -> rows ++ ["", "[baerbel-identification]", "type=global", setting, ""]
+  where global line = Text.filter (/= ' ') (Text.strip line) == "type=global"
+
+orderLine :: Text -> Bool
+orderLine = (== "endpoint_identifier_order") . Text.strip . Text.takeWhile (/= '=')
+
+orderValue :: Text -> Text
+orderValue = Text.strip . Text.takeWhile (/= ';') . Text.drop 1 . Text.dropWhile (/= '=')

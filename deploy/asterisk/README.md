@@ -1,3 +1,8 @@
+# Legacy account migration
+
+The current site installer uses the templates in `config/asterisk/` and
+`make config`. See [deployment](../../docs/deployment.md#install-asterisk-settings).
+
 The account entry template is applied to the existing managed Asterisk
 dialplan by `make activate-accounts`. The command uses the staged Haskell
 release and two private deployment files. It installs the checked dialplan,

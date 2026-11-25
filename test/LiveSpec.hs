@@ -279,7 +279,7 @@ integratedSession global = do
   forecast <- Config.rule settings "windguru" "WINDGURU_SET_TOOL"
   let first = concatMap (Config.toolDefinitions settings) ["WEB_SEARCH_TOOLS", "PROFILE_TOOLS", "WINDGURU_TOOLS"]
       rest = concatMap (Config.toolDefinitions settings) ["GMAIL_TOOLS", "OWNER_NOTE_TOOLS", "CALENDAR_TOOLS",
-        "MAPS_TOOLS", "CONTACTS_TOOLS", "DIRECT_CALL_TOOLS", "VOICE_TEST_TOOLS", "END_CALL_TOOLS", "HELP_TOOLS"]
+        "MAPS_TOOLS", "CONTACTS_TOOLS", "DIRECT_CALL_TOOLS", "END_CALL_TOOLS", "HELP_TOOLS"]
       tools = first ++ [forecast] ++ rest
       day = fromGregorian 2026 3 29
       time = secondsToDiffTime 43200

@@ -78,7 +78,7 @@ def copy_receipts(db: sqlite3.Connection, user: str, account: Account, values: d
 def copy_account(db: sqlite3.Connection, user: str, account: Account, defaults: dict[str, str]) -> None:
     values = account["environment"]
     resolved = defaults | values
-    path = Path(resolved["PHONE_ASSISTANT_PROFILE_FILE"]).expanduser()
+    path = Path(resolved.get("PHONE_ASSISTANT_PROFILE_FILE", "")).expanduser()
     memory: dict[str, object] = json.loads(path.read_text()) if path.is_file() else {}
     updated = memory.get("updated_at")
     entries = cast(dict[str, str], memory.get("values", {}))
@@ -122,7 +122,10 @@ def import_connections(binary: Path, config_path: Path, user: str, account: Acco
 
 def migrate(global_path: Path, legacy_path: Path, config_path: Path, database: Path, create: bool) -> int:
     legacy = cast(Legacy, json.loads(legacy_path.read_text()))
-    defaults: dict[str, str] = yaml.safe_load(global_path.read_text())["defaults"]
+    storage = global_path.parent.parent / "deploy" / "file-storage.yaml"
+    local: dict[str, str] = yaml.safe_load(storage.read_text())["defaults"]
+    shared: dict[str, str] = yaml.safe_load(global_path.read_text())["defaults"]
+    defaults = local | shared
     if create and not database.exists():
         fd = os.open(database, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)

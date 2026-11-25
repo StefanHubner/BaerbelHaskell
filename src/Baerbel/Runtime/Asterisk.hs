@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-module Baerbel.Runtime.Asterisk (InstallStatus(..), adopt, preview, install, restore) where
+module Baerbel.Runtime.Asterisk (InstallStatus(..), adopt, preview, previewSite, install, installSite, restore) where
 
 import Baerbel.Core.Accounts (validId)
 import Baerbel.Core.Asterisk
@@ -62,9 +62,9 @@ writeSip database previous standard pro = databaseResult "sip_database_unavailab
       execute_ connection "PRAGMA defer_foreign_keys=ON"
       execute connection "UPDATE users SET id='stefan' WHERE id=? AND user_type='Pro'" (Only previous)
       mapM_ (\sql -> execute connection sql (Only previous)) renameStatements
-      execute_ connection "CREATE TABLE sip_accounts (number TEXT PRIMARY KEY, username TEXT NOT NULL, password TEXT NOT NULL, pro_user_id TEXT UNIQUE REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE) WITHOUT ROWID"
-      execute_ connection "CREATE UNIQUE INDEX one_shared_sip ON sip_accounts ((1)) WHERE pro_user_id IS NULL"
-      execute_ connection "CREATE VIEW user_sip_accounts AS SELECT users.id AS user_id, sip_accounts.number AS sip_number FROM users JOIN sip_accounts ON (users.user_type='Standard' AND sip_accounts.pro_user_id IS NULL) OR (users.user_type='Pro' AND sip_accounts.pro_user_id=users.id)"
+      execute_ connection "CREATE TABLE IF NOT EXISTS sip_accounts (number TEXT PRIMARY KEY, username TEXT NOT NULL, password TEXT NOT NULL, pro_user_id TEXT UNIQUE REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE) WITHOUT ROWID"
+      execute_ connection "CREATE UNIQUE INDEX IF NOT EXISTS one_shared_sip ON sip_accounts ((1)) WHERE pro_user_id IS NULL"
+      execute_ connection "CREATE VIEW IF NOT EXISTS user_sip_accounts AS SELECT users.id AS user_id, sip_accounts.number AS sip_number FROM users JOIN sip_accounts ON (users.user_type='Standard' AND sip_accounts.pro_user_id IS NULL) OR (users.user_type='Pro' AND sip_accounts.pro_user_id=users.id)"
       insertSip connection standard Nothing
       insertSip connection pro (Just "stefan")
 
@@ -87,12 +87,13 @@ readRoster :: FilePath -> IO (Result Roster)
 readRoster path = mapResult buildRoster (databaseResult "sip_database_unavailable" (withConnection path fetch))
   where
     fetch connection = (,) <$> query_ connection "SELECT number, username, password FROM sip_accounts WHERE pro_user_id IS NULL"
-      <*> query_ connection "SELECT users.id, number, username, password FROM users LEFT JOIN sip_accounts ON users.id=pro_user_id WHERE user_type='Pro'"
+      <*> query_ connection "SELECT users.id, users.phone, number, username, password FROM users LEFT JOIN sip_accounts ON users.id=pro_user_id WHERE user_type='Pro'"
 
-buildRoster :: ([(Text, Text, Text)], [(Text, Maybe Text, Maybe Text, Maybe Text)]) -> Result Roster
+buildRoster :: ([(Text, Text, Text)], [(Text, Text, Maybe Text, Maybe Text, Maybe Text)]) -> Result Roster
 buildRoster ([(number, user, secret)], dedicated) = Roster <$> sip number user secret <*> (Map.fromList <$> traverse row dedicated)
   where
-    row (ident, Just did, Just name, Just password) | validId ident = (ident,) <$> sip did name password
+    row (ident, phone, Just did, Just name, Just password) | validId ident && validPhone phone = siteLine <$> sip did name password
+      where siteLine line = (ident, ProLine line phone)
     row _ = Left (failure "pro_sip_account_required")
 buildRoster _ = Left (failure "shared_sip_account_required")
 
@@ -102,22 +103,56 @@ sip number user secret
   | otherwise = Left (failure "invalid_sip_account")
   where singleLine value = not (Text.null value || Text.any (\char -> char == '\n' || char == '\r') value)
 
-readPlan :: FilePath -> FilePath -> IO (Result (Pbx, Map FilePath Text))
+readYaml :: Yaml.FromJSON a => FilePath -> IO (Result a)
+readYaml config = mapResult decode loaded
+  where
+    loaded = ioResult "asterisk_yaml_unavailable" (Yaml.decodeFileEither config)
+    decode = either (const (Left (failure "invalid_asterisk_yaml"))) Right
+
+data Plan = Plan
+  {planDirectory :: FilePath, planFiles :: Map FilePath Text, planParents :: Map FilePath Bytes.ByteString
+  , planEndpoints :: [String]}
+
+readPlan :: FilePath -> FilePath -> IO (Result Plan)
 readPlan config database = runExceptT $ do
-  decoded <- ExceptT (ioResult "asterisk_yaml_unavailable" (Yaml.decodeFileEither config))
-  pbx <- except (either (const (Left (failure "invalid_asterisk_yaml"))) Right decoded)
+  pbx <- ExceptT (readYaml config)
   roster <- ExceptT (readRoster database)
   files <- except (render pbx roster)
-  pure (pbx, files)
+  let root = pbxDirectory pbx
+      normalize _ = includePaths (Map.keys files)
+  ExceptT (completePlan root files normalize ["phone-assistant-aa-bristol"])
+
+readSitePlan :: FilePath -> FilePath -> FilePath -> IO (Result Plan)
+readSitePlan config database templates = runExceptT $ do
+  site <- ExceptT (readYaml config)
+  roster <- ExceptT (readRoster database)
+  sources <- ExceptT (ioResult "asterisk_templates_unavailable" (readTemplates templates))
+  files <- except (renderSite site roster sources)
+  let endpoints = map (Text.unpack . proEndpoint) (Map.keys (proSip roster))
+  ExceptT (completePlan (siteDirectory site) files (wireModules (Map.keys files)) endpoints)
+
+readTemplates :: FilePath -> IO (Map FilePath Text)
+readTemplates root = traverse Text.readFile sources
+  where sources = Map.fromList [(name, root </> (name <> ".in")) | name <- templateNames]
+
+completePlan :: FilePath -> Map FilePath Text -> (FilePath -> Text -> Text) -> [String] -> IO (Result Plan)
+completePlan root files wire endpoints = do
+  modules <- ioResult "asterisk_configuration_unavailable" (readModules root)
+  pure (Plan root files . Map.mapMaybeWithKey changed <$> modules <*> pure endpoints)
+  where
+    changed name old
+      | new == old = Nothing
+      | otherwise = Just new
+      where new = Bytes8.pack (Text.unpack (wire name (Text.decodeLatin1 old)))
 
 preview :: FilePath -> FilePath -> FilePath -> IO (Result ())
-preview config database destination = runExceptT $ do
-  (pbx, files) <- ExceptT (readPlan config database)
-  parents <- ExceptT (parentFiles pbx files)
-  ExceptT (saveBytes destination (stagedFiles files parents))
+preview config database destination = readPlan config database >>= continue (savePlan destination)
 
-parentFiles :: Pbx -> Map FilePath Text -> IO (Result (Map FilePath Bytes.ByteString))
-parentFiles pbx files = ioResult "asterisk_configuration_unavailable" (readParents (pbxDirectory pbx) (Map.keys files))
+previewSite :: FilePath -> FilePath -> FilePath -> FilePath -> IO (Result ())
+previewSite config database templates destination = readSitePlan config database templates >>= continue (savePlan destination)
+
+savePlan :: FilePath -> Plan -> IO (Result ())
+savePlan destination plan = saveBytes destination (stagedFiles (planFiles plan) (planParents plan))
 
 stagedFiles :: Map FilePath Text -> Map FilePath Bytes.ByteString -> Map FilePath Bytes.ByteString
 stagedFiles files parents = Map.union (Map.map Text.encodeUtf8 files) (Map.mapKeys ("parent-" <>) parents)
@@ -131,23 +166,24 @@ saveBytes folder files = runExceptT $ do
 data InstallStatus = Updated | Current
 
 install :: FilePath -> FilePath -> FilePath -> IO (Result InstallStatus)
-install config database backup = do
-  plan <- readPlan config database
-  continue (uncurry (applyPlan backup)) plan
+install config database backup = readPlan config database >>= continue (applyPlan backup)
 
-applyPlan :: FilePath -> Pbx -> Map FilePath Text -> IO (Result InstallStatus)
-applyPlan backup pbx files = runExceptT $ do
-  parents <- ExceptT (parentFiles pbx files)
+installSite :: FilePath -> FilePath -> FilePath -> FilePath -> IO (Result InstallStatus)
+installSite config database templates backup = readSitePlan config database templates >>= continue (applyPlan backup)
+
+applyPlan :: FilePath -> Plan -> IO (Result InstallStatus)
+applyPlan backup plan = runExceptT $ do
   current <- ExceptT (ioResult "asterisk_configuration_unavailable" (currentFiles root files))
-  ExceptT (update parents (Map.null parents && current))
+  ExceptT (update (Map.null parents && current))
   where
-    root = pbxDirectory pbx
-    names = Map.keys files
-    update _ True = pure (Right Current)
-    update parents False = runExceptT $ do
+    root = planDirectory plan
+    files = planFiles plan
+    parents = planParents plan
+    update True = pure (Right Current)
+    update False = runExceptT $ do
       ExceptT idle
-      ExceptT (backupPaths root backup names (Map.keys parents))
-      ExceptT (applyOrRestore root backup files parents)
+      ExceptT (backupPaths root backup (Map.keys files) (Map.keys parents))
+      ExceptT (applyOrRestore backup plan)
       pure Updated
 
 currentFiles :: FilePath -> Map FilePath Text -> IO Bool
@@ -168,18 +204,11 @@ currentFiles root files = doesDirectoryExist destination >>= compareDirectory
       content <- Bytes.readFile (destination </> name)
       pure (content == Text.encodeUtf8 expected)
 
-readParents :: FilePath -> [FilePath] -> IO (Map FilePath Bytes.ByteString)
-readParents root names = do
-  paths <- filterM (doesFileExist . (root </>)) modules
+readModules :: FilePath -> IO (Map FilePath Bytes.ByteString)
+readModules root = do
+  paths <- filterM (doesFileExist . (root </>)) moduleNames
   let sources = Map.fromList [(path, root </> path) | path <- paths]
-  original <- Map.traverseWithKey (const Bytes.readFile) sources
-  pure (Map.mapMaybe changed original)
-  where
-    modules = ["asterisk.conf", "pjsip.conf", "extensions.conf", "manager.conf", "rtp.conf", "cdr.conf", "cdr_custom.conf"]
-    changed old
-      | new == old = Nothing
-      | otherwise = Just new
-      where new = Bytes8.pack (Text.unpack (includePaths names (Text.decodeLatin1 old)))
+  traverse Bytes.readFile sources
 
 backupPaths :: FilePath -> FilePath -> [FilePath] -> [FilePath] -> IO (Result ())
 backupPaths root backup names parents = runExceptT $ do
@@ -200,14 +229,17 @@ copyPresent from to paths = fmap sequence_ (traverse copy paths)
     transfer _ False = pure (Right ())
     present path = (||) <$> doesFileExist path <*> doesDirectoryExist path
 
-applyOrRestore :: FilePath -> FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -> IO (Result ())
-applyOrRestore root backup files parents = do
-  result <- withSystemTempDirectory "baerbel-asterisk" (installFiles root files parents)
+applyOrRestore :: FilePath -> Plan -> IO (Result ())
+applyOrRestore backup plan = do
+  result <- withSystemTempDirectory "baerbel-asterisk" (installFiles root files (planParents plan))
   archived <- continue (const (removeOld root (Map.keys files))) result
-  finished <- continue (const restart) archived
+  finished <- continue (const (restart (planEndpoints plan))) archived
   case finished of
     Right () -> pure (Right ())
     Left issue -> restore root backup >> pure (Left issue)
+  where
+    root = planDirectory plan
+    files = planFiles plan
 
 installFiles :: FilePath -> Map FilePath Text -> Map FilePath Bytes.ByteString -> FilePath -> IO (Result ())
 installFiles root files parents staging = runExceptT $ do
@@ -234,7 +266,7 @@ restore root backup = runExceptT $ do
   paths <- ExceptT (ioResult "asterisk_backup_unavailable" (listDirectory backup))
   ExceptT (ioResult "asterisk_restore_unavailable" (clearManaged root))
   ExceptT (copyPresent backup root paths)
-  ExceptT restart
+  ExceptT (restart [])
 clearManaged :: FilePath -> IO ()
 clearManaged root = do
   let installed = root </> "phone-assistant"
@@ -247,15 +279,15 @@ idle = mapResult check (run "asterisk" ["-rx", "core show channels concise"])
     check output | null output = Right ()
                  | otherwise = Left (failure "asterisk_has_active_calls")
 
-restart :: IO (Result ())
-restart = runExceptT $ do
+restart :: [String] -> IO (Result ())
+restart endpoints = runExceptT $ do
   ExceptT (command "systemctl" ["restart", "asterisk.service"])
   ExceptT (command "timeout" ["20", "asterisk", "-rx", "core waitfullybooted"])
   report <- ExceptT (run "asterisk" ["-rx", "dialplan show baerbel-account-entry"])
   except (unless ("127.0.0.1:4573/account" `Text.isInfixOf` Text.pack report) (Left (failure "asterisk_account_route_missing")))
-  mapM_ (ExceptT . endpoint) ["phone-assistant-aa", "phone-assistant-aa-bristol"]
+  mapM_ (ExceptT . endpoint) ("phone-assistant-aa" : endpoints)
   identifiers <- ExceptT (run "asterisk" ["-rx", "pjsip show identifiers"])
-  except (identifierOrder identifiers)
+  except (checkIdentifierOrder identifiers)
 
 endpoint :: String -> IO (Result ())
 endpoint name = mapResult validate (run "asterisk" ["-rx", "pjsip show endpoint " <> name])
@@ -265,8 +297,8 @@ endpoint name = mapResult validate (run "asterisk" ["-rx", "pjsip show endpoint 
       "Endpoint:" : ident : _ -> takeWhile (/= '/') ident == name
       _ -> False
 
-identifierOrder :: String -> Result ()
-identifierOrder output = case dropWhile (not . starts "header") (lines output) of
+checkIdentifierOrder :: String -> Result ()
+checkIdentifierOrder output = case dropWhile (not . starts "header") (lines output) of
   _ : remaining | any (starts "ip") remaining -> Right ()
   _ -> Left (failure "asterisk_sip_identifier_order")
   where starts name line = take 1 (words line) == [name]

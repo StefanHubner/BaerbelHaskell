@@ -1,0 +1,402 @@
+; Installed as /etc/asterisk/phone-assistant/extensions.conf.
+; Only the authenticated A&A endpoint enters this context. Private numbers and
+; limits come from the generated the generated routing.conf globals.
+; Owner access deliberately uses the existing caller-number allowlist only;
+; additional protection against spoofed owner CLI is deferred by the owner.
+[phone-assistant-inbound]
+exten => _.,1,Goto(s,1)
+exten => s,1,NoOp(Baerbel SIP account)
+@@PRO_ENTRIES@@ same => n,GotoIf(${REGEX("^phone-assistant-aa$" ${CHANNEL(endpoint)})}?did:rejected)
+ same => n(did),Set(PA_REQUEST_USER=${PJSIP_PARSE_URI(${CHANNEL(pjsip,request_uri)},user)})
+ same => n,Set(PA_TO_USER=${PJSIP_PARSE_URI(${CHANNEL(pjsip,local_uri)},user)})
+ same => n,GotoIf(${REGEX("^[+]?@@SHARED_DIGITS@@$" ${PA_REQUEST_USER})}?shared)
+ ; Legacy contact requests are accepted only for the shared number.
+ same => n,GotoIf(${REGEX("^${GLOBAL(PA_AA_CONTACT)}$" ${PA_REQUEST_USER})}?contact:rejected)
+ same => n(contact),GotoIf(${REGEX("^[+]?@@SHARED_DIGITS@@$" ${PA_TO_USER})}?shared:rejected)
+ same => n(shared),Set(PA_TRACE_ROUTE=shared)
+ same => n,Gosub(baerbel-routing-trace,s,1(shared,selected))
+ same => n,Set(PA_ENTRY=shared)
+ same => n,Goto(baerbel-account-entry,s,1)
+ same => n(dedicated),Set(PA_TRACE_ROUTE=pro-@@LOCAL_ACCOUNT@@)
+ same => n,Gosub(baerbel-routing-trace,s,1(pro-@@LOCAL_ACCOUNT@@,selected))
+ same => n,Set(PA_ENTRY=@@LOCAL_ACCOUNT@@)
+ same => n,GotoIf(${REGEX("^([+]44|0044|44|0)${GLOBAL(PA_OWNER_MOBILE):3}$" ${CALLERID(num)})}?baerbel-account-entry,s,1)
+ same => n,Set(PA_ACCOUNT=@@LOCAL_ACCOUNT@@)
+ same => n,Gosub(phone-assistant-record-call,s,1)
+ same => n,Gosub(baerbel-routing-trace,s,1(pro-@@LOCAL_ACCOUNT@@,screening))
+ same => n,Goto(phone-assistant-public-forward,s,1)
+ same => n(rejected),Gosub(baerbel-routing-trace,s,1(unmatched,rejected))
+ same => n,Hangup(21)
+
+[baerbel-account-entry]
+exten => s,1,Set(PA_ACCOUNT=)
+ same => n,Set(PA_OWNER_AUTHORIZED=0)
+ same => n,GotoIf(${REGEX("^allowed(_not_screened|_passed_screen|_failed_screen)?$" ${CALLERID(num-pres)})}?privacy:rejected)
+ same => n(privacy),GotoIf(${REGEX("^(|none)$" ${TOLOWER(${PJSIP_HEADER(read,Privacy)})})}?caller:rejected)
+ same => n(caller),GotoIf(${REGEX("^[+]?[0-9]{7,17}$" ${CALLERID(num)})}?auth:rejected)
+ same => n(auth),AGI(agi://127.0.0.1:4573/account,${CALLERID(num)},${PA_ENTRY})
+ same => n,GotoIf($["${AGISTATUS}"="SUCCESS" & "${PA_ACCOUNT}"!=""]?record:rejected)
+ same => n(record),Gosub(baerbel-routing-trace,s,1(${PA_TRACE_ROUTE},owner))
+ same => n,Gosub(phone-assistant-record-call,s,1)
+ same => n,Set(PA_CALL_ID=${SHELL(/usr/bin/tr -d '[:space:]' < /proc/sys/kernel/random/uuid)})
+ same => n,Set(PA_OWNER_AUTHORIZED=1)
+ same => n,Set(PA_PERMISSION=owner)
+ same => n,Set(PA_ORIGINAL_CALLER_ID=${CALLERID(num)})
+ same => n,Set(CHANNEL(hangup_handler_push)=phone-assistant-hangup,s,1)
+ same => n,Answer()
+ same => n,Goto(phone-assistant-resume,s,1)
+ same => n(rejected),Gosub(baerbel-routing-trace,s,1(${PA_TRACE_ROUTE},account-rejected))
+ same => n,Hangup(21)
+
+
+[baerbel-routing-trace]
+exten => s,1,GotoIf($["${DB(baerbel/account-routing-trace)}"="1"]?trace:done)
+ same => n(trace),Set(FILE(/var/lib/phone-assistant-incoming-events/account-routing.log,,,al,u)=${EPOCH},${ARG1},${ARG2})
+ same => n(done),Return()
+
+[phone-assistant-record-call]
+exten => s,1,GotoIf($["${PA_RECORDING_ACTIVE}"="1"]?done)
+ same => n,GotoIf(${REGEX("^phone-assistant-(aa|aa-pro-[a-z0-9-]+|telematica|home)$" ${CHANNEL(endpoint)})}?identity:rejected)
+ same => n(identity),GotoIf(${REGEX("^[A-Za-z0-9_.-]{1,100}$" ${UNIQUEID})}?record:rejected)
+ same => n(record),MixMonitor(/var/lib/phone-assistant-call-recordings/${UNIQUEID}.wav,i(PA_RECORDING_ID))
+ same => n,Set(PA_RECORDING_ACTIVE=1)
+ same => n,Set(CHANNEL(hangup_handler_push)=phone-assistant-recording-finished,s,1)
+ same => n(done),Return()
+ same => n(rejected),Hangup(21)
+
+; The handler stays with the original channel, including assistant returns.
+; StopMixMonitor flushes the archive; nothing deletes or expires recordings.
+[phone-assistant-recording-finished]
+exten => s,1,StopMixMonitor(${PA_RECORDING_ID})
+ same => n,Return()
+
+; Public calls retain private identity metadata and one shared concurrency slot.
+; Optional restricted screening hands over only to the fixed mobile and home phone.
+[phone-assistant-public-forward]
+exten => s,1,Set(PA_OWNER_AUTHORIZED=0)
+ same => n,Set(PA_PERMISSION=call_only)
+ same => n,Set(CDR_PROP(disable)=0)
+ same => n,Set(CDR(tf_route)=aa-forward)
+ same => n,Set(CDR(tf_did)=@@LOCAL_DID@@)
+ same => n,Set(CDR(tf_destination)=${GLOBAL(PA_OWNER_MOBILE)})
+ same => n,Set(CDR(tf_aa_cli)=${GLOBAL(PA_AA_DID)})
+ same => n,Set(CDR(tf_privacy)=unknown)
+ same => n,Set(TF_RESULT=REJECTED)
+ same => n,Set(TF_DIALED=0)
+ same => n,Set(TF_ANSWERED=0)
+ same => n,Set(TF_NOTIFY_ELIGIBLE=0)
+ same => n,Set(TF_NOTIFY_PRIVACY=unknown)
+ same => n,Set(CHANNEL(hangup_handler_push)=phone-assistant-public-hangup,s,1)
+ same => n,GotoIf(${REGEX("^phone-assistant-aa(-pro-[a-z0-9-]+)?$" ${CHANNEL(endpoint)})}?enabled:rejected)
+ same => n(enabled),GotoIf($["${GLOBAL(PA_FORWARD_ENABLED)}"="1"]?identity:rejected)
+ same => n(identity),Set(TF_NOTIFY_ELIGIBLE=1)
+ same => n,Set(TF_FROM=${PJSIP_PARSE_URI(${CHANNEL(pjsip,remote_uri)},user)})
+ same => n,Set(TF_PRESENTATION=${CALLERID(num-pres)})
+ same => n,Set(CDR(tf_presentation)=${FILTER(a-zA-Z0-9_,${TF_PRESENTATION})})
+ same => n,GotoIf(${REGEX("^(|none)$" ${TOLOWER(${PJSIP_HEADER(read,Privacy)})})}?presentation:withheld)
+ same => n(presentation),GotoIf(${REGEX("^prohib" ${TF_PRESENTATION})}?withheld)
+ same => n,GotoIf(${REGEX("^allowed(_not_screened|_passed_screen|_failed_screen)?$" ${TF_PRESENTATION})}?normalize:limits)
+ same => n(normalize),Set(TF_CALLBACK=)
+ same => n,ExecIf(${REGEX("^[+][1-9][0-9]{6,14}$" ${TF_FROM})}?Set(TF_CALLBACK=${TF_FROM}))
+ same => n,ExecIf(${REGEX("^00[1-9][0-9]{6,14}$" ${TF_FROM})}?Set(TF_CALLBACK=+${TF_FROM:2}))
+ same => n,ExecIf(${REGEX("^44[1-9][0-9]{9}$" ${TF_FROM})}?Set(TF_CALLBACK=+${TF_FROM}))
+ same => n,ExecIf(${REGEX("^0[1-9][0-9]{9}$" ${TF_FROM})}?Set(TF_CALLBACK=+44${TF_FROM:1}))
+ same => n,GotoIf(${REGEX("^[+][1-9][0-9]{6,14}$" ${TF_CALLBACK})}?known:limits)
+ same => n(known),Set(CDR(tf_original)=${TF_FROM})
+ same => n,Set(CDR(tf_callback)=${TF_CALLBACK})
+ same => n,Set(CDR(tf_privacy)=allowed)
+ same => n,Goto(limits)
+ same => n(withheld),Set(CDR(tf_privacy)=withheld)
+ same => n,Set(TF_FROM=)
+ same => n,Set(TF_CALLBACK=)
+ same => n,Set(CALLERID(all)=)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(CALLERID(pres)=prohib_not_screened)
+ same => n(limits),Set(TF_NOTIFY_PRIVACY=${CDR(tf_privacy)})
+ same => n,Set(TF_RESULT=BUSY)
+ ; The named lock makes checking and claiming a concurrency slot atomic.
+ same => n,Set(TF_LIMIT_LOCK=${LOCK(phone-assistant-forward-limit)})
+ same => n,GotoIf($["${TF_LIMIT_LOCK}"="1"]?count:busy)
+ same => n(count),GotoIf($[${GROUP_COUNT(call_only@phone-assistant-forward)}>=${GLOBAL(PA_FORWARD_LIMIT)}]?unlock_busy:claim)
+ same => n(claim),Set(GROUP(phone-assistant-forward)=call_only)
+ same => n,Set(TF_LIMIT_UNLOCK=${UNLOCK(phone-assistant-forward-limit)})
+ same => n,GotoIf($["${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1"]?phone-assistant-screening,s,1)
+ same => n(dial),Set(TF_RESULT=DIALING)
+ same => n,Set(TF_DIALED=1)
+ same => n,Set(DIALSTATUS=)
+ same => n,HangupCauseClear()
+ ; I suppresses identity updates; no t/T/g/F/G transfer or continuation flags.
+ same => n,Set(TF_DIAL_TARGETS=PJSIP/${GLOBAL(PA_OWNER_MOBILE)}@phone-assistant-aa-outbound)
+ same => n,GotoIf($["${GLOBAL(PA_HOME_PHONE_ENABLED)}"="1"]?home:ring)
+ same => n(home),Set(TF_HOME_CONTACTS=${PJSIP_DIAL_CONTACTS(phone-assistant-home)})
+ same => n,ExecIf($[${LEN(${TF_HOME_CONTACTS})}>0]?Set(TF_DIAL_TARGETS=${TF_DIAL_TARGETS}&${TF_HOME_CONTACTS}))
+ same => n(ring),Dial(${TF_DIAL_TARGETS},${GLOBAL(PA_FORWARD_TIMEOUT)},rIb(phone-assistant-aa-cli^s^1)U(phone-assistant-public-answered))
+ same => n,GotoIf($["${GLOBAL(PA_INCOMING_MESSAGES_ENABLED)}"="1" & "${TF_ANSWERED}"="0"]?phone-assistant-message,s,1)
+ same => n,Hangup()
+ same => n(unlock_busy),Set(TF_LIMIT_UNLOCK=${UNLOCK(phone-assistant-forward-limit)})
+ same => n(busy),Hangup(17)
+ same => n(rejected),Hangup(21)
+
+; Separate AudioSocket listener exposes no owner session or personal tools.
+; The PBX deadline starts before Answer/contact lookup/model interaction and
+; remains effective even if the assistant stalls or its connection fails.
+[phone-assistant-screening]
+exten => s,1,GotoIf($["${PA_OWNER_AUTHORIZED}"="0" & "${PA_PERMISSION}"="call_only"]?endpoint:rejected)
+ same => n(endpoint),GotoIf(${REGEX("^phone-assistant-(aa|aa-pro-[a-z0-9-]+|telematica)$" ${CHANNEL(endpoint)})}?enabled:rejected)
+ same => n(enabled),ExecIf($["${CHANNEL(endpoint)}"="phone-assistant-telematica"]?Set(PA_ACCOUNT=@@LOCAL_ACCOUNT@@))
+ same => n,GotoIf($["${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1"]?screen:rejected)
+ same => n(screen),Set(TIMEOUT(absolute)=60)
+ same => n,Set(PA_INCOMING_REMAINING=60)
+ same => n,Set(PA_INCOMING_MODE=screening)
+ same => n,Set(PA_CALL_ID=${SHELL(/usr/bin/tr -d '[:space:]' < /proc/sys/kernel/random/uuid)})
+ same => n,Set(PA_PERMISSION=screening)
+ same => n,Set(TF_RESULT=SCREENING)
+ same => n,Answer()
+ same => n,AudioSocket(${PA_CALL_ID},127.0.0.1:9093)
+ same => n,Hangup()
+ same => n(rejected),Hangup(21)
+exten => T,1,Set(TF_RESULT=SCREENING_TIMEOUT)
+ same => n,Hangup(21)
+
+; Only the restricted controller redirects a validated screening leg here.
+; Preserve the remaining assistant budget before ringing; the native bridge
+; has no AI and cannot accept a destination from the caller or model.
+[phone-assistant-screened-forward]
+exten => s,1,GotoIf($["${PA_OWNER_AUTHORIZED}"="0" & "${PA_PERMISSION}"="screening" & "${PA_INCOMING_MODE}"="screening"]?endpoint:rejected)
+ same => n(endpoint),GotoIf(${REGEX("^phone-assistant-(aa|aa-pro-[a-z0-9-]+|telematica)$" ${CHANNEL(endpoint)})}?enabled:rejected)
+ same => n(enabled),GotoIf($["${GLOBAL(PA_FORWARD_ENABLED)}"="1" & "${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1"]?handover:rejected)
+ same => n(handover),Set(PA_INCOMING_REMAINING=${TIMEOUT(absolute)})
+ same => n,Set(TIMEOUT(absolute)=0)
+ same => n,Set(PA_PERMISSION=call_only)
+ same => n,Goto(phone-assistant-public-forward,s,dial)
+ same => n(rejected),Hangup(21)
+
+; A failed fixed forward can use only the unspent portion of the original
+; assistant budget. A new UUID prevents a stale screening handler from owning
+; this message-only leg. It cannot be forwarded again or gain owner access.
+[phone-assistant-message]
+exten => s,1,GotoIf($["${PA_OWNER_AUTHORIZED}"="0" & "${PA_PERMISSION}"="call_only" & "${PA_INCOMING_MODE}"="screening" & "${TF_DIALED}"="1" & "${TF_ANSWERED}"="0"]?endpoint:rejected)
+ same => n(endpoint),GotoIf(${REGEX("^phone-assistant-(aa|aa-pro-[a-z0-9-]+|telematica)$" ${CHANNEL(endpoint)})}?enabled:rejected)
+ same => n(enabled),GotoIf($["${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1" & "${GLOBAL(PA_INCOMING_MESSAGES_ENABLED)}"="1"]?failed:rejected)
+ same => n(failed),GotoIf(${REGEX("^(BUSY|NOANSWER|CHANUNAVAIL|CONGESTION|DONTCALL|TORTURE|INVALIDARGS)$" ${DIALSTATUS})}?budget:rejected)
+ same => n(budget),GotoIf(${REGEX("^([0-9]|[1-5][0-9]|60)([.][0-9]{1,3})?$" ${PA_INCOMING_REMAINING})}?positive:rejected)
+ same => n(positive),GotoIf($[${PA_INCOMING_REMAINING}>0 & ${PA_INCOMING_REMAINING}<=60]?message:rejected)
+ same => n(message),Set(TIMEOUT(absolute)=${PA_INCOMING_REMAINING})
+ same => n,Set(PA_CALL_ID=${SHELL(/usr/bin/tr -d '[:space:]' < /proc/sys/kernel/random/uuid)})
+ same => n,Set(PA_INCOMING_MODE=message)
+ same => n,Set(PA_PERMISSION=screening)
+ same => n,AudioSocket(${PA_CALL_ID},127.0.0.1:9093)
+ same => n,Hangup()
+ same => n(rejected),Hangup(21)
+exten => T,1,Hangup(21)
+
+; Provider-authorized identity is applied only to the outbound channel.
+[phone-assistant-aa-cli]
+exten => s,1,GotoIf(${REGEX("^phone-assistant-aa-outbound$" ${CHANNEL(endpoint)})}?identity:home_endpoint)
+ same => n(identity),Set(CALLERID(all)=<${GLOBAL(PA_AA_DID)}>)
+ same => n,Set(CALLERID(pres)=allowed_not_screened)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(CONNECTEDLINE(all,i)=<${GLOBAL(PA_AA_DID)}>)
+ same => n,Set(CONNECTEDLINE(pres,i)=allowed_not_screened)
+ same => n,Set(CONNECTEDLINE(priv-all,i)=)
+ same => n,Set(CONNECTEDLINE(priv-num-valid,i)=0)
+ same => n,Set(CONNECTEDLINE(priv-name-valid,i)=0)
+ same => n,Set(REDIRECTING(from-all,i)=)
+ same => n,Set(REDIRECTING(to-all,i)=)
+ same => n,Set(REDIRECTING(orig-all,i)=)
+ same => n,Set(REDIRECTING(count,i)=0)
+ same => n,Goto(done)
+ same => n(home_endpoint),GotoIf(${REGEX("^phone-assistant-home$" ${CHANNEL(endpoint)})}?home_identity:done)
+ same => n(home_identity),Set(CALLERID(all)=)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(CALLERID(pres)=prohib_not_screened)
+ same => n,Set(CONNECTEDLINE(all,i)=)
+ same => n,Set(CONNECTEDLINE(priv-all,i)=)
+ same => n,Set(CONNECTEDLINE(priv-num-valid,i)=0)
+ same => n,Set(CONNECTEDLINE(priv-name-valid,i)=0)
+ same => n,Set(CONNECTEDLINE(pres,i)=prohib_not_screened)
+ same => n,Set(REDIRECTING(from-all,i)=)
+ same => n,Set(REDIRECTING(to-all,i)=)
+ same => n,Set(REDIRECTING(orig-all,i)=)
+ same => n,Set(REDIRECTING(count,i)=0)
+ same => n,GotoIf($["${MASTER_CHANNEL(TF_NOTIFY_PRIVACY)}"="allowed"]?home_number:done)
+ same => n(home_number),GotoIf(${REGEX("^[+][1-9][0-9]{6,14}$" ${MASTER_CHANNEL(TF_CALLBACK)})}?home_allowed:done)
+ same => n(home_allowed),Set(CALLERID(all)=<${MASTER_CHANNEL(TF_CALLBACK)}>)
+ same => n,Set(CALLERID(pres)=allowed_not_screened)
+ same => n,Set(CONNECTEDLINE(all,i)=<${MASTER_CHANNEL(TF_CALLBACK)}>)
+ same => n,Set(CONNECTEDLINE(pres,i)=allowed_not_screened)
+ same => n(done),Return()
+
+; Only the password-authenticated LAN endpoint enters this context. Caller
+; identity is irrelevant. The configured extension opens Bärbel; numbers dialed on the phone are
+; explicit owner requests, validated through the same conservative policy.
+[phone-assistant-home-inbound]
+exten => _[+0-9].,1,Set(PA_OWNER_AUTHORIZED=0)
+ same => n,Set(PA_PERMISSION=call_only)
+ same => n,GotoIf(${REGEX("^phone-assistant-home$" ${CHANNEL(endpoint)})}?enabled:rejected)
+ same => n(enabled),GotoIf($["${GLOBAL(PA_HOME_PHONE_ENABLED)}"="1"]?record:rejected)
+ same => n(record),Gosub(phone-assistant-record-call,s,1)
+ same => n,Set(PA_OWNER_AUTHORIZED=1)
+ same => n,Set(PA_PERMISSION=owner)
+ same => n,GotoIf($["${EXTEN}"="@@handset.extension@@"]?assistant:route)
+ same => n(assistant),Set(PA_ACCOUNT=@@LOCAL_ACCOUNT@@)
+ same => n,Set(PA_CALL_ID=${SHELL(/usr/bin/tr -d '[:space:]' < /proc/sys/kernel/random/uuid)})
+ same => n,Set(PA_ORIGINAL_CALLER_ID=@@handset.extension@@)
+ same => n,Set(CHANNEL(hangup_handler_push)=phone-assistant-hangup,s,1)
+ same => n,Answer()
+ same => n,Goto(phone-assistant-resume,s,1)
+ same => n(route),Set(PA_HOME_DIAL_READY=0)
+ same => n,Set(PA_DIRECT_NUMBER=)
+ same => n,Set(PA_DIRECT_PROVIDER=)
+ same => n,AGI(agi://127.0.0.1:4573/home-dial)
+ same => n,GotoIf($["${AGISTATUS}"="SUCCESS" & "${PA_HOME_DIAL_READY}"="1"]?number:rejected)
+ same => n(number),GotoIf(${REGEX("^[+][1-9][0-9]{1,14}$" ${PA_DIRECT_NUMBER})}?provider:rejected)
+ same => n(provider),GotoIf($["${PA_DIRECT_PROVIDER}"="aa"]?aa:telematica_enabled)
+ same => n(telematica_enabled),GotoIf($["${PA_DIRECT_PROVIDER}"="telematica" & "${GLOBAL(PA_TELEMATICA_OUTBOUND_ENABLED)}"="1"]?telematica_number:rejected)
+ same => n(telematica_number),GotoIf(${REGEX("^[+]43[1-9][0-9]{3,12}$" ${PA_DIRECT_NUMBER})}?telematica_prepare:rejected)
+ same => n(telematica_prepare),Gosub(phone-assistant-telematica-outbound-prepare,s,1)
+ same => n,GotoIf($["${PA_TELEMATICA_READY}"="1"]?telematica:rejected)
+ same => n(aa),Dial(PJSIP/${PA_DIRECT_NUMBER}@phone-assistant-aa-outbound,30,rIb(phone-assistant-aa-cli^s^1))
+ same => n,Hangup()
+ same => n(telematica),Dial(PJSIP/${PA_TELEMATICA_WIRE_NUMBER}@phone-assistant-telematica,30,rIb(phone-assistant-telematica-outbound-cli^s^1))
+ same => n,Hangup()
+ same => n(rejected),Hangup(21)
+exten => s,1,Hangup(21)
+
+; Runs on only the answered owner leg, before the external caller is bridged.
+; Caller facts stay in the service's expiring single-use UUID map. No owner
+; confirmation, owner session, arbitrary destination or inbound voice input.
+[phone-assistant-public-answered]
+exten => s,1,Set(MASTER_CHANNEL(TF_ANSWERED)=1)
+ same => n,GotoIf($["${MASTER_CHANNEL(PA_OWNER_AUTHORIZED)}"="0" & "${MASTER_CHANNEL(PA_INCOMING_MODE)}"="screening" & "${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1"]?endpoint:done)
+ same => n(endpoint),GotoIf(${REGEX("^phone-assistant-(aa-outbound|home)$" ${CHANNEL(endpoint)})}?token:done)
+ same => n(token),Set(PA_CALL_ID=${MASTER_CHANNEL(PA_HANDOFF_ID)})
+ same => n,GotoIf(${REGEX("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ${PA_CALL_ID})}?announce:done)
+ same => n(announce),Set(PA_ACCOUNT=${MASTER_CHANNEL(PA_ACCOUNT)})
+ same => n,Set(PA_OWNER_AUTHORIZED=0)
+ same => n,Set(PA_PERMISSION=handoff)
+ same => n,Set(PA_HANDOFF_PARENT=${MASTER_CHANNEL(UNIQUEID)})
+ same => n,Set(TIMEOUT(absolute)=25)
+ same => n,TryExec(AudioSocket(${PA_CALL_ID},127.0.0.1:9093))
+ same => n,Set(TIMEOUT(absolute)=0)
+ same => n,Set(PA_PERMISSION=call_only)
+ same => n(done),Return()
+
+; Persist outcomes even when the caller hangs up before Dial returns.
+[phone-assistant-public-hangup]
+exten => s,1,Set(TF_END=${EPOCH})
+ same => n,Set(TF_CAUSE=${FILTER(0-9,${HANGUPCAUSE})})
+ same => n,Set(TF_CAUSE_KEYS=${HANGUPCAUSE_KEYS()})
+ same => n,Set(TF_CAUSE_CHANNEL=${SHIFT(TF_CAUSE_KEYS)})
+ same => n,Set(TF_SIP_CAUSE=)
+ same => n,ExecIf($[${LEN(${TF_CAUSE_CHANNEL})}>0]?Set(TF_SIP_CAUSE=${FILTER(a-zA-Z0-9 /_-,${HANGUPCAUSE(${TF_CAUSE_CHANNEL},tech)})}))
+ same => n,Set(TF_DIAL_STATUS=${FILTER(A-Z_,${DIALSTATUS})})
+ ; Preserve a later screening/message outcome after an unanswered Dial.
+ same => n,GotoIf($["${TF_ANSWERED}"!="1" & ${REGEX("^(DECLINED|SCREENING_TIMEOUT|SCREENING_ERROR|MESSAGE_SENT|MESSAGE_FAILED|MESSAGE_UNCERTAIN)$" ${TF_RESULT})}]?write)
+ same => n,GotoIf($["${TF_DIALED}"="1"]?dial_result:write)
+ same => n(dial_result),Set(TF_RESULT=${IF($["${TF_ANSWERED}"="1"]?ANSWERED:${IF($[${LEN(${TF_DIAL_STATUS})}>0]?${TF_DIAL_STATUS}:CANCEL)})})
+ same => n(write),Set(TF_LOCK=${LOCK(phone-assistant-forward-history)})
+ same => n,GotoIf($["${TF_LOCK}"="1"]?append:notify)
+ same => n(append),Set(FILE(${GLOBAL(PA_FORWARD_COMPLETION_PATH)},,,al,u)=${CSV_QUOTE(telematica-completion-v1)},${CSV_QUOTE(${UNIQUEID})},${CSV_QUOTE(${CHANNEL(linkedid)})},${CSV_QUOTE(${TF_END})},${CSV_QUOTE(${TF_DIAL_STATUS})},${CSV_QUOTE(${TF_CAUSE})},${CSV_QUOTE(${TF_SIP_CAUSE})},${CSV_QUOTE(${TF_RESULT})},${CSV_QUOTE(${TF_ANSWERED})})
+ same => n,Set(TF_UNLOCK=${UNLOCK(phone-assistant-forward-history)})
+ same => n(notify),Gosub(phone-assistant-incoming-notification,s,1)
+ same => n(done),Return()
+
+; Only trusted external ingress can append metadata for the SMS worker.
+; FILE opens for each write, so rename/create rotation needs no PBX reload.
+[phone-assistant-incoming-notification]
+exten => s,1,GotoIf($["${GLOBAL(PA_INCOMING_SMS_ENABLED)}"="1" & "${TF_NOTIFY_ELIGIBLE}"="1" & "${PA_OWNER_AUTHORIZED}"="0"]?endpoint:done)
+ same => n(endpoint),GotoIf(${REGEX("^phone-assistant-(aa|aa-pro-[a-z0-9-]+|telematica)$" ${CHANNEL(endpoint)})}?privacy:done)
+ same => n(privacy),Set(TF_NOTIFY_NUMBER=)
+ same => n,ExecIf($["${TF_NOTIFY_PRIVACY}"="allowed" & ${REGEX("^[+][1-9][0-9]{6,14}$" ${TF_CALLBACK})}]?Set(TF_NOTIFY_NUMBER=${TF_CALLBACK}))
+ same => n,Set(TF_NOTIFY_LOCK=${LOCK(phone-assistant-incoming-events)})
+ same => n,GotoIf($["${TF_NOTIFY_LOCK}"="1"]?append:done)
+ same => n(append),Set(FILE(${GLOBAL(PA_INCOMING_EVENTS_PATH)},,,al,u)=${CSV_QUOTE(incoming-v1)},${CSV_QUOTE(${UNIQUEID})},${CSV_QUOTE(${TF_END})},${CSV_QUOTE(${FILTER(a-z,${TF_NOTIFY_PRIVACY})})},${CSV_QUOTE(${TF_NOTIFY_NUMBER})},${CSV_QUOTE(${FILTER(A-Z_,${TF_RESULT})})},${CSV_QUOTE(${TF_ANSWERED})})
+ same => n,Set(TF_NOTIFY_UNLOCK=${UNLOCK(phone-assistant-incoming-events)})
+ same => n(done),Return()
+
+; Only the local call controller redirects the existing authorized inbound leg
+; here. Never Originate a detached destination, and never expose this context
+; through a SIP endpoint. Validate again before constructing any dial string.
+[phone-assistant-direct-call]
+exten => s,1,GotoIf($["${PA_OWNER_AUTHORIZED}" = "1" & "${PA_PERMISSION}" = "owner"]?check_number:denied)
+ same => n(denied),Hangup(21)
+ same => n(check_number),GotoIf($["${PA_DIRECT_PROVIDER}"="home" & "${PA_DIRECT_NUMBER}"="home"]?check_timeout:external_number)
+ same => n(external_number),GotoIf(${REGEX("^[+][1-9][0-9]{1,14}$" ${PA_DIRECT_NUMBER})}?check_timeout:invalid)
+ same => n(check_timeout),GotoIf(${REGEX("^([5-9]|[1-8][0-9]|90)$" ${PA_DIRECT_TIMEOUT})}?check_attempt:invalid)
+ same => n(check_attempt),GotoIf(${REGEX("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" ${PA_DIRECT_ATTEMPT})}?provider:invalid)
+ same => n(provider),GotoIf($["${PA_DIRECT_PROVIDER}"="home"]?home_enabled:external_provider)
+ same => n(home_enabled),GotoIf($["${GLOBAL(PA_HOME_PHONE_ENABLED)}"="1" & "${PA_DIRECT_NUMBER}"="home" & "${CHANNEL(endpoint)}"!="phone-assistant-home"]?dial:invalid)
+ same => n(external_provider),GotoIf($["${PA_DIRECT_PROVIDER}"="aa"]?dial:telematica_enabled)
+ same => n(telematica_enabled),GotoIf($["${PA_DIRECT_PROVIDER}"="telematica" & "${GLOBAL(PA_TELEMATICA_OUTBOUND_ENABLED)}"="1"]?telematica_number:invalid)
+ same => n(telematica_number),GotoIf(${REGEX("^[+]43[1-9][0-9]{3,12}$" ${PA_DIRECT_NUMBER})}?telematica_prepare:invalid)
+ same => n(telematica_prepare),Gosub(phone-assistant-telematica-outbound-prepare,s,1)
+ same => n,GotoIf($["${PA_TELEMATICA_READY}"="1"]?dial:invalid)
+ same => n(dial),Set(DIALSTATUS=)
+ same => n,HangupCauseClear()
+ same => n,Set(PA_DIRECT_CAUSE=)
+ same => n,Set(PA_DIRECT_SIP_CAUSE=)
+ same => n,Set(PA_DIRECT_RESULT=DIALING)
+ ; Keep the existing native bridge and attempt reporting for both providers.
+ same => n,GotoIf($["${PA_DIRECT_PROVIDER}"="home"]?home_dial)
+ same => n,GotoIf($["${PA_DIRECT_PROVIDER}"="telematica"]?telematica_dial)
+ same => n,Dial(PJSIP/${PA_DIRECT_NUMBER}@phone-assistant-aa-outbound,${PA_DIRECT_TIMEOUT},rIb(phone-assistant-aa-cli^s^1)U(phone-assistant-direct-answered^${PA_CALL_ID}^${PA_DIRECT_ATTEMPT}))
+ same => n,Goto(dial_complete)
+ same => n(telematica_dial),Dial(PJSIP/${PA_TELEMATICA_WIRE_NUMBER}@phone-assistant-telematica,${PA_DIRECT_TIMEOUT},rIb(phone-assistant-telematica-outbound-cli^s^1)U(phone-assistant-direct-answered^${PA_CALL_ID}^${PA_DIRECT_ATTEMPT}))
+ same => n,Goto(dial_complete)
+ same => n(home_dial),Set(PA_HOME_CONTACTS=${PJSIP_DIAL_CONTACTS(phone-assistant-home)})
+ same => n,GotoIf($[${LEN(${PA_HOME_CONTACTS})}=0]?home_unavailable)
+ same => n,Dial(${PA_HOME_CONTACTS},${PA_DIRECT_TIMEOUT},rIU(phone-assistant-direct-answered^${PA_CALL_ID}^${PA_DIRECT_ATTEMPT}))
+ same => n,Goto(dial_complete)
+ same => n(home_unavailable),Set(DIALSTATUS=CHANUNAVAIL)
+ same => n(dial_complete),Gosub(phone-assistant-direct-cause,s,1)
+ same => n,Goto(result)
+ same => n(invalid),Set(DIALSTATUS=INVALIDARGS)
+ same => n,Set(PA_DIRECT_CAUSE=0)
+ same => n,Set(PA_DIRECT_SIP_CAUSE=)
+ same => n(result),Set(PA_DIRECT_RESULT=${DIALSTATUS})
+ same => n,UserEvent(PhoneAssistantDialResult,CallID:${PA_CALL_ID},AttemptID:${PA_DIRECT_ATTEMPT},Result:${PA_DIRECT_RESULT},Cause:${PA_DIRECT_CAUSE},SIPCause:${PA_DIRECT_SIP_CAUSE})
+ same => n,Goto(phone-assistant-resume,s,1)
+
+; A failed attempt reconnects to the SAME in-memory conversation and UUID.
+; The controller never closes the AudioSocket itself to initiate a transfer:
+; AudioSocket termination is a hangup, so AMI Redirect performs the handoff.
+[phone-assistant-resume]
+exten => s,1,GotoIf($["${PA_OWNER_AUTHORIZED}" = "1" & "${PA_PERMISSION}" = "owner"]?authorized:denied)
+ same => n(denied),Hangup(21)
+ same => n(authorized),Set(CALLERID(num)=${PA_ORIGINAL_CALLER_ID})
+ same => n,AudioSocket(${PA_CALL_ID},127.0.0.1:9092)
+ same => n,Hangup()
+
+; Runs on the answered destination immediately before native bridging. It
+; emits metadata only: the assistant never speaks to the destination.
+[phone-assistant-direct-answered]
+exten => s,1,UserEvent(PhoneAssistantDialAnswered,CallID:${ARG1},AttemptID:${ARG2})
+ same => n,Return()
+
+; A single destination is dialed per attempt. Save its available technology
+; cause before another attempt clears the channel's hangup-cause collection.
+[phone-assistant-direct-cause]
+exten => s,1,Set(PA_DIRECT_CAUSE=${HANGUPCAUSE})
+ same => n,Set(PA_DIRECT_CAUSE_KEYS=${HANGUPCAUSE_KEYS()})
+ same => n,Set(PA_DIRECT_CAUSE_CHANNEL=${SHIFT(PA_DIRECT_CAUSE_KEYS)})
+ same => n,Set(PA_DIRECT_SIP_CAUSE=)
+ same => n,GotoIf($["${PA_DIRECT_CAUSE_CHANNEL}" = ""]?done)
+ same => n,Set(PA_DIRECT_SIP_CAUSE=${HANGUPCAUSE(${PA_DIRECT_CAUSE_CHANNEL},tech)})
+ same => n(done),Return()
+
+; Unlike h, this handler follows the inbound channel through Redirect and Dial.
+; Native Dial tears down its destination on caller hangup; this handler only
+; reports completion and must not start asynchronous work or a new call.
+[phone-assistant-hangup]
+exten => s,1,Gosub(phone-assistant-direct-cause,s,1)
+ same => n,UserEvent(PhoneAssistantHangup,CallID:${PA_CALL_ID},AttemptID:${PA_DIRECT_ATTEMPT},Cause:${PA_DIRECT_CAUSE},SIPCause:${PA_DIRECT_SIP_CAUSE})
+ same => n,Return()
+
+@@PRO_CONTEXTS@@

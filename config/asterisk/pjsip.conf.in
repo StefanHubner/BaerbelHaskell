@@ -1,0 +1,43 @@
+; Installed as /etc/asterisk/phone-assistant/pjsip.conf and included by pjsip.conf.
+; Inbound A&A trunk only: no registration and no outbound calling.
+; Authentication is generated privately from AA_INBOUND_SIP_PASSWORD.
+; Install root:asterisk 0640; no SIP credentials belong in this template.
+
+[phone-assistant-udp]
+type=transport
+protocol=udp
+bind=@@network.sipBind@@
+local_net=@@network.localNet@@
+external_signaling_address=@@network.publicAddress@@
+external_signaling_port=5060
+external_media_address=@@network.publicAddress@@
+; Transport changes require a full Asterisk restart.
+allow_reload=no
+
+
+[phone-assistant-aa]
+type=endpoint
+transport=phone-assistant-udp
+context=phone-assistant-inbound
+auth=phone-assistant-aa-auth
+identify_by=ip
+disallow=all
+allow=alaw,ulaw
+dtmf_mode=rfc4733
+direct_media=no
+; Keep the RTP socket on Ethernet's address as well as the SIP socket.
+; The transport's external_media_address rewrites this LAN address in public SDP.
+media_address=@@network.mediaAddress@@
+bind_rtp_to_media_address=yes
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+allow_subscribe=no
+allow_transfer=no
+
+[phone-assistant-aa-identify]
+type=identify
+endpoint=phone-assistant-aa
+; Published A&A IPv4 signalling ranges; match identifies, auth above authenticates.
+; https://support.aa.net.uk/VoIP_Firewall
+match=81.187.30.110/31,81.187.30.112/29,90.155.3.0/24,90.155.103.0/24

@@ -35,7 +35,7 @@ data LiveConfig = LiveConfig
   , liveFrameBytes :: Int, liveFrameMicros :: Int
   , liveInputRate :: Int, liveProviderRate :: Int
   , liveQueueFrames :: Int, liveStartupFrames :: Int, liveToolLimits :: ToolLimits
-  , liveToolMicros :: Int, liveVoiceMicros :: Int, liveDirectMicros :: Int
+  , liveToolMicros :: Int, liveDirectMicros :: Int
   , liveMutationErrors :: Map.Map Text Text, liveBackground :: BackgroundRules
   , liveMessageBytes :: Int, liveErrorFields :: Map.Map Text (Map.Map Text Value)
   } deriving (Eq)

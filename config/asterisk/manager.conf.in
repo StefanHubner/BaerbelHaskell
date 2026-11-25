@@ -1,0 +1,14 @@
+; Generated privately; the assistant only controls its current inbound call.
+[general](+)
+enabled=yes
+bindaddr=127.0.0.1
+port=5038
+webenabled=no
+tlsenable=no
+
+[phone-assistant]
+secret=@@ami.password@@
+deny=0.0.0.0/0.0.0.0
+permit=127.0.0.1/255.255.255.255
+read=call,user,dtmf
+write=call

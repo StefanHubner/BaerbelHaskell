@@ -133,7 +133,7 @@ buildSession settings now = buildSessionWithProfile settings now ""
 
 buildSessionWithProfile :: Settings -> UTCTime -> Text -> [Value] -> Result SessionSettings
 buildSessionWithProfile settings now profile tools = do
-  base <- initialInstructions settings tools
+  base <- initialInstructions settings
   integrated <- foldM (integrate settings now profile names) base integrationSpecs
   final <- finishInstructions settings now names integrated
   makeOwnerSession settings tools final
@@ -152,18 +152,16 @@ makeOwnerSession settings tools (voice, backend) = do
     , backendTokenLimit = tokens, sessionTools = tools, providerSampleRate = 24000
     }
 
-initialInstructions :: Settings -> [Value] -> Result Instructions
-initialInstructions settings tools = do
+initialInstructions :: Settings -> Result Instructions
+initialInstructions settings = do
   identity <- voiceIdentity settings
   instructions <- configuredInstruction settings "PHONE_ASSISTANT_LIVE_INSTRUCTIONS" "live_instructions"
   help <- rule settings "live" "HELP_INSTRUCTIONS"
   background <- rule settings "live" "BACKGROUND_INSTRUCTIONS"
   backend <- rule settings "live" "LIVE_BACKEND_INSTRUCTIONS"
   let initial = (identity <> "\n\n" <> instructions <> help <> background, backend <> help)
-      voiceTest = "voice_test" `elem` toolNames tools
       pin = not (T.null (setting settings "PHONE_ASSISTANT_PRIVATE_PIN_HASH"))
-  tested <- applyRule settings voiceTest prependBoth "VOICE_TEST_INSTRUCTIONS" initial
-  applyRule settings pin appendBoth "PIN_INSTRUCTIONS" tested
+  applyRule settings pin appendBoth "PIN_INSTRUCTIONS" initial
 
 voiceIdentity :: Settings -> Result Text
 voiceIdentity settings = do

@@ -40,7 +40,13 @@ spec = do
       (decodeBytes "invalid" "{" :: Either Failure Text) `shouldBe` Left (failure "invalid")
     it "loads the preserved global tool catalogue" $ do
       result <- loadSettings "config/global.yaml" "config/user.example.json"
-      fmap (Map.size . globalTools . settingsGlobal) result `shouldBe` Right 15
+      fmap (Map.size . globalTools . settingsGlobal) result `shouldBe` Right 14
+    it "uses file-backed defaults only for local configuration" $ do
+      let key = "PHONE_ASSISTANT_GMAIL_STATE_FILE"
+      global <- readGlobal "config/global.yaml"
+      local <- loadSettings "config/global.yaml" "config/user.example.json"
+      fmap (Map.lookup key . globalDefaults) global `shouldBe` Right Nothing
+      fmap (`setting` key) local `shouldBe` Right "/var/lib/phone-assistant/gmail-sends.sqlite3"
   describe "account separation" $ do
     it "selects a phone account with private state and central model policy" $ do
       let selected = accountSettings accountGlobal Map.empty accountConfig

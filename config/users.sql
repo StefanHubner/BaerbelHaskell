@@ -89,3 +89,18 @@ CREATE TABLE event_cursors (
     anchor TEXT NOT NULL,
     PRIMARY KEY (user_id, file_key)
 ) WITHOUT ROWID;
+
+CREATE TABLE sip_accounts (
+    number TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    pro_user_id TEXT UNIQUE REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE
+) WITHOUT ROWID;
+
+CREATE UNIQUE INDEX one_shared_sip ON sip_accounts ((1)) WHERE pro_user_id IS NULL;
+
+CREATE VIEW user_sip_accounts AS
+SELECT users.id AS user_id, sip_accounts.number AS sip_number
+FROM users JOIN sip_accounts
+ON (users.user_type = 'Standard' AND sip_accounts.pro_user_id IS NULL)
+OR (users.user_type = 'Pro' AND sip_accounts.pro_user_id = users.id);

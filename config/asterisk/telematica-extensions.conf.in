@@ -1,0 +1,160 @@
+; Telematica ingress remains public, including calls from the owner number.
+; When shared screening is enabled for the same fixed destination, use its
+; restricted greeting/screening and private owner introduction before bridging.
+; Otherwise preserve the fixed native A&A forwarding fallback.
+; Caller-ID country does not select this route: the identified provider does.
+[from-telematica]
+exten => s,1,Goto(phone-assistant-telematica-forward,s,1)
+exten => h,1,NoOp()
+exten => _.,1,Goto(phone-assistant-telematica-forward,s,1)
+
+[phone-assistant-telematica-forward]
+exten => s,1,Set(PA_OWNER_AUTHORIZED=0)
+ same => n,Set(PA_PERMISSION=call_only)
+ same => n,Set(CDR_PROP(disable)=0)
+ same => n,Set(CDR(tf_route)=telematica)
+ same => n,Set(CDR(tf_did)=@@telematica.number@@)
+ same => n,Set(CDR(tf_destination)=@@LOCAL_PHONE@@)
+ same => n,Set(CDR(tf_aa_cli)=@@SHARED_DID@@)
+ same => n,Set(TF_RESULT=REJECTED_SOURCE)
+ same => n,Set(TF_DIALED=0)
+ same => n,Set(TF_ANSWERED=0)
+ same => n,Set(TF_NOTIFY_ELIGIBLE=0)
+ same => n,Set(TF_NOTIFY_PRIVACY=unknown)
+ same => n,Set(CDR(tf_privacy)=unknown)
+ same => n,Set(CDR(tf_presentation)=unavailable)
+ same => n,Set(CHANNEL(hangup_handler_push)=phone-assistant-telematica-hangup,s,1)
+ ; Defence in depth in addition to PJSIP IP identification and endpoint ACL.
+ same => n,GotoIf(${REGEX("^phone-assistant-telematica$" ${CHANNEL(endpoint)})}?check_source:rejected)
+ same => n(check_source),GotoIf(${REGEX("^176[.]123[.]55[.]10:[0-9]{1,5}$" ${CHANNEL(pjsip,remote_addr)})}?identity:rejected)
+ ; remote_uri is the dialog's From URI; never replace it with P-Asserted-Identity.
+ same => n(identity),Set(TF_FROM=${PJSIP_PARSE_URI(${CHANNEL(pjsip,remote_uri)},user)})
+ same => n,Set(TF_PRESENTATION=${CALLERID(num-pres)})
+ same => n,Set(CDR(tf_presentation)=${FILTER(a-zA-Z0-9_,${TF_PRESENTATION})})
+ same => n,Set(TF_PRIVACY=${TOLOWER(${PJSIP_HEADER(read,Privacy)})})
+ ; trust_id_inbound=no intentionally ignores PAI, so enforce Privacy explicitly.
+ ; Any nonempty privacy request except exact 'none' is treated conservatively.
+ same => n,GotoIf(${REGEX("^(|none)$" ${TF_PRIVACY})}?check_presentation:withheld)
+ same => n(check_presentation),GotoIf(${REGEX("^prohib" ${TF_PRESENTATION})}?withheld)
+ same => n,GotoIf(${REGEX("^allowed(_not_screened|_passed_screen|_failed_screen)?$" ${TF_PRESENTATION})}?normalize:did)
+ same => n(normalize),Set(TF_CALLBACK=)
+ same => n,ExecIf(${REGEX("^[+][1-9][0-9]{1,14}$" ${TF_FROM})}?Set(TF_CALLBACK=${TF_FROM}))
+ same => n(normalized),GotoIf(${REGEX("^[+][1-9][0-9]{1,14}$" ${TF_CALLBACK})}?known:did)
+ same => n(known),Set(CDR(tf_original)=${TF_FROM})
+ same => n,Set(CDR(tf_callback)=${TF_CALLBACK})
+ same => n,Set(CDR(tf_privacy)=allowed)
+ same => n,Goto(did)
+ same => n(withheld),Set(CDR(tf_privacy)=withheld)
+ ; Never persist withheld From digits, even when the provider supplies them.
+ same => n,Set(TF_FROM=)
+ same => n,Set(TF_CALLBACK=)
+ ; Scrub withheld identity from standard CDR backends as well as this history.
+ ; The permitted incoming identity is never changed on the forwarding channel.
+ same => n,Set(CALLERID(all)=)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(CALLERID(pres)=prohib_not_screened)
+ same => n(did),Set(TF_RESULT=REJECTED_DID)
+ same => n,Set(TF_REQUEST_USER=${PJSIP_PARSE_URI(${CHANNEL(pjsip,request_uri)},user)})
+ same => n,Set(TF_TO_USER=${PJSIP_PARSE_URI(${CHANNEL(pjsip,local_uri)},user)})
+ same => n,GotoIf(${REGEX("^(@@TELEMATICA_DIGITS@@|[+]@@TELEMATICA_DIGITS@@)$" ${TF_REQUEST_USER})}?check_to:rejected)
+ same => n(check_to),GotoIf(${REGEX("^[+]@@TELEMATICA_DIGITS@@$" ${TF_TO_USER})}?record:rejected)
+ same => n(record),Gosub(phone-assistant-record-call,s,1)
+ same => n(check_loop),Set(TF_NOTIFY_ELIGIBLE=1)
+ same => n,Set(TF_NOTIFY_PRIVACY=${CDR(tf_privacy)})
+ same => n,Set(TF_RESULT=REJECTED_LOOP)
+ same => n,GotoIf($["${TF_CALLBACK}"="@@LOCAL_PHONE@@"]?rejected)
+ same => n,Set(TF_LIMIT=1)
+ same => n,ExecIf(${REGEX("^([1-9]|10)$" ${GLOBAL(PA_FORWARD_LIMIT)})}?Set(TF_LIMIT=${GLOBAL(PA_FORWARD_LIMIT)}))
+ same => n,Set(TF_RESULT=BUSY)
+ same => n,Set(TF_SLOT_LOCK=${LOCK(phone-assistant-forward-limit)})
+ same => n,GotoIf($["${TF_SLOT_LOCK}"!="1"]?busy)
+ same => n,GotoIf($[${GROUP_COUNT(call_only@phone-assistant-forward)}>=${TF_LIMIT}]?unlock_busy)
+ same => n,Set(GROUP(phone-assistant-forward)=call_only)
+ same => n,Set(TF_SLOT_UNLOCK=${UNLOCK(phone-assistant-forward-limit)})
+ same => n,GotoIf($["${GLOBAL(PA_FORWARD_ENABLED)}"="1" & "${GLOBAL(PA_INCOMING_SCREENING_ENABLED)}"="1" & "${GLOBAL(PA_OWNER_MOBILE)}"="@@LOCAL_PHONE@@"]?phone-assistant-screening,s,1)
+ same => n,Goto(dial)
+ same => n(unlock_busy),Set(TF_SLOT_UNLOCK=${UNLOCK(phone-assistant-forward-limit)})
+ same => n(busy),Hangup(17)
+ same => n(dial),Set(TF_RESULT=DIALING)
+ same => n,Set(TF_DIALED=1)
+ same => n,Set(DIALSTATUS=)
+ same => n,HangupCauseClear()
+ ; b() runs on the outbound channel. I ignores later identity/redirect updates.
+ ; No t/T/g/F/G flags: no transfer, detached call or continuation after answer.
+ same => n,Dial(PJSIP/@@LOCAL_PHONE@@@phone-assistant-aa-outbound,30,Ib(phone-assistant-telematica-aa-cli^s^1)U(phone-assistant-telematica-answered))
+ same => n,Hangup()
+ same => n(rejected),Hangup(21)
+
+[phone-assistant-telematica-aa-cli]
+exten => s,1,Set(CALLERID(all)=<@@SHARED_DID@@>)
+ same => n,Set(CALLERID(pres)=allowed_not_screened)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(CONNECTEDLINE(all,i)=<@@SHARED_DID@@>)
+ same => n,Set(CONNECTEDLINE(pres,i)=allowed_not_screened)
+ same => n,Set(CONNECTEDLINE(priv-all,i)=)
+ same => n,Set(CONNECTEDLINE(priv-num-valid,i)=0)
+ same => n,Set(CONNECTEDLINE(priv-name-valid,i)=0)
+ same => n,Set(REDIRECTING(from-all,i)=)
+ same => n,Set(REDIRECTING(to-all,i)=)
+ same => n,Set(REDIRECTING(orig-all,i)=)
+ same => n,Set(REDIRECTING(count,i)=0)
+ same => n,Return()
+
+[phone-assistant-telematica-answered]
+exten => s,1,Set(MASTER_CHANNEL(TF_ANSWERED)=1)
+ same => n,Return()
+
+; Runs for caller cancellation, either-side hangup, and every Dial failure.
+; CDR custom variables are set before Dial: after bridge teardown they can be
+; finalized already. Record completion separately, joined by uniqueid/linkedid.
+[phone-assistant-telematica-hangup]
+exten => s,1,Set(TF_END=${EPOCH})
+ same => n,Set(TF_CAUSE=${FILTER(0-9,${HANGUPCAUSE})})
+ same => n,Set(TF_CAUSE_KEYS=${HANGUPCAUSE_KEYS()})
+ same => n,Set(TF_CAUSE_CHANNEL=${SHIFT(TF_CAUSE_KEYS)})
+ same => n,Set(TF_SIP_CAUSE=)
+ same => n,ExecIf($[${LEN(${TF_CAUSE_CHANNEL})}>0]?Set(TF_SIP_CAUSE=${FILTER(a-zA-Z0-9 /_-,${HANGUPCAUSE(${TF_CAUSE_CHANNEL},tech)})}))
+ same => n,Set(TF_DIAL_STATUS=${FILTER(A-Z_,${DIALSTATUS})})
+ same => n,GotoIf($["${TF_ANSWERED}"!="1" & ${REGEX("^(DECLINED|SCREENING_TIMEOUT|SCREENING_ERROR|MESSAGE_SENT|MESSAGE_FAILED|MESSAGE_UNCERTAIN)$" ${TF_RESULT})}]?write)
+ same => n,GotoIf($["${TF_DIALED}"="1"]?dial_result:write)
+ same => n(dial_result),Set(TF_RESULT=${IF($["${TF_ANSWERED}"="1"]?ANSWERED:${IF($[${LEN(${TF_DIAL_STATUS})}>0]?${TF_DIAL_STATUS}:CANCEL)})})
+ same => n(write),Set(TF_LOCK=${LOCK(phone-assistant-telematica-history)})
+ same => n,GotoIf($["${TF_LOCK}"="1"]?append:notify)
+ same => n(append),Set(FILE(/var/log/asterisk/cdr-custom/Telematica-completion.csv,,,al,u)=${CSV_QUOTE(telematica-completion-v1)},${CSV_QUOTE(${UNIQUEID})},${CSV_QUOTE(${CHANNEL(linkedid)})},${CSV_QUOTE(${TF_END})},${CSV_QUOTE(${TF_DIAL_STATUS})},${CSV_QUOTE(${TF_CAUSE})},${CSV_QUOTE(${TF_SIP_CAUSE})},${CSV_QUOTE(${TF_RESULT})},${CSV_QUOTE(${TF_ANSWERED})})
+ same => n,Set(TF_UNLOCK=${UNLOCK(phone-assistant-telematica-history)})
+ same => n(notify),ExecIf($["${GLOBAL(PA_INCOMING_SMS_ENABLED)}"="1"]?Gosub(phone-assistant-incoming-notification,s,1))
+ same => n(done),Return()
+
+; Called only by the existing owner handoff. No Dial or fallback occurs here.
+; The main dialplan checks its feature flag before entering this optional context.
+[phone-assistant-telematica-outbound-prepare]
+exten => s,1,Set(PA_TELEMATICA_READY=0)
+ same => n,Set(PA_TELEMATICA_WIRE_NUMBER=)
+ same => n,GotoIf($["${PA_OWNER_AUTHORIZED}"!="1"]?done)
+ same => n,GotoIf($["${PA_PERMISSION}"!="owner"]?done)
+ same => n,GotoIf($["${GLOBAL(PA_TELEMATICA_OUTBOUND_ENABLED)}"!="1"]?done)
+ same => n,GotoIf(${REGEX("^[+]43[1-9][0-9]{4,11}$" ${PA_DIRECT_NUMBER})}?format:done)
+ same => n(format),Set(PA_TELEMATICA_WIRE_NUMBER=0${PA_DIRECT_NUMBER:3})
+ same => n,Set(PA_TELEMATICA_READY=1)
+ same => n(done),Return()
+
+; Preserve registration From username; supply the provider-authorised Austrian
+; DID as PPI, which Telematica documents as its user-provided identity input.
+; These values are rendered from trusted private configuration, never caller data.
+[phone-assistant-telematica-outbound-cli]
+exten => s,1,Set(CALLERID(all)=<@@telematica.number@@>)
+ same => n,Set(CALLERID(pres)=allowed_not_screened)
+ same => n,Set(CALLERID(priv-all)=)
+ same => n,Set(CALLERID(priv-num-valid)=0)
+ same => n,Set(CALLERID(priv-name-valid)=0)
+ same => n,Set(PJSIP_HEADER(remove,P-Preferred-Identity)=)
+ same => n,Set(PJSIP_HEADER(add,P-Preferred-Identity)=<sip:@@telematica.number@@@sip.telematica.at>)
+ same => n,Set(REDIRECTING(from-all,i)=)
+ same => n,Set(REDIRECTING(to-all,i)=)
+ same => n,Set(REDIRECTING(orig-all,i)=)
+ same => n,Set(REDIRECTING(count,i)=0)
+ same => n,Return()

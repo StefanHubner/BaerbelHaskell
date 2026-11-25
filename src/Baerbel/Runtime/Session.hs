@@ -57,7 +57,7 @@ import Control.Monad ( when, void )
 import Data.Aeson ( Value )
 import Data.List ( sortOn, elemIndex )
 import Data.Map.Strict ( Map )
-import Data.Maybe ( fromMaybe, isJust )
+import Data.Maybe ( fromMaybe )
 import Data.Text ( Text )
 import Data.Time ( UTCTime, getCurrentTime )
 import Data.Word ( Word64 )
@@ -246,10 +246,9 @@ ownerServices settings services managed pin owner notesRuntime ending descriptio
     calling = maybe [] (\control -> [Service "direct" (toolDefinitions settings "DIRECT_CALL_TOOLS") (executeDirect control)]) owner
     notesService = maybe [] (\notes -> [Service "owner_note" (toolDefinitions settings "OWNER_NOTE_TOOLS") (noteExecute notes)]) notesRuntime
     end = Service "end" (toolDefinitions settings "END_CALL_TOOLS") (executeOwnerEnd managed pin notesRuntime ending settings)
-    voice = [Service "voice" (toolDefinitions settings "VOICE_TEST_TOOLS") (\_ _ _ -> voiceTest settings managed notesRuntime) | isJust owner]
     rank service = fromMaybe (length order) (elemIndex (servicePrefix service) order)
     integrated = sortOn rank (services ++ notesService)
-    available = integrated ++ calling ++ voice ++ [end]
+    available = integrated ++ calling ++ [end]
     helpSchemas = toolDefinitions settings "HELP_TOOLS"
     schemas = hostedTools settings ++ concatMap serviceTools available ++ helpSchemas
 
@@ -297,28 +296,3 @@ afterOwnerTool managed owner name _
       answered <- maybe (pure False) ownerAnswered owner
       controls <- managedControls managed
       when answered (maybe (pure ()) stopSession controls)
-
-
-voiceTest :: Settings -> ManagedCall -> Maybe NoteRuntime -> IO (Result Value)
-voiceTest settings managed notesRuntime = do
-  paused <- managedPaused managed
-  pending <- maybe (pure False) notePending notesRuntime
-  case (paused, pending, voiceSamples settings) of
-    (True, _, _) -> pure (Left (failure "voice_test_unavailable"))
-    (_, True, _) -> pure (Left (failure "finish_or_cancel_note_before_voice_test"))
-    (_, _, Left err) -> pure (Left err)
-    (_, _, Right samples) -> do
-      played <- Effects.runAll (playSample settings managed) samples
-      pure (sampleResult settings samples played)
-
-playSample :: Settings -> ManagedCall -> VoiceSample -> IO (Result ())
-playSample settings managed sample = case sampleConfiguration settings sample of
-  Left err -> pure (Left err)
-  Right (cfg, quiet, duration, gap) -> do
-    controls <- managedControls managed
-    let completion = T.unwords (takeLast 5 (T.words (sampleText sample)))
-        play current = playAnnouncement current cfg completion quiet False
-    let announce = maybe (pure (Left (failure "voice_test_unavailable"))) play controls
-    result <- Effects.within (failure "voice_test_timeout") duration announce
-    threadDelay gap
-    pure (void result)

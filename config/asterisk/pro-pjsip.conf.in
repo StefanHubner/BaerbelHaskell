@@ -1,0 +1,36 @@
+[@@ENDPOINT@@]
+type=endpoint
+transport=phone-assistant-udp
+context=phone-assistant-inbound
+auth=@@ENDPOINT@@-auth
+identify_by=header
+disallow=all
+allow=alaw,ulaw
+dtmf_mode=rfc4733
+direct_media=no
+; Keep the RTP socket on Ethernet's address as well as the SIP socket.
+; The transport's external_media_address rewrites this LAN address in public SDP.
+media_address=@@network.mediaAddress@@
+bind_rtp_to_media_address=yes
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+allow_subscribe=no
+allow_transfer=no
+deny=0.0.0.0/0
+deny=::/0
+permit=81.187.30.110/31
+permit=81.187.30.112/29
+permit=90.155.3.0/24
+permit=90.155.103.0/24
+
+[@@ENDPOINT@@-auth]
+type=auth
+auth_type=userpass
+username=@@SIP_USER@@
+password=@@SIP_PASSWORD@@
+
+[@@ENDPOINT@@-identify]
+type=identify
+endpoint=@@ENDPOINT@@
+match_header=To: /sips?:(0|0044|[+]?44)@@SIP_LOCAL@@@/

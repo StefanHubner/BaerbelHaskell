@@ -1,0 +1,6 @@
+; Managed Telematica CDR requirements; included first inside [general].
+enable=yes
+unanswered=yes
+endbeforehexten=no
+batch=no
+congestion=yes

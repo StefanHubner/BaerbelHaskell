@@ -1,5 +1,6 @@
 module Baerbel.Core.AMI where
 
+import Baerbel.Core.Accounts (validId)
 import Baerbel.Core.Error ( Result, failure )
 import Baerbel.Core.JSON ( jsonOptions )
 import Data.Aeson ( FromJSON(..), genericParseJSON )
@@ -17,7 +18,9 @@ import qualified Data.Map.Strict as M
 import qualified Data.Text as T
     ( all,
       breakOn,
+      breakOnEnd,
       drop,
+      dropEnd,
       intercalate,
       length,
       null,
@@ -138,16 +141,22 @@ incomingMatch identifier message = field "Event" message == "Status"
   && (field "Context" message, variable "PA_INCOMING_MODE" message)
      `elem` [("phone-assistant-screening", "screening"), ("phone-assistant-message", "message")]
 
-incomingEndpoints :: [Text]
-incomingEndpoints = ["phone-assistant-aa", "phone-assistant-aa-bristol", "phone-assistant-telematica"]
+legacyIncomingEndpoints :: [Text]
+legacyIncomingEndpoints = ["phone-assistant-aa", "phone-assistant-aa-bristol", "phone-assistant-telematica"]
+
+incomingEndpoint :: Text -> Bool
+incomingEndpoint endpoint
+  | endpoint `elem` legacyIncomingEndpoints = True
+  | Just ident <- T.stripPrefix "phone-assistant-aa-pro-" endpoint = validId ident
+  | otherwise = False
 
 incomingName :: Text -> Bool
-incomingName name = any matches incomingEndpoints
+incomingName name = case T.stripPrefix "PJSIP/" name of
+  Just stem -> matches (T.breakOnEnd "-" stem)
+  Nothing -> False
   where
-    matches :: Text -> Bool
-    matches endpoint = case T.stripPrefix ("PJSIP/" <> endpoint <> "-") name of
-      Nothing -> False
-      Just suffix -> not (T.null suffix) && T.all isHexDigit suffix
+    matches (prefix, suffix) = incomingEndpoint (T.dropEnd 1 prefix)
+      && not (T.null suffix) && T.all isHexDigit suffix
 
 selectChannel :: Text -> Text -> (Text -> Bool) -> [Message] -> Result Channel
 selectChannel missing invalid permitted messages = case messages of

@@ -29,6 +29,7 @@ prepare_release() {
     mv "$stage/baerbel" "$release"
     rmdir "$stage"
   fi
+  install -m 0644 "$release/config/instructions.yaml" "$work/instructions.yaml"
   prepare_config "$release/config/global.yaml"
   env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server" "$release/bin/asteriskconfig"
   if [[ -f "$work/global.yaml" && -f "$release/deploy/migrate-users.py" ]]; then
@@ -77,7 +78,7 @@ activate_release() {
   if [[ "$target_config" == "$global_config" ]]; then
     config=("$prepared_user")
     active_config=("$target_config")
-    install -m 0644 "$release/config/phone-numbers.json" "$(dirname "$global_config")/phone-numbers.json" || return
+    install -m 0644 "$release/config/phone-numbers.json" "$release/config/instructions.yaml" "${global_config%/*}/" || return
   else
     config=("$release/config/global.yaml" "$prepared_user")
     active_config=("$release/config/global.yaml" "$target_config")
@@ -235,20 +236,51 @@ install_pbx_database() {
 }
 
 install_account_routing() {
-  local pid binary release backup result
-  pid=$(systemctl show "$service" --property=MainPID --value) || return
-  binary=$(readlink -e "/proc/$pid/exe") || return
-  release=${binary%/bin/phone-assistant-server}
+  local source=$1 release backup result service_user
+  release=$(readlink -e "$prefix/staged") || return
+  service_user=$(stat -c %G "$user_database") || return
+  install_pbx_directories "$service_user" || return
   backup=$(mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX) || return
-  result=$("$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$backup") || return
-  printf '%s\n' "$result"
-  archive_pbx_inputs "$backup" || return
-  if [[ "$result" == "Asterisk configuration already current." ]]; then
-    rmdir -- "$backup" 2>/dev/null || true
-    return
+  if ! stage_pbx_source "$source" "$backup"; then
+    return 1
   fi
-  systemctl restart "$service" || return
-  verify_service "$binary"
+  if ! result=$("$release/bin/asteriskconfig" install "$pbx_config" "$user_database" "$release/config/asterisk" "$backup/asterisk"); then
+    restore_pbx_source "$backup"
+    return 1
+  fi
+  printf '%s\n' "$result"
+  if [[ "$source" == "$work/asterisk-source.yaml" ]]; then rm -f -- "$source"; fi
+  archive_pbx_inputs "$backup" || return
+  rmdir -- "$backup" 2>/dev/null || true
+  if [[ "$result" == "Asterisk configuration updated." ]] && systemctl is-active --quiet "$service"; then
+    systemctl restart "$service" || return
+    verify_service
+  fi
+}
+
+install_pbx_directories() {
+  local group=$1 recordings=/var/lib/phone-assistant-call-recordings events=/var/lib/phone-assistant-incoming-events
+  [[ -d "$recordings" ]] || install -d -o asterisk -g "$group" -m 2750 "$recordings" || return
+  [[ -d "$events" ]] || install -d -o asterisk -g "$group" -m 2750 "$events"
+}
+
+stage_pbx_source() {
+  local source=$1 backup=$2
+  cmp -s "$source" "$pbx_config" && return 0
+  if [[ -f "$pbx_config" ]]; then
+    cp -a -- "$pbx_config" "$backup/asterisk.yaml" || return
+  fi
+  install -D -m 0600 -- "$source" "$pbx_config" && touch "$backup/site-changed"
+}
+
+restore_pbx_source() {
+  local backup=$1
+  [[ -f "$backup/site-changed" ]] || return 0
+  if [[ -f "$backup/asterisk.yaml" ]]; then
+    cp -a -- "$backup/asterisk.yaml" "$pbx_config"
+  else
+    rm -f -- "$pbx_config"
+  fi
 }
 
 archive_pbx_inputs() {
@@ -276,9 +308,6 @@ move_legacy_state() {
     home/stefan/.config/phone-assistant/{contacts-token,gmail-token-all-calendars,gmail-token-calendar,gmail-token}.json \
     home/stefan/.cache/baerbel-hs/deploy/{accounts,user}.json; do
     move_legacy "$from/$file" "$to/$file" || return
-  done
-  for file in "$from"/var/lib/phone-assistant/voice-test{,-previous-*}; do
-    move_legacy "$file" "$to/var/lib/phone-assistant/${file##*/}" || return
   done
 }
 
@@ -359,7 +388,7 @@ verify_service() {
 }
 
 verify_running() {
-  local expected=$1 pid=$2 executable
+  local expected=${1:-} pid=$2 executable
   systemctl is-active "$service" || return
   systemctl is-active asterisk.service || return
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || { printf 'Assistant has no running main process.\n' >&2; return 1; }
@@ -372,7 +401,7 @@ case "$action" in
   prepare) prepare_release ;;
   activate) activate_prepared ;;
   activate-accounts) activate_accounts ;;
-  install-account-routing) install_account_routing ;;
+  install-account-routing) install_account_routing "$2" ;;
   rollback-accounts) rollback_accounts ;;
   rollback) rollback_release ;;
   archive-legacy-state) archive_legacy_state ;;

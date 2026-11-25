@@ -78,9 +78,11 @@ The VAD remainder and bounded transcript history are retained in memory.
 Windguru forecast parsing uses timestamps to address readings. A forecast array must cover every timestamp; trailing readings with no timestamp are ignored, while short arrays remain invalid. Saved-set results retain each member's independent provider failure, so one failed member does not hide available forecasts. The target checks and corrective release activation are recorded in [live-checks.md](live-checks.md#production-incidents-under-investigation).
 
 The `asteriskconfig` installer joins SIP accounts in SQLite with the
-private PBX YAML to render the files in `/etc/asterisk/phone-assistant/`.
-It preserves the separate Asterisk module includes and the installed SIP
-authentication and provider rules during initial adoption.
+private site YAML and reusable PBX templates to render the files in
+`/etc/asterisk/phone-assistant/`. It attaches the relevant stock module
+includes, preserving existing administrator settings. Each Pro account
+uses the same SIP template and a distinct endpoint. The site YAML ties
+the existing handset and provider routes to the selected Pro account.
 
 ## Deployment boundary
 

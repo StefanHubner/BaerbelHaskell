@@ -1,0 +1,4 @@
+; Included at the end of /etc/asterisk/asterisk.conf.
+[options](+)
+runuser = asterisk
+rungroup = asterisk

@@ -120,7 +120,7 @@
 <title>pbx</title>
 <path fill="#eaf2ed" stroke="#618d73" stroke-width="1.4" d="M1052,-1092.5C1052,-1092.5 651,-1092.5 651,-1092.5 645,-1092.5 639,-1086.5 639,-1080.5 639,-1080.5 639,-1014.5 639,-1014.5 639,-1008.5 645,-1002.5 651,-1002.5 651,-1002.5 1052,-1002.5 1052,-1002.5 1058,-1002.5 1064,-1008.5 1064,-1014.5 1064,-1014.5 1064,-1080.5 1064,-1080.5 1064,-1086.5 1058,-1092.5 1052,-1092.5"/>
 <text text-anchor="middle" x="851.5" y="-1069.5" font-family="DejaVu Sans" font-size="15.00">Existing Asterisk</text>
-<text text-anchor="middle" x="851.5" y="-1052.5" font-family="DejaVu Sans" font-size="15.00">Asterisk YAML + SQLite&#45;backed SIP accounts</text>
+<text text-anchor="middle" x="851.5" y="-1052.5" font-family="DejaVu Sans" font-size="15.00">Site YAML · templates · SQLite SIP accounts</text>
 <text text-anchor="middle" x="851.5" y="-1035.5" font-family="DejaVu Sans" font-size="15.00">Native dialplan and media bridge</text>
 <text text-anchor="middle" x="851.5" y="-1018.5" font-family="DejaVu Sans" font-size="15.00">AudioSocket · AMI · FastAGI · full&#45;call WAV</text>
 </g>

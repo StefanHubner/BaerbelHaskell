@@ -5,7 +5,7 @@ module Baerbel.Core.Incoming
   ) where
 
 import qualified Baerbel.Core.JSON as JSON
-import Baerbel.Core.AMI (Channel(..), incomingEndpoints)
+import Baerbel.Core.AMI (Channel(..), incomingEndpoint)
 import Baerbel.Core.Error (Result, failure)
 import Data.Aeson (Value(..), FromJSON(..), genericParseJSON)
 import Baerbel.Core.JSON (camelOptions)
@@ -109,7 +109,7 @@ restrictDecision (Object fields) = Object (KM.insert "enum" (Array (V.singleton 
 restrictDecision value = value
 
 trustedEndpoint :: Channel -> Text -> Bool
-trustedEndpoint channel endpoint = endpoint `elem` incomingEndpoints
+trustedEndpoint channel endpoint = incomingEndpoint endpoint
   && T.isPrefixOf ("PJSIP/" <> endpoint <> "-") (channelName channel)
 
 callbackNumber :: Text -> Text -> Maybe Text

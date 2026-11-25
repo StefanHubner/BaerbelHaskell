@@ -11,7 +11,7 @@ See [migration](migration.md) for the verification record.
 
 ## Check and package
 
-Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared application rules remain in `config/global.yaml`; `config/phone-numbers.json` supplies reference metadata beside it. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
+Local checks use the private file `~/.config/baerbel/user.json`, prepared from the existing Python configuration. Shared settings live in `config/global.yaml`, with prompts and tool schemas in `config/instructions.yaml`. `config/phone-numbers.json` supplies reference metadata. Synthetic TTS settings are separate in `test/live/config.json`, used only by the development checker.
 
 ```sh
 make check
@@ -31,7 +31,7 @@ make install
 
 This uploads the archive and helpers over SSH and installs the checksum release under
 `~/apps/baerbel/releases/`. It combines the release template with the private
-installation section, stages `global.json` with mode `0600`, and runs the
+installation section, stages `global.yaml` with mode `0600`, and runs the
 target library and offline executable checks. On the first database
 migration it imports the prior account configuration, memory, Google
 connections, receipts and cursors into `/var/lib/phone-assistant/users.sqlite3`.
@@ -46,7 +46,7 @@ make activate
 ```
 
 This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the combined configuration at
-`/etc/phone-assistant/global.yaml` and repeats the executable's `--check` as
+`/etc/phone-assistant/global.yaml`, installs `instructions.yaml` alongside it, and repeats the executable's `--check` as
 the service user. The first migration stops the assistant before refreshing
 the imported state so the database captures completed writes. The former account JSON is archived under
 `/var/backups/phone-assistant-users.*`; the source state files are retained
@@ -67,25 +67,38 @@ checks.
 make config
 ```
 
-The release includes the Haskell `asteriskconfig` executable. It uses
-`/etc/phone-assistant/asterisk.yaml` for PBX policy and
-`/var/lib/phone-assistant/users.sqlite3` for SIP accounts. The generated
-files are grouped in `/etc/asterisk/phone-assistant/` and loaded by the
-appropriate Asterisk modules. The installer checks that the PBX is idle
-and preserves the replaced files in a private backup.
+The editable site file is `config/asterisk.yaml`. Keep its private copy
+with the checkout. The Make target installs it under
+`/etc/phone-assistant/` and runs the Haskell `asteriskconfig` executable
+from the staged release. The executable reads the shipped templates and
+`/var/lib/phone-assistant/users.sqlite3`. It installs the generated files
+in `/etc/asterisk/phone-assistant/` and adds the required module includes.
+On a repeat apply it compares the bytes and leaves an up-to-date site
+alone. Updates require idle Asterisk and save the replaced files privately.
 
-Both `make install` and `make config` can run from a checkout on the
-miniserver. The same targets use SSH from the workstation. A repeated
-`make config` compares the rendered bytes and exits when the files and
-includes are current. The existing handset extension and Telematica
-endpoint and routing rules are part of the private Asterisk YAML.
+### A different server
 
-The initial adoption moves the existing shared and Pro credentials into
-SQLite, changes the old internal Pro ID to `stefan`, and archives the
-former JSON configuration and `account-routes` file. It preserves the
-existing primary Pro routing. Additional Pro SIP accounts generate
-dedicated owner entry routes. Standard users use the shared SIP account
-without requiring a new Asterisk endpoint.
+Install and start Asterisk with the stock module configuration and the
+PJSIP, AMI, AudioSocket, CDR and MixMonitor modules. Copy the built release,
+the private site YAML and a consistent SQLite backup. Adjust the SIP
+bind, advertised address, local network and handset ACL in the site YAML.
+Provision Bärbel's shared credentials and service separately. The
+Asterisk installer does not require a previous Bärbel dialplan.
+
+From the unpacked release on that server:
+
+```sh
+sudo install -D -m 0600 config/asterisk.yaml /etc/phone-assistant/asterisk.yaml
+sudo bin/asteriskconfig install /etc/phone-assistant/asterisk.yaml \
+  /var/lib/phone-assistant/users.sqlite3 config/asterisk \
+  "$(sudo mktemp -d /var/backups/baerbel-asterisk.XXXXXXXX)"
+```
+
+For a complete installation, create the call-recordings and
+incoming-events directories owned by Asterisk with group read access for
+the Bärbel service. The regular `make config` deployment already prepares
+these directories. Confirm registrations and make a Standard call, a Pro
+owner call and a public call to the site’s forwarding route.
 
 ## Archive legacy files
 
@@ -93,8 +106,8 @@ without requiring a new Asterisk endpoint.
 make archive-legacy
 ```
 
-This moves the standalone OAuth exports, receipt databases, profile,
-old voice audition files and account staging JSON to
+This moves the standalone OAuth exports, receipt databases, profile
+and account staging JSON to
 `~/apps/baerbel/legacy/`. The sudo step moves the old Python environment to
 `/var/backups/phone-assistant-legacy/assistant.env`. Both archive roots
 are private. The archive action checks the running Haskell command line

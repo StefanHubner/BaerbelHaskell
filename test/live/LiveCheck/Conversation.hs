@@ -67,7 +67,7 @@ schemaCheck settings = withConversation settings schemas (const unavailable) ins
   where
     groups = ["PROFILE_TOOLS", "GMAIL_TOOLS", "CALENDAR_TOOLS", "CONTACTS_TOOLS", "MAPS_TOOLS",
       "WINDGURU_TOOLS", "WINDGURU_SET_TOOL", "OWNER_NOTE_TOOLS", "DIRECT_CALL_TOOLS",
-      "VOICE_TEST_TOOLS", "HELP_TOOLS", "END_CALL_TOOLS", "WEB_SEARCH_TOOLS"]
+      "HELP_TOOLS", "END_CALL_TOOLS", "WEB_SEARCH_TOOLS"]
     schemas = concatMap (toolDefinitions settings) groups
     inspect running = do
       observed <- await running "live_check_audio_input_timeout" 5000000 (\_ -> seen "check.input.audio")
