@@ -3,10 +3,11 @@ module Baerbel.Protocol
   ( SessionRole(..), SessionSettings(..), sessionConfig, greetingCommand
   , allowedTools, applyInstructions, audioCommand, toolOutputCommand, decodeAudio
   , startCommand, continueCommand, appendCommand, buildSession, buildSessionWithProfile, appendSessionContext
-  , voiceIdentity, timeContext, gmailTimeContext, spokenWords, announcementComplete
+  , voiceIdentity, timeContext, gmailTimeContext, spokenWords, announcementComplete, announcementReady
   ) where
 
 import Baerbel.Error (Result, failure)
+import Baerbel.Concurrent (hasElapsed)
 import Baerbel.Config (Settings, rule, setting, integerSetting, booleanSetting)
 import Baerbel.JSON (camelOptions, textField)
 import Control.Monad (foldM)
@@ -27,6 +28,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as TE
 import qualified Data.Aeson.KeyMap as KM
 import Data.Text (Text)
+import Data.Word (Word64)
 import qualified Data.Text as T
 
 data SessionRole = Owner | Restricted | Announcement deriving (Eq, Show)
@@ -332,6 +334,12 @@ normalizeLabel ("gpt" : "live" : number : rest)
   | number `elem` ["one", "1"] = "gpt" : "live" : "1" : normalizeLabel rest
 normalizeLabel (word : rest) = word : normalizeLabel rest
 normalizeLabel [] = []
+
+announcementReady :: Bool -> Text -> Int -> Word64 -> Text -> Maybe Word64 -> Bool
+announcementReady marker ending quietMicros now transcript lastSpeech = complete && quiet
+  where
+    complete = announcementComplete marker ending transcript
+    quiet = maybe False (hasElapsed quietMicros now) lastSpeech
 
 announcementComplete :: Bool -> Text -> Text -> Bool
 announcementComplete marker ending transcript = not (null suffix) && matching suffix wordsOf

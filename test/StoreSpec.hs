@@ -7,7 +7,7 @@ import System.Timeout (timeout)
 import Baerbel.Config (Settings, loadSettings, rule)
 import Baerbel.Error (Result, failure)
 import Baerbel.Profile (ProfileState(..), ProfileStore(..), emptyProfile)
-import Baerbel.Store (profileStore, validateProfileFile)
+import Baerbel.Store (StoreRules(..), profileStore, validateProfileFile)
 import Baerbel.JSON (encodeBytes, decodeUnique)
 import Data.Aeson (Value, object)
 import qualified Data.ByteString as Bytes
@@ -27,6 +27,10 @@ spec = do
       let path = directory </> "profile.json"
       validate settings path `shouldReturn` Right ()
     it "reads typed snapshots without creating a mutation lock" $ withStoreConfig readWithoutLock
+    it "does not write unchanged state even when the byte limit is smaller" $
+      withStoreConfig (withoutWrite emptyProfile (Right (object [])))
+    it "rejects oversized updates before writing state" $
+      withStoreConfig (withoutWrite oversized (Left (failure "profile_storage_limit_reached")))
     it "rejects a public parent directory" $ withStoreConfig $ \settings directory -> do
       setFileMode directory 0o755
       validate settings (directory </> "profile.json") `shouldReturn` Left (failure "profile_unsafe_storage")
@@ -65,12 +69,26 @@ spec = do
           prepared <- profileStore profileRules storeRules path
           either (expectationFailure . show) (verify path state) prepared
   where
+  oversized = ProfileState 1 (Map.singleton "home" "Vienna") (Just "2026-11-19T12:00:00Z")
   verify path state store = do
     result <- profileUpdate store (\_ -> Right (state, object []))
     result `shouldBe` Right (object [])
     profileRead store `shouldReturn` Right state
     raw <- Bytes.readFile path
     (decodeUnique "invalid" raw :: Result ProfileState) `shouldBe` Right state
+
+withoutWrite :: ProfileState -> Result Value -> Settings -> FilePath -> IO ()
+withoutWrite state expected settings directory = either (expectationFailure . show) open configured
+  where
+    path = directory </> "profile.json"
+    configured = (,) <$> rule settings "providers" "profile" <*> rule settings "profile" "store"
+    open (profileRules, storeRules) = do
+      let bounded = storeRules {storeMaximumBytes = 1}
+      prepared <- profileStore profileRules bounded path
+      either (expectationFailure . show) verify prepared
+    verify store = do
+      profileUpdate store (const (Right (state, object []))) `shouldReturn` expected
+      doesFileExist path `shouldReturn` False
 
 readWithoutLock :: Settings -> FilePath -> IO ()
 readWithoutLock settings directory = either (expectationFailure . show) open configured

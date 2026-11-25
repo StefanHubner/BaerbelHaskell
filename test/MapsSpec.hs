@@ -58,9 +58,29 @@ runCase rules fixture = do
 
 spec :: Spec
 spec = do
+  referenceSpec
   findSpec
   detailSpec
   routeSpec
+
+referenceSpec :: Spec
+referenceSpec = describe "Maps reference boundary" $
+  it "rejects unknown references before HTTP or clock effects" $
+    withRules "maps" (withRules "route" . unknownReferences)
+
+unknownReferences :: MapsRules -> RouteRules -> Expectation
+unknownReferences rules routeRules = do
+  calls <- newIORef (0 :: Int)
+  let record = atomicModifyIORef' calls (\count -> (count + 1, ()))
+      send _ = record >> pure (Left (failure "unexpected_request"))
+      clock = record >> pure (UTCTime (fromGregorian 2026 10 15) 28800)
+      details = object ["place_ref" .= ("unknown" :: Text)]
+      directions = object ["origin_ref" .= ("unknown" :: Text), "destination_ref" .= ("other" :: Text)]
+      rejected = Left (failure "maps_unknown_place_reference")
+  execute <- maps rules routeRules id send False clock
+  execute "maps_place_details" details "details" `shouldReturn` rejected
+  execute "maps_route" directions "route" `shouldReturn` rejected
+  readIORef calls `shouldReturn` 0
 
 routeSpec :: Spec
 routeSpec = describe "Maps route equivalence" $ do

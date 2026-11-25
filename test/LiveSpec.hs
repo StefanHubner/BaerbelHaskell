@@ -54,6 +54,11 @@ advance = foldl step (Right (emptyToolState, []))
 
 spec :: Spec
 spec = do
+  describe "Live setup classification" $ do
+    it "distinguishes startup, provider failure, closure and unrelated events" $ do
+      let classify kind = observeStarted (object ["type" .= (kind :: Text)])
+      map classify ["session.started", "error", "session.closed", "session.input_transcript.delta"]
+        `shouldBe` [Right True, Left (failure "live_setup_rejected"), Left (failure "live_closed_before_start"), Right False]
   describe "Announcement transcript updates" $ do
     it "does not request a state write for unrelated or malformed events" $ do
       let unrelated = object ["type" .= ("session.started" :: Text), "delta" .= ("ignored" :: Text)]
@@ -191,6 +196,14 @@ spec = do
       let second = first >>= \(_, rest) -> Chat.splitEvents (rest <> "created\"}\n\n")
       fmap (length . fst) second `shouldBe` Right 1
   describe "announcement completion" $ do
+    it "waits for delivered speech to finish and the exact quiet interval to elapse" $ do
+      let ready now = announcementReady False "Goodbye" 600000 now "Goodbye!" (Just 1000000000)
+      map ready [999999999, 1000000000, 1599999999, 1600000000]
+        `shouldBe` [False, False, False, True]
+      announcementReady False "Goodbye" 600000 1600000000 "Goodbye!" Nothing `shouldBe` False
+    it "retains different transcript rules for interruptible and one-shot playback" $ do
+      let ready marker = announcementReady marker "Goodbye" 600000 1600000000 "Goodbye. Extra words" (Just 1000000000)
+      map ready [False, True] `shouldBe` [False, True]
     it "recognizes contractions and normalized accented names" $ do
       announcementComplete True "I will connect you now" "I'll connect you now." `shouldBe` True
       spokenWords "Bärbel, I'm ready" `shouldBe` ["barbel", "i", "am", "ready"]

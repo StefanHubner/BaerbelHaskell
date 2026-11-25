@@ -2,20 +2,20 @@
 module Baerbel.Live
   ( LiveConfig(..), Media(..), AudioDelivery(..), LiveControls(..), ToolLimits(..), ToolCall(..), ToolBatch(..)
   , ToolState, emptyToolState, stepTools, rememberOutput, cachedOutput
-  , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript
+  , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript, observeStarted
   ) where
 
 import Baerbel.JSON (eventDelta, field, textField, numberField)
 import Baerbel.AudioMetrics (AudioDelivery(..), AudioMetrics, AudioNotice, emptyMetrics, recordInputFrame, recordQueueDepth, recordDelivery, noticeValue, summaryValue)
 import Baerbel.WebSocket (withSecureSocket)
-import Baerbel.Concurrent (raceWorkers, awaitReady, hasElapsed, paceFrame)
+import Baerbel.Concurrent (raceWorkers, awaitReady, paceFrame)
 import Baerbel.Background (BackgroundRules(..), Progress(..), progressStep)
 import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Failure(..), Result, failure)
 import Baerbel.Speech (Resampler, resample, resetResampler, splitFrames, withResampler, audiblePCM)
 import Baerbel.Recording (Timeline, emptyTimeline, addFrame, resetTimeline, sentSamples, transcriptBounds)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Baerbel.Protocol (audioCommand, toolOutputCommand, decodeAudio, startCommand, continueCommand, appendCommand, announcementComplete)
+import Baerbel.Protocol (audioCommand, toolOutputCommand, decodeAudio, startCommand, continueCommand, appendCommand, announcementReady)
 import Control.Applicative ((<|>))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
@@ -267,20 +267,28 @@ beginSession runtime execute = do
       Effects.continue (const (runBridge runtime execute)) result
 
 awaitStarted :: Runtime -> IO (Result ())
-awaitStarted runtime = receiveEvent runtime >>= Effects.continue (observeStarted runtime)
+awaitStarted runtime = receiveEvent runtime >>= Effects.continue dispatch
+  where
+    dispatch :: Value -> IO (Result ())
+    dispatch event = case observeStarted event of
+      Left err -> pure (Left err)
+      Right False -> observeEvent (media runtime) event >> awaitStarted runtime
+      Right True -> started
+    started :: IO (Result ())
+    started = do
+      atomically (writeTVar (ready runtime) True)
+      now <- getMonotonicTimeNSec
+      let session = liveSession (config runtime)
+          event = startedEvent session (runtimeStart runtime) now
+      observeEvent (media runtime) event
+      pure (Right ())
 
-observeStarted :: Runtime -> Value -> IO (Result ())
-observeStarted runtime event = case textField "type" event of
-  Just "session.started" -> do
-    atomically (writeTVar (ready runtime) True)
-    now <- getMonotonicTimeNSec
-    let session = liveSession (config runtime)
-        started = startedEvent session (runtimeStart runtime) now
-    observeEvent (media runtime) started
-    pure (Right ())
-  Just "error" -> pure (Left (failure "live_setup_rejected"))
-  Just "session.closed" -> pure (Left (failure "live_closed_before_start"))
-  _ -> observeEvent (media runtime) event >> awaitStarted runtime
+observeStarted :: Value -> Result Bool
+observeStarted event = case textField "type" event of
+  Just "session.started" -> Right True
+  Just "error" -> Left (failure "live_setup_rejected")
+  Just "session.closed" -> Left (failure "live_closed_before_start")
+  _ -> Right False
 
 runBridge :: Runtime -> Execute -> IO (Result ())
 runBridge runtime execute = do
@@ -693,24 +701,19 @@ appendTranscript event = fmap append (eventDelta "session.output_transcript.delt
 previewComplete :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int -> Bool -> IO (Result Bool)
 previewComplete runtime transcript lastAudio ending quietMicros interruptible = do
   cancelled <- readTVarIO (interrupted runtime)
-  readyToEnd <- previewDrained runtime transcript lastAudio ending quietMicros interruptible
-  let finish
-        | cancelled && interruptible = pure (Right False)
-        | readyToEnd = pure (Right True)
-        | otherwise = threadDelay (liveFrameMicros (config runtime)) >>
-            previewComplete runtime transcript lastAudio ending quietMicros interruptible
-  finish
-
-previewDrained :: Runtime -> TVar Text -> TVar (Maybe Word64) -> Text -> Int -> Bool -> IO Bool
-previewDrained runtime transcript lastAudio ending quietMicros marker = do
   now <- getMonotonicTimeNSec
   text <- readTVarIO transcript
   lastSpeech <- readTVarIO lastAudio
   empty <- atomically (isEmptyTBQueue (outputQueue runtime))
   active <- readTVarIO (playing runtime)
-  let complete = announcementComplete marker ending text
-      quiet = maybe False (hasElapsed quietMicros now) lastSpeech
-  pure (complete && quiet && empty && not active)
+  let complete = announcementReady interruptible ending quietMicros now text lastSpeech
+      readyToEnd = complete && empty && not active
+      finish
+        | cancelled && interruptible = pure (Right False)
+        | readyToEnd = pure (Right True)
+        | otherwise = threadDelay (liveFrameMicros (config runtime)) >>
+            previewComplete runtime transcript lastAudio ending quietMicros interruptible
+  finish
 
 sendToolEvent :: Runtime -> Value -> IO (Result ())
 sendToolEvent runtime event = nextToolCommand runtime event >>= sendEvent runtime

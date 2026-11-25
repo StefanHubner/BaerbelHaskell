@@ -5,11 +5,11 @@ Physical source lines include comments and blank lines, exclude tests, fixtures,
 | Scope | Files | Lines |
 |---|---:|---:|
 | Preserved Python runtime (`src/phone_assistant`) | 50 | 10,809 |
-| Haskell runtime (`src` and `app`) | 70 | 13,562 |
+| Haskell runtime (`src` and `app`) | 70 | 13,611 |
 | Haskell build hook, native bridge, Makefile and shell helpers | 10 | 296 |
-| Current production source total | 80 | 13,858 |
+| Current production source total | 80 | 13,907 |
 
-The plumbing consolidation from `028cf7e` changes 46 production files: 159 added lines, 170 removed lines and 412 replaced lines. These counts pair old/new lines within replacement blocks and count only the excess as additions/removals; tests and documentation are excluded.
+The current purity audit from `abf5ec9` changes nine production files: 78 added lines, 29 removed lines and 81 replaced lines. These counts pair old/new lines within replacement blocks and count only the excess as additions/removals; tests and documentation are excluded. The preceding plumbing consolidation at `abf5ec9` changed 46 production files: 159 added, 170 removed and 412 replaced lines.
 
 The original Python runtime has zero changed lines. Its repository guideline update added four lines. The port is larger by physical line count; shared transport, codecs, typed preparation and pure state functions are described in [the module overview](architecture.md).
 
@@ -39,3 +39,18 @@ The subsequent consolidation reuses the same small functions throughout startup,
 - `Cache.onceSuccess`: shared initialization caching, now also used for Contacts warm-up.
 
 Provider-specific response interpretation, receipt uncertainty and timeout recovery remain explicit. The obsolete `Provider.fetch` adapter and duplicate warm-up, clock, getter and sequencing implementations were removed. Pure functions still receive ordinary values; effect runners retain explicit `IO` types.
+
+## Follow-up effect audit
+
+The audit inspected all production modules for pure work behind effectful interfaces. It did not introduce new effect aliases or generalize signatures to conceal `IO`.
+
+| Signature measure | Before (`abf5ec9`) | After audit |
+|---|---:|---:|
+| Top-level effect-returning declarations, including existing capability aliases and `ExceptT … IO` | 502 | 496 |
+| Lines matching `::.*\bIO\b` in `src` and `app` | 654 | 651 |
+
+`markDialing`, `observeStarted` and `renderPiece` now have pure signatures. Effectful dial-variable construction, profile-save preparation and mail decoder selection were replaced by pure functions, and the extra announcement-wait wrapper was removed. Gmail's local validation/forwarding adapter was removed too. New explicit local signatures describe the actual effects retained by their coordinators, which is why the textual count falls by less than the top-level count.
+
+Pure interfaces now cover profile write/no-write decisions and byte limits, SMS request/receipt construction, Maps reference resolution, Gmail search preparation/results, shared announcement readiness and mail decoder selection. Valid UTF-8 is decoded purely. Malformed UTF-8 still uses ICU because its replacement grouping differs from the standard lenient decoder; native converters remain freshly allocated at the effect boundary.
+
+The remaining effectful functions read or write sockets, HTTP responses, files, databases, clocks or synchronized state; allocate native codecs and call-local caches; or sequence and scope those operations. Scope constructors that allocate mutable state and resource/cancellation coordinators remain effectful. Pure capability assemblers can mention `IO` in their argument or record-field types without executing it, so a textual occurrence count also includes those interfaces.

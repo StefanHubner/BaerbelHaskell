@@ -6,7 +6,6 @@ module Baerbel.Session
 import Baerbel.AudioMetrics (AudioDelivery(..))
 import Baerbel.JSON (jsonOptions)
 import GHC.Generics (Generic)
-import Baerbel.Concurrent (hasElapsed)
 import Baerbel.Config (Settings, setting, rule, booleanSetting, integerSetting, numericSetting, toolDefinitions)
 import Baerbel.EndCall (EndConfig(..), EndContext(..), EndEffects(..), executeEndCall, parseEndReason)
 import Baerbel.ManagedMedia (Registry, ManagedCall(..), withManaged)
@@ -28,7 +27,7 @@ import Network.Socket (Socket)
 import qualified Baerbel.Effects as Effects
 import Baerbel.Error (Result, failure)
 import Baerbel.Live (LiveConfig(..), Media(..), LiveControls(..), ToolLimits(..), runLiveSession, appendTranscript)
-import Baerbel.Protocol (SessionRole(..), SessionSettings(..), sessionConfig, voiceIdentity, greetingCommand, buildSessionWithProfile, announcementComplete)
+import Baerbel.Protocol (SessionRole(..), SessionSettings(..), sessionConfig, voiceIdentity, greetingCommand, buildSessionWithProfile, announcementReady)
 import Baerbel.Speech (audiblePCM)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
@@ -114,9 +113,8 @@ awaitAnnouncement transcript lastAudio completion quietMicros = do
   now <- getMonotonicTimeNSec
   heard <- readTVarIO transcript
   lastSpeech <- readTVarIO lastAudio
-  let complete = announcementComplete False completion heard
-      quiet = maybe False (hasElapsed quietMicros now) lastSpeech
-  continue (complete && quiet)
+  let complete = announcementReady False completion quietMicros now heard lastSpeech
+  continue complete
   where
     continue True = pure (Right ())
     continue False = threadDelay 20000 >> awaitAnnouncement transcript lastAudio completion quietMicros

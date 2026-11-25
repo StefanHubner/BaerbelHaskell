@@ -319,25 +319,35 @@ readMessage rules ident format = get (gmailHttp rules) url params
 
 search :: GmailRules -> Send -> SearchArgs -> IO (Result Value)
 search rules send args = do
-  page <- requestJSON send request (decodeValue "gmail_invalid_response")
-  continue complete page
+  let request = searchRequest rules args
+      parse value = decodeValue "gmail_invalid_response" value >>= searchPage args
+  page <- requestJSON send request parse
+  continue retrieve page
+  where
+    retrieve :: (Page, [MessageId]) -> IO (Result Value)
+    retrieve (page, ids) = do
+      messages <- boundedMap (gmailSearchConcurrency rules) (readSummary rules send) ids
+      pure (sequence messages >>= searchResult rules page)
+
+searchRequest :: GmailRules -> SearchArgs -> Request
+searchRequest rules args = get (gmailHttp rules) url params
   where
     url = gmailBase rules <> "/messages"
     count = Text.pack (show (searchLimit args))
     params = [textParam "q" (searchQuery args), textParam "maxResults" count]
       <> maybe [] (pure . textParam "pageToken") (searchPageToken args)
-    request = get (gmailHttp rules) url params
-    complete page = continue (summaries page) validatedIds
-      where
-        ids = take (searchLimit args) (fromMaybe [] (pageMessages page))
-        validatedIds = traverse validateId ids
-        validateId value = decodeValue "invalid_message_id" value >>= fmap MessageId . identifier . midId
-    summaries page ids = do
-      messages <- boundedMap (gmailSearchConcurrency rules) (readSummary rules send) ids
-      pure (sequence messages >>= result page)
-    result page items = do
-      token <- traverse (textValue (gmailPageTokenChars rules) True) (pageNextPageToken page)
-      Right (toJSON (SearchResult "ok" items (length items) (isJust token) token (gmailSearchScope rules) True))
+
+searchPage :: SearchArgs -> Page -> Result (Page, [MessageId])
+searchPage args page = (page,) <$> traverse validateId ids
+  where
+    ids = take (searchLimit args) (fromMaybe [] (pageMessages page))
+    validateId :: Value -> Result MessageId
+    validateId value = decodeValue "invalid_message_id" value >>= fmap MessageId . identifier . midId
+
+searchResult :: GmailRules -> Page -> [Summary] -> Result Value
+searchResult rules page items = do
+  token <- traverse (textValue (gmailPageTokenChars rules) True) (pageNextPageToken page)
+  Right (toJSON (SearchResult "ok" items (length items) (isJust token) token (gmailSearchScope rules) True))
 
 readSummary :: GmailRules -> Send -> MessageId -> IO (Result Summary)
 readSummary rules send ident = runExceptT $ do

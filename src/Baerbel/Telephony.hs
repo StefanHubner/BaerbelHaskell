@@ -282,18 +282,16 @@ checkVariable ami channel (name, expected) = do
 nativeDial :: OwnerRuntime -> MVar (Maybe CallState) -> DialRequest -> ExceptT Failure IO Value
 nativeDial runtime pending request = do
   channel <- ExceptT (owned runtime pending)
-  ExceptT (setDialVariables runtime channel request)
-  ExceptT (markDialing runtime pending)
+  let variables = dialVariables (dialTimeoutSeconds (ownerConfig runtime)) request
+  ExceptT (setVariables (ownerAMI runtime) channel variables)
+  ExceptT (stateMVar pending markDialing)
   lift (pauseMedia (ownerMedia runtime))
   ExceptT (redirectOwner runtime pending channel)
   ExceptT (awaitDial runtime pending request)
 
-markDialing :: OwnerRuntime -> MVar (Maybe CallState) -> IO (Result ())
-markDialing _ pending = stateMVar pending transition
-  where
-    transition :: Maybe CallState -> (Maybe CallState, Result ())
-    transition (Just state) | callPhase state == Announcing = (Just state {callPhase = Dialing}, Right ())
-    transition state = (state, Left (failure "call_cancelled"))
+markDialing :: Maybe CallState -> (Maybe CallState, Result ())
+markDialing (Just state) | callPhase state == Announcing = (Just state {callPhase = Dialing}, Right ())
+markDialing state = (state, Left (failure "call_cancelled"))
 
 setVariables :: AMI -> Channel -> [(Text, Text)] -> IO (Result ())
 setVariables ami channel variables = runExceptT (mapM_ set variables)
@@ -301,16 +299,14 @@ setVariables ami channel variables = runExceptT (mapM_ set variables)
     set :: (Text, Text) -> ExceptT Failure IO ()
     set (key, value) = void (ExceptT (amiAction ami "Setvar" [("Channel", channelName channel), ("Variable", key), ("Value", value)] Nothing))
 
-setDialVariables :: OwnerRuntime -> Channel -> DialRequest -> IO (Result ())
-setDialVariables runtime channel request = setVariables (ownerAMI runtime) channel variables
+dialVariables :: Int -> DialRequest -> [(Text, Text)]
+dialVariables duration request = [("PA_DIRECT_NUMBER", routeNumber route), ("PA_DIRECT_PROVIDER", provider),
+  ("PA_DIRECT_ATTEMPT", dialAttemptId request), ("PA_DIRECT_TIMEOUT", T.pack (show duration))]
   where
     route :: Route
     route = dialRoute request
     provider :: Text
     provider = providerName (routeProvider route)
-    variables :: [(Text, Text)]
-    variables = [("PA_DIRECT_NUMBER", routeNumber route), ("PA_DIRECT_PROVIDER", provider),
-      ("PA_DIRECT_ATTEMPT", dialAttemptId request), ("PA_DIRECT_TIMEOUT", T.pack (show (dialTimeoutSeconds (ownerConfig runtime))))]
 
 redirect :: AMI -> Channel -> Text -> IO (Result ())
 redirect ami channel context = fmap void action

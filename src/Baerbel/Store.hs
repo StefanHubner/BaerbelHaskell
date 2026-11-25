@@ -13,6 +13,7 @@ import Control.Exception (IOException, bracket, try)
 import Data.Aeson (FromJSON(..), genericParseJSON)
 import qualified Data.ByteString as Bytes
 import Data.Bits ((.&.))
+import Data.Bifunctor (first)
 import Data.Char (isPrint, isAscii, isDigit)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (isNothing)
@@ -120,11 +121,11 @@ awaitLock rules descriptor@(Fd raw) = fileLock raw 6 >>= continue
 update :: ProfileRules -> StoreRules -> FilePath -> UserID -> (ProfileState -> Result (ProfileState, a)) -> IO (Result a)
 update profileRules rules path uid operation = do
   previous <- readProfile profileRules rules path uid
-  Effects.continue (persist rules path) (previous >>= apply)
-  where
-  apply previous = do
-    (next, result) <- operation previous
-    Right (previous, next, result)
+  case previous >>= prepareSave rules operation of
+    Left issue -> pure (Left issue)
+    Right (bytes, result) -> do
+      written <- traverse (atomicWrite path) bytes
+      pure (result <$ first storageFailure (sequence_ written))
 
 readProfile :: ProfileRules -> StoreRules -> FilePath -> UserID -> IO (Result ProfileState)
 readProfile profileRules rules path owner = Effects.attempt "profile_storage_unavailable" openedFile
@@ -180,16 +181,22 @@ validTimestamp value = shaped && seconds < "60" && maybe False positiveYear pars
     positiveYear :: UTCTime -> Bool
     positiveYear time = let (year, _, _) = toGregorian (utctDay time) in year > 0
 
-persist :: StoreRules -> FilePath -> (ProfileState, ProfileState, a) -> IO (Result a)
-persist rules path (previous, next, result)
-  | previous == next = pure (Right result)
-  | Bytes.length bytes > storeMaximumBytes rules = pure (Left (failure "profile_storage_limit_reached"))
-  | otherwise = fmap (either rejected (const (Right result))) (atomicWrite path bytes)
-  where
-  bytes = encodeBytes next <> "\n"
-  rejected issue = Left issue {failureCode = storageFailure issue}
+prepareSave :: StoreRules -> (ProfileState -> Result (ProfileState, a)) -> ProfileState -> Result (Maybe Bytes.ByteString, a)
+prepareSave rules operation previous = do
+  (next, result) <- operation previous
+  bytes <- saveContent rules previous next
+  Right (bytes, result)
 
-storageFailure :: Failure -> Text
-storageFailure issue
-  | failureUncertain issue = "profile_update_outcome_unknown_check_profile_before_retry"
-  | otherwise = "profile_storage_unavailable"
+saveContent :: StoreRules -> ProfileState -> ProfileState -> Result (Maybe Bytes.ByteString)
+saveContent rules previous next
+  | previous == next = Right Nothing
+  | Bytes.length bytes > storeMaximumBytes rules = Left (failure "profile_storage_limit_reached")
+  | otherwise = Right (Just bytes)
+  where bytes = encodeBytes next <> "\n"
+
+storageFailure :: Failure -> Failure
+storageFailure issue = issue {failureCode = code}
+  where
+    code
+      | failureUncertain issue = "profile_update_outcome_unknown_check_profile_before_retry"
+      | otherwise = "profile_storage_unavailable"

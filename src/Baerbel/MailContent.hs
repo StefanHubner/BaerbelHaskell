@@ -1,6 +1,7 @@
 module Baerbel.MailContent (htmlText, htmlTextWith, decodeWords, decodeCharset) where
 
 import Baerbel.Error (Result, failure, ioResult)
+import Baerbel.Effects (continue)
 import Control.Exception (evaluate, try)
 import Control.Monad.Trans.Except (ExceptT(..), except, runExceptT)
 import Data.Char (isAscii, isAlphaNum)
@@ -38,14 +39,31 @@ visible hidden opening closing depth (tag : rest) = output <> visible hidden ope
       TagText value | depth == 0 -> (depth, [value])
       _ -> (depth, [])
 
+data Decoder = Decoded Text | Unicode Text ByteString | System String ByteString
+
 -- Fresh converters stay inside IO: ICU converters carry mutable decoding state.
 decodeCharset :: Text -> ByteString -> IO Text
 decodeCharset charset bytes = do
-  let (name, input) = encodingInput charset bytes
-      decode | unicodeName name = unicodeBody name input
-             | otherwise = systemDecode True name input
-  result <- decode
+  result <- continue decode (bodyDecoder charset bytes)
   either (const (fallbackBody bytes)) pure result
+
+-- ICU groups malformed UTF-8 sequences differently from the lenient text decoder.
+bodyDecoder :: Text -> ByteString -> Result Decoder
+bodyDecoder charset bytes
+  | name == "utf-8", Right value <- Text.decodeUtf8' input = Right (Decoded value)
+  | unicodeName name = Right (Unicode name input)
+  | otherwise = systemDecoder True name input
+  where (name, input) = encodingInput charset bytes
+
+decode :: Decoder -> IO (Result Text)
+decode (Decoded value) = pure (Right value)
+decode (Unicode name bytes) = unicodeBody name bytes
+decode (System name bytes) = ioResult "invalid_message_header" convert
+  where
+    convert = do
+      codec <- mkTextEncoding name
+      decoded <- Bytes.useAsCStringLen bytes (Foreign.peekCStringLen codec)
+      evaluate (Text.pack decoded)
 
 fallbackBody :: ByteString -> IO Text
 fallbackBody bytes = do
@@ -67,18 +85,16 @@ convertUnicode name bytes = do
   let decoded = ICU.toUnicode converter bytes
   evaluate decoded
 
-systemDecode :: Bool -> Text -> ByteString -> IO (Result Text)
-systemDecode replace name bytes
-  | Text.null name || Text.any invalidName name = pure (Left (failure "invalid_message_header"))
-  | otherwise = ioResult "invalid_message_header" convert
+systemDecoder :: Bool -> Text -> ByteString -> Result Decoder
+systemDecoder replace name bytes
+  | Text.null name || Text.any invalidName name = invalid
+  | not replace && name == "utf-8" = either (const invalid) (Right . Decoded) (Text.decodeUtf8' bytes)
+  | otherwise = Right (System selected bytes)
   where
+    invalid = Left (failure "invalid_message_header")
     invalidName char = not (isAscii char && (isAlphaNum char || char `elem` ("-_." :: String)))
     selected | replace = Text.unpack name <> "//TRANSLIT"
              | otherwise = Text.unpack name
-    convert = do
-      codec <- mkTextEncoding selected
-      decoded <- Bytes.useAsCStringLen bytes (Foreign.peekCStringLen codec)
-      evaluate (Text.pack decoded)
 
 unicodeName :: Text -> Bool
 unicodeName name = any (`Text.isPrefixOf` name) ["utf-8", "utf-16", "utf-32"]
@@ -117,14 +133,14 @@ data HeaderPiece = Literal Text | Encoded Text ByteString
 decodeWords :: Text -> IO (Result Text)
 decodeWords input = runExceptT $ do
   pieces <- except (parseWords input)
-  decoded <- traverse (ExceptT . renderPiece) pieces
+  decoded <- traverse (ExceptT . continue decode . renderPiece) pieces
   pure (Text.concat decoded)
 
-renderPiece :: HeaderPiece -> IO (Result Text)
-renderPiece (Literal value) = pure (Right value)
+renderPiece :: HeaderPiece -> Result Decoder
+renderPiece (Literal value) = Right (Decoded value)
 renderPiece (Encoded charset bytes)
-  | Text.toLower charset == "unknown-8bit" = systemDecode True "ascii" bytes
-  | otherwise = let (name, input) = encodingInput charset bytes in systemDecode False name input
+  | Text.toLower charset == "unknown-8bit" = systemDecoder True "ascii" bytes
+  | otherwise = let (name, input) = encodingInput charset bytes in systemDecoder False name input
 
 parseWords :: Text -> Result [HeaderPiece]
 parseWords input = case Text.breakOn "=?" input of

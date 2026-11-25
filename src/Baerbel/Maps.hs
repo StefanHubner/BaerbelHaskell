@@ -349,7 +349,8 @@ execute rules routeRules redact send elevation clock places name arguments _ = c
   where
     details args = do
       known <- fmap (fst . storedPlaces) (readMVar places)
-      maybe (pure (Left (failure "maps_unknown_place_reference"))) (retrieve (detailsPlaceRef args)) (Map.lookup (detailsPlaceRef args) known)
+      let place = resolvePlace known (detailsPlaceRef args)
+      continue (retrieve (detailsPlaceRef args)) place
     retrieve reference place = do
       let request = detailsRequest rules place
       response <- requestJSON send request (decodeValue "maps_invalid_place_response")
@@ -357,10 +358,14 @@ execute rules routeRules redact send elevation clock places name arguments _ = c
       pure (response >>= placeDetails rules redact now reference place)
     directions args = do
       known <- fmap (fst . storedPlaces) (readMVar places)
-      let origin = Map.lookup (routeOriginRef args) known
-          destination = Map.lookup (routeDestinationRef args) known
-          result = route routeRules send elevation <$> origin <*> destination
-      fromMaybe (pure (Left (failure "maps_unknown_place_reference"))) result
+      let origin = resolvePlace known (routeOriginRef args)
+          destination = resolvePlace known (routeDestinationRef args)
+          resolved = (,) <$> origin <*> destination
+      continue (uncurry (route routeRules send elevation)) resolved
+
+
+resolvePlace :: Map Text Place -> Text -> Result Place
+resolvePlace known reference = maybe (Left (failure "maps_unknown_place_reference")) Right (Map.lookup reference known)
 
 
 data ApiEnvelope = ApiEnvelope {apiStatus :: Maybe Value, apiError :: Maybe Value} deriving (Generic)

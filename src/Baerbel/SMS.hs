@@ -151,14 +151,20 @@ deliver rules credentials sender reserve remember ident text kind =
 
 sendReserved :: SMSRules -> SMSCredentials -> RawSend -> Remember -> Text -> Text -> IO Receipt
 sendReserved rules credentials sender remember ident body = do
+  let request = smsRequest rules credentials body
   response <- sender request
   let status = either (const Uncertain) (classify rules) response
-  saved <- remember ident status
-  pure (Receipt (either (const Uncertain) (const status) saved) Nothing Nothing)
+  savedReceipt status <$> remember ident status
+
+smsRequest :: SMSRules -> SMSCredentials -> Text -> Request
+smsRequest rules credentials body = Request "POST" (smsEndpoint rules) [] [] (FormBody form)
+  (smsMaximumResponse rules) (smsTimeoutSeconds rules)
   where
-  form = map (second Text.encodeUtf8)
-    [("username", smsUsername credentials), ("password", smsPassword credentials)
-    , ("da", smsRecipient credentials), ("ud", body), ("private", "1")
-    , ("limit", Text.pack (show (smsMaximumParts rules)))]
-  request = Request "POST" (smsEndpoint rules) [] [] (FormBody form)
-    (smsMaximumResponse rules) (smsTimeoutSeconds rules)
+    form = map (second Text.encodeUtf8)
+      [("username", smsUsername credentials), ("password", smsPassword credentials)
+      , ("da", smsRecipient credentials), ("ud", body), ("private", "1")
+      , ("limit", Text.pack (show (smsMaximumParts rules)))]
+
+savedReceipt :: Delivery -> Result () -> Receipt
+savedReceipt status result = Receipt confirmed Nothing Nothing
+  where confirmed = either (const Uncertain) (const status) result

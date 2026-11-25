@@ -35,6 +35,14 @@ spec = describe "mail codec equivalence" $ do
   case loaded of
     Left issue -> it "loads original codec fixtures" (expectationFailure (show issue))
     Right cases -> mapM_ codecExample cases
+  it "decodes valid UTF-8 scalar boundaries in bodies and strict headers" $ do
+    let value = Text.pack ['\0', '\x7f', '\x80', '\x7ff', '\x800', '\xd7ff', '\xe000', '\xffff', '\x10000', '\x10ffff']
+        bytes = Text.encodeUtf8 value
+        header = encodedHeader bytes
+    decodeCharset "UTF_8" bytes `shouldReturn` value
+    decodeWords header `shouldReturn` Right value
+  it "retains ICU grouping for interrupted UTF-8 and unknown-charset fallback" $
+    mapM_ checkInterrupted [[224,160], [237,159], [240,144,128], [244,143,191]]
   it "keeps stateful charset converters independent across concurrent messages" $ do
     let header = "=?iso-2022-jp?B?GyRCRnxLXDhsGyhC?="
         inputs = replicate 100 header
@@ -45,3 +53,14 @@ spec = describe "mail codec equivalence" $ do
   it "preserves text around adjacent encoded words" $
     decodeWords "Re: =?utf-8?Q?Gr=C3=BC=C3=9Fe?= =?utf-8?B?IQ==?=" `shouldReturn` Right "Re: Grüße!"
   where codecExample fixture = it (Text.unpack (caseLabel fixture)) (checkFixture fixture)
+
+encodedHeader :: Bytes.ByteString -> Text
+encodedHeader bytes = "=?utf-8?B?" <> Text.decodeUtf8 (Base64.encode bytes) <> "?="
+
+checkInterrupted :: [Word] -> Expectation
+checkInterrupted prefix = do
+  let bytes = Bytes.pack (map fromIntegral (prefix <> [65]))
+      header = encodedHeader bytes
+  decodeCharset "utf-8" bytes `shouldReturn` "\xfffd\&A"
+  decodeCharset "unknown-test" bytes `shouldReturn` "\xfffd\&A"
+  decodeWords header `shouldReturn` Left (failure "invalid_message_header")
