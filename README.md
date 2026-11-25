@@ -21,11 +21,11 @@ The build uses the tested LTS package set. Package requirements specify minimum 
 stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbel/user.json
 ```
 
-`--check` validates local configuration and native dependencies without making provider requests. Production uses Live speech; the unused alternate STT/chat/TTS pipeline has been removed from the current source. The new backend settings are `gpt-6.2-sol`, `low` reasoning and `priority` service tier (Fast); the Live speech model is unchanged. These new source/configuration changes are not deployed yet.
+`--check` validates local configuration and native dependencies without making provider requests. Production uses Live speech; the unused alternate STT/chat/TTS pipeline has been removed from the current source. The deployed backend settings are `gpt-6.2-sol`, `low` reasoning and `priority` service tier (reported as `fast` by the provider); the Live speech model is unchanged.
 
 The service currently loads one private user configuration. Shared application/reference files are separate from user credentials and state; future multi-user routing and shared versus separate telephone numbers remain undecided.
 
-Haskell now runs in the existing `phone-assistant.service` on the miniserver. The Python application is preserved for rollback. Process, listener and startup-log checks passed. Real tests verified the owner Gmail path and known-caller forwarding/ringing, followed by caller hangup and an accepted outcome SMS. Answered bridging and other call paths remain unverified. See the migration and live-verification records for the behavior actually exercised.
+Haskell now runs in the existing `phone-assistant.service` on the miniserver. The Python application is preserved for rollback. Process and listener checks passed. Real tests on an earlier release verified the owner Gmail path and known-caller forwarding/ringing, followed by caller hangup and an accepted outcome SMS. Answered bridging and other call paths remain unverified. See the migration and live-verification records for the behavior actually exercised.
 
 ## Development checks
 
@@ -64,4 +64,4 @@ make activate
 
 `make rollback` removes that override and restores the same Python service. The Python application in `/home/stefan/apps/assistant`, its virtual environment and shared state are preserved; no second service is installed. The server supplies Asterisk, libsoxr and ffmpeg. See [deployment.md](docs/deployment.md) for the workflow and [migration.md](docs/migration.md) for what has actually been exercised. Installation, target checks and activation passed on 2026-11-25. The Haskell process is active with zero restarts, its three loopback listeners are bound, Asterisk is active and the old Python process has exited. Real owner Gmail and known-caller forwarding/ringing checks passed; the forwarded caller ended before answer. Answered bridging and other call paths still need verification.
 
-The audio-pacing and Windguru corrections from `21d47c7` are active as of 2026-11-25T17:18:47Z. Read-only inspection confirmed the exact release executable, zero restarts and active Asterisk. The newer live-only/configuration/backend changes described above are not yet deployed. See [the release record](docs/migration.md#corrective-release-activated).
+Release `559d2cdf…` from `95bae182…` is active as of 2026-11-25T19:48:47Z. Verification confirmed the exact executable, zero restarts, all three loopback listeners and active Asterisk. A focused synthetic Live tool check on the miniserver verified the new backend, tool round trip and provider finalization. No real Asterisk call or latency benchmark has been performed for this release. See [the release record](docs/migration.md#live-only-release-activated).

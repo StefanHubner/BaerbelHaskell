@@ -2,7 +2,7 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-The corrective release from commit `21d47c7` is active as of 2026-11-25T17:18:47Z. It corrects accumulating audio delay and Windguru's trailing forecast arrays. Read-only inspection verified the exact installed executable at PID 219249, zero restarts and active Asterisk. See [the activated release record](migration.md#corrective-release-activated). The newer live-only/configuration/backend changes are not yet deployed.
+Release `559d2cdf…` from source `95bae182…` is active as of 2026-11-25T19:48:47Z. It includes the audio/Windguru corrections, live-only runtime, separate phone metadata and `gpt-6.2-sol`/`low`/`priority` backend settings. Verification confirmed the exact staged executable at PID 221942, zero restarts, ownership of all three loopback listeners and active Asterisk. The focused target-provider tool check passed; no real Asterisk call or latency benchmark has been performed for this release. See [the activated release record](migration.md#live-only-release-activated).
 
 ## Check and package
 
@@ -28,7 +28,7 @@ This uploads the existing archive and preparation helpers over SSH to `/home/ste
 
 The helper runs `ldd` and the staged Haskell executable's `--check` as `stefan`, the current service user, before selecting `/home/stefan/apps/baerbel/staged`. It prepares the target binary and configuration without sudo, changing the running service, or opening its listeners. Missing dependencies or a failed preflight stop preparation. Asterisk, libsoxr and ffmpeg remain supplied by the server.
 
-Remote installation, target library/configuration/native checks and activation passed on 2026-11-25. Post-activation checks confirmed the installed Haskell executable, zero restarts, all three loopback listeners, active Asterisk and no startup warnings or errors. The previous Python process exited. See [migration.md](migration.md) for the artifact, timings and verification limits.
+Remote installation, target library/configuration/native checks and activation passed on 2026-11-25. Post-activation checks confirmed the installed Haskell executable, zero restarts, all three loopback listeners and active Asterisk. The previous Python process exited. See [migration.md](migration.md) for the artifact, timings and verification limits.
 
 ## Activate with sudo
 
@@ -38,9 +38,9 @@ make activate
 
 This uses the uploaded helper and requests sudo through the existing SSH connection. The privileged step checks Asterisk for active channels and refuses a busy cutover. The release is already installed under `/home/stefan/apps/baerbel`. This step installs the prepared private configuration at `/etc/phone-assistant/user.json`, then repeats the executable's `--check` as the service user.
 
-Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf`, reloads systemd and restarts the existing `phone-assistant.service`. Systemd stops Python before starting Haskell; no second assistant service is installed. The helper verifies both assistant and Asterisk are active, checks `/proc/MainPID/exe` against the installed executable, waits three seconds and verifies the same PID again. It reports the executable and effective command.
+Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf`, reloads systemd and restarts the existing `phone-assistant.service`. Systemd stops the previous assistant before starting the selected release; no second assistant service is installed. The helper verifies both assistant and Asterisk are active, checks `/proc/MainPID/exe` against the installed executable, waits three seconds and verifies the same PID again. It reports the executable and effective command.
 
-The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. A subsequent real owner Gmail call was verified against the deployed Haskell executable: both Gmail searches succeeded and provider closure was acknowledged. A known external caller also exercised forwarding/ringing as expected, then hung up before answer; its outcome SMS was accepted. Answered bridging, unknown-caller screening, home-phone behavior and in-call voice notes remain unverified in real calls. Independent inspection of the loaded Asterisk dialplan was unavailable: the current SSH session lacks noninteractive sudo and the AMI account rejects the scoped dialplan query.
+The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. On an earlier Haskell release, a real owner Gmail call was verified against its executable: both Gmail searches succeeded and provider closure was acknowledged. A known external caller also exercised forwarding/ringing as expected, then hung up before answer; its outcome SMS was accepted. Answered bridging, unknown-caller screening, home-phone behavior and in-call voice notes remain unverified in real calls. Independent inspection of the loaded Asterisk dialplan was unavailable: the current SSH session lacks noninteractive sudo and the AMI account rejects the scoped dialplan query.
 
 ## Restore Python
 

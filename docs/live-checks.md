@@ -1,10 +1,10 @@
 # Live verification
 
-Later production calls exposed a long-call input overflow and slow responses
-across multiple backend tool steps. The audio-pacing and Windguru corrections
-passed local checks and focused target-provider reruns. The corrected release
-is active as of 2026-11-25T17:18:47Z. Newer live-only/configuration/backend changes
-are not yet deployed and are outside the results below.
+The live-only release with separate phone metadata and the `gpt-6.2-sol` / `low`
+/ `priority` backend is active as of **2026-11-25T19:48:47Z**. It passed local
+checks and a focused actual-provider tool check described below. Earlier
+real-call and longer synthetic-session results retain their stated release scope;
+no real Asterisk call or latency benchmark has been performed for this release.
 
 Run the local checks using the private user file at `~/.config/baerbel/user.json`:
 
@@ -214,12 +214,11 @@ execution took **614 ms**. The follow-up executed `profile_set` in **7 ms**,
 backend response cycles accounted for most of the remaining wait; the provider
 HTTP operations themselves were short in these samples.
 
-The actual deployed Haskell settings and the preserved Python loader both select
+At the time of these incidents, the deployed Haskell settings and preserved Python loader both selected
 `gpt-live-1`, backend `gpt-6-luna`, reasoning effort **`high`**, and a **16,384**
 backend output-token limit. Both session builders disable parallel tool calls.
-There was no accidental model/effort change during migration. Changing these
-settings would be a separate behavior choice; they have not been altered as a
-latency workaround.
+There was no accidental model/effort change during migration. The later explicit
+backend change is recorded separately below; these timings do not measure it.
 
 The final `make check` passed **406 examples with zero failures**, HLint with
 **zero hints**, HLS across **159 files with zero failures**, and offline
@@ -251,3 +250,25 @@ observed 149-second failure. It does not replace a real Asterisk call after
 activation. The corrected release became active at 2026-11-25T17:18:47Z;
 read-only inspection confirmed its exact executable, zero restarts and active
 Asterisk. See [deployment.md](deployment.md).
+
+## Live-only release and backend verification
+
+Release `559d2cdf111aa2fddc3d8d1ceb6c29b0918838567a25f2a1ebf20b236ab371c1`,
+from source `95bae18204b5da142c0f00e4f6166790d9b65a40`, became active at
+**2026-11-25T19:48:47Z**. Verification found the exact staged executable at
+**PID 221942**, zero restarts, all three loopback listeners owned by that PID
+and active Asterisk. Local checks passed **402 tests**, HLint with no hints,
+HLS across **157 files with zero failures**, and offline configuration/native
+checks. Shared phone metadata and permitted-number policy are unchanged.
+Development-only synthesis configuration and the checker are absent from the
+production archive.
+
+A focused actual Live-provider check ran on the miniserver against the staged
+configuration with a synthetic tool. **Two backend responses completed** using
+`gpt-6.2-sol`, `low` reasoning and reported tier `fast` for the requested
+`priority`. The exact tool round trip succeeded, there were no provider errors,
+and finalization was acknowledged. The initial assertion expected the literal
+returned tier `priority`; after accepting the observed `fast` spelling, the
+focused repeat passed. This is provider functionality evidence, not a latency
+benchmark or a real Asterisk call. The earlier full-suite and 210-second soak
+results were obtained before this explicit backend change.
