@@ -36,10 +36,10 @@ they have connected.
 
 Standard users share the 033 SIP account in SQLite. Each Pro user has
 their own SIP number, username and password there. A user’s registered
-caller number is stored separately. `make install-account-routing`
+caller number is stored separately. `make config`
 renders the managed files from the private Asterisk YAML and SQLite after
 a SIP account is added. Telematica’s former verification flag was a
-record of call testing.
+record of call testing. The handset extension and Telematica routing live in Asterisk YAML.
 
 ## Recovery files
 

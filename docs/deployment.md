@@ -67,7 +67,7 @@ checks.
 ## Install Asterisk settings
 
 ```sh
-make install-account-routing
+make config
 ```
 
 The release includes the Haskell `asteriskconfig` executable. It uses
@@ -76,6 +76,12 @@ The release includes the Haskell `asteriskconfig` executable. It uses
 files are grouped in `/etc/asterisk/phone-assistant/` and loaded by the
 appropriate Asterisk modules. The installer checks that the PBX is idle
 and preserves the replaced files in a private backup.
+
+Both `make install` and `make config` can run from a checkout on the
+miniserver. The same targets use SSH from the workstation. A repeated
+`make config` compares the rendered bytes and exits when the files and
+includes are current. The existing handset extension and Telematica
+endpoint and routing rules are part of the private Asterisk YAML.
 
 The initial adoption moves the existing shared and Pro credentials into
 SQLite, changes the old internal Pro ID to `stefan`, and archives the
