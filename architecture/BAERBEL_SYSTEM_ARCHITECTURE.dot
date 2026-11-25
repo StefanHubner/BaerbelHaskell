@@ -3,7 +3,7 @@ digraph Baerbel {
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=15, margin="0.18,0.15", color="#728397", fillcolor="#eef4fa", penwidth=1.4];
   edge [fontname="DejaVu Sans", fontsize=12, color="#586f86", arrowsize=0.8];
   title [shape=plain, style="", label="BÄRBEL · HASKELL IMPLEMENTATION", fontsize=26, pos="900,1010!"];
-  status [shape=plain, style="", label="Haskell service active · Asterisk retained\nProvider/synthetic checks passed · real-call verification pending", fontsize=15, pos="900,965!"];
+  status [shape=plain, style="", label="Haskell active · real owner Gmail call verified\nOther routes and features need real-call verification", fontsize=15, pos="900,965!"];
   phones [label="Owner / public callers\nSIP providers and home phone", pos="900,870!", width=4.7];
   pbx [label="Existing Asterisk\nNative channel ownership, dialplan, bridge\nAudioSocket · AMI · FastAGI · full-call WAV", pos="900,750!", width=5.9, fillcolor="#eaf2ed", color="#618d73"];
   owner [label="Owner ingress :9092\nSeparate managed-media registry\nPIN gate for private email tools", pos="420,570!", width=5.2, fillcolor="#f1eaf8", color="#9674b2"];

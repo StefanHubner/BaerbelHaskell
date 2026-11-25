@@ -105,8 +105,37 @@ and native-audio check. ShellCheck and strict typing of the metadata utility
 passed. Pure phone validation matched all 1,236,669 differential cases and the
 864 original fixtures. These checks supplement the live evidence above.
 
-These local checks do not originate carrier calls or replace the running Python
-service. Asterisk channel ownership, carrier audio, transfers and hardware still
-need the actual call checks at cutover. See [deployment.md](deployment.md) for
-staging, the same-service switch to Haskell and rollback to Python, and
-[migration.md](migration.md) for the recorded deployment state.
+## Real owner Gmail call
+
+On **2026-11-25, approximately 15:58:12–15:59:57 UTC**, the user reported a
+successful real owner Gmail call. All **185** associated journal entries identify
+PID **214856** and the installed Haskell executable under
+`/home/stefan/apps/baerbel/releases/421e7cad8704c7209d4b9137b5fc9e71d455306bfa4f907583c3786c243bdeb6/bin/phone-assistant-server`.
+The old Python process is absent, and the service remains at zero restarts.
+
+Two `gmail_search` actions with distinct tool-call IDs both returned `ok`; two
+delegation events were recorded. The logs do not map each tool to a delegation
+ID. Four backend responses were created and completed; none failed or were
+incomplete. Private PIN protection was configured and the keypad prompt was
+observed, without recording PIN or transcript contents here. The provider acknowledged
+session closure (`finalized=true`). The call journal contained no warning/error
+entries. No personal email content, message identifiers or telephone numbers are
+included in this record.
+
+| Measurement | Observed result |
+|---|---:|
+| First Gmail search execution | 1.406 s |
+| Second Gmail search execution | 1.061 s |
+| Session duration | 105.084 s |
+| Recorded input audio | 97.620 s |
+| Recorded output audio | 95.060 s |
+| Maximum queued audio | 2.860 s |
+
+Search execution timings exclude the preceding PIN wait. These are observations
+from this call, not latency guarantees. The evidence
+verifies the deployed Haskell owner Gmail path. Other routes and features,
+including public screening, native transfers and home-phone behavior, remain
+unverified in real calls. Independent inspection of the loaded Asterisk dialplan
+was denied by the available SSH/AMI permissions. See [deployment.md](deployment.md)
+for the existing-service switch and Python rollback, and [migration.md](migration.md)
+for deployment evidence.
