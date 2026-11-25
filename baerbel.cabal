@@ -45,6 +45,7 @@ extra-source-files:
     scripts/package-release.sh
     scripts/prepare-build.sh
     scripts/remote-deploy.sh
+    scripts/prepare-user-config.py
     scripts/update-phone-metadata.py
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service

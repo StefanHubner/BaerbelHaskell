@@ -13,7 +13,7 @@ extra-source-files:
 - native/licenses/*
 - native/README.md
 - scripts/*.sh
-- scripts/update-phone-metadata.py
+- scripts/*.py
 - deploy/*
 - architecture/*.dot
 - architecture/core-imports.txt

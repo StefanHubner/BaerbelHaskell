@@ -1,12 +1,9 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := test
 
-TARGET ?=
-INSTALL_PREFIX ?= /opt/baerbel-hs
-USER_CONFIG ?=
-RELEASE_ARCHIVE ?= release/baerbel-linux-x86_64.tar.gz
+user_config := $(HOME)/.config/baerbel/user.json
 
-.PHONY: prepare native build test check live-check live-delivery-check require-config package install activate rollback
+.PHONY: prepare native build test check live-check live-delivery-check package install activate rollback
 
 prepare:
 	./scripts/prepare-build.sh
@@ -21,29 +18,26 @@ build: native
 test: native
 	stack test
 
-check: test require-config
+check: test
 	.tools/hlint src app test Setup.hs
 	haskell-language-server-wrapper typecheck src app test Setup.hs --cwd "$(CURDIR)"
-	stack exec phone-assistant-server -- --check config/global.json "$(USER_CONFIG)"
+	stack exec phone-assistant-server -- --check config/global.json "$(user_config)"
 
-live-check: build require-config
-	stack exec baerbel-live-check -- config/global.json "$(USER_CONFIG)"
+live-check: build
+	stack exec baerbel-live-check -- config/global.json "$(user_config)"
 
-live-delivery-check: build require-config
-	stack exec baerbel-live-check -- delivery config/global.json "$(USER_CONFIG)"
-
-require-config:
-	@test -n "$(USER_CONFIG)" || { printf 'Set USER_CONFIG to a private JSON file outside the repository.\n' >&2; exit 2; }
+live-delivery-check: build
+	stack exec baerbel-live-check -- delivery config/global.json "$(user_config)"
 
 package: native
 	./scripts/package-release.sh
 
 # Install stages the already reviewed archive. Activation is a separate action.
 install:
-	./scripts/deploy.sh install "$(TARGET)" "$(INSTALL_PREFIX)" "$(RELEASE_ARCHIVE)"
+	./scripts/deploy.sh install
 
 activate:
-	./scripts/deploy.sh activate "$(TARGET)" "$(INSTALL_PREFIX)"
+	./scripts/deploy.sh activate
 
 rollback:
-	./scripts/deploy.sh rollback "$(TARGET)" "$(INSTALL_PREFIX)"
+	./scripts/deploy.sh rollback

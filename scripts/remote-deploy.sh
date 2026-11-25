@@ -1,35 +1,53 @@
 #!/usr/bin/env bash
 set -euo pipefail
-action=${1:?Expected install, activate or rollback}
-prefix=${2:?Expected absolute installation prefix}
-archive=${3:-}
+action=$1
+work=$(cd "$(dirname "$0")" && pwd)
+prefix=/home/stefan/apps/baerbel
 service=phone-assistant.service
 override=/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf
 user_config=/etc/phone-assistant/user.json
-# These paths become literal systemd configuration, not shell expressions.
-[[ "$prefix" =~ ^/[a-zA-Z0-9/_-]+$ ]] || { printf 'Invalid installation prefix\n' >&2; exit 2; }
 
-install_release() {
+prepare_release() {
   local digest release stage
-  digest=$(sha256sum "$archive")
+  digest=$(sha256sum "$work/release.tar.gz")
   digest=${digest%% *}
   release="$prefix/releases/$digest"
   mkdir -p "$prefix/releases"
   if [[ ! -d "$release" ]]; then
     stage=$(mktemp -d "$prefix/releases/.incoming.XXXXXXXX")
-    tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$stage"
+    tar --no-same-owner --no-same-permissions -xzf "$work/release.tar.gz" -C "$stage"
     mv "$stage/baerbel" "$release"
     rmdir "$stage"
   fi
+  prepare_config "$release/config/global.json"
+  env -u LD_PRELOAD ldd "$release/bin/phone-assistant-server"
+  "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$work/user.json"
   ln -sfn "releases/$digest" "$prefix/staged"
-  printf 'Staged release: %s\nThe running service has not changed.\n' "$release"
+  printf 'Prepared and checked release: %s\nThe running service has not changed.\n' "$release"
+}
+
+prepare_config() {
+  local global=$1
+  if [[ -f "$user_config" ]]; then
+    install -m 0600 "$user_config" "$work/user.json"
+  else
+    /home/stefan/.venvs/assistant/bin/python "$work/prepare-user-config.py" /etc/phone-assistant/assistant.env "$work/user.json" "$global"
+  fi
+}
+
+require_idle() {
+  local channels
+  channels=$(asterisk -rx 'core show channels concise')
+  [[ -z "$channels" ]] || { printf 'Asterisk has active calls; the service was not restarted.\n' >&2; return 1; }
 }
 
 activate_release() {
   local release service_user unit
   release=$(readlink -e "$prefix/staged")
   service_user=$(systemctl show "$service" --property=User --value)
+  install -m 0600 -o "$service_user" -g "$service_user" "$work/user.json" "$user_config"
   runuser -u "$service_user" -- "$release/bin/phone-assistant-server" --check "$release/config/global.json" "$user_config"
+  require_idle
   unit=$(mktemp)
   cat > "$unit" <<UNIT
 # Managed by Bärbel Haskell deployment; remove this file to restore Python.
@@ -46,10 +64,13 @@ UNIT
 }
 
 rollback_release() {
+  local python
+  python=$(readlink -e /home/stefan/.venvs/assistant/bin/python)
+  require_idle
   rm -f "$override"
   systemctl daemon-reload
   systemctl restart "$service"
-  verify_service
+  verify_service "$python"
 }
 
 verify_service() {
@@ -75,8 +96,7 @@ verify_running() {
 }
 
 case "$action" in
-  install) install_release ;;
+  prepare) prepare_release ;;
   activate) activate_release ;;
   rollback) rollback_release ;;
-  *) printf 'Unknown deployment action: %s\n' "$action" >&2; exit 2 ;;
 esac

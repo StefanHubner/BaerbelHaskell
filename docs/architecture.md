@@ -49,7 +49,7 @@ The saved profile remains a private JSON document with atomic replacement. Typed
 
 ## Deployment boundary
 
-This repository remains a Haskell candidate. Deployment and real-call validation are explicitly deferred; the existing Python service and Asterisk configuration remain deployed. Local validation includes real-provider probes and synthetic audio/tool sessions, recorded separately in [live-checks.md](live-checks.md). These exercise workstation/provider behavior, not SIP calls or production activation. The Core/Runtime separation and pure phone validator do not alter activation or permissions.
+This repository remains a Haskell candidate. Haskell activation and real-call validation remain outstanding; the existing Python service and Asterisk configuration remain deployed. Local validation includes real-provider probes and synthetic audio/tool sessions, recorded separately in [live-checks.md](live-checks.md). These exercise workstation/provider behavior, not SIP calls or production activation. The Core/Runtime separation and pure phone validator do not alter activation or permissions.
 
 GHCup supplies GHC and Stack; Stack drives the build. Cabal is Stack's internal build backend. The small Setup hook resolves native library paths at configure time and introduces no runtime dependency on the build checkout.
 
@@ -76,4 +76,4 @@ The surrounding I/O coordinators fetch data, read clocks/state and commit the se
 
 Functional state transitions return new values and decisions. Their small I/O callers commit the state or execute the selected operation. Shared deadline helpers take the complete failure value so uncertainty is preserved. Provider-specific mutation receipts, timestamped forecast caches and timeout recovery retain their own pure interpretation. Library exceptions are converted to typed failures at operational boundaries; asynchronous cancellation retains its resource-cleanup meaning.
 
-The deployment Makefile stages immutable releases and activates one through a removable systemd override. The existing Python unit, environment, virtual environment and shared state remain available for rollback. Installation and activation are separate commands; neither modifies Asterisk configuration. See [the deployment pipeline](deployment.md).
+The fixed-host deployment pipeline installs a checksum release under `/home/stefan/apps/baerbel`, prepares private configuration in the existing SSH user’s cache, and runs target library and offline executable checks without sudo. A separate privileged step checks that Asterisk has no active calls, installs the private configuration in `/etc/phone-assistant` and activates the release through a removable override on the existing service. The Python unit, environment, virtual environment and shared state remain available for rollback. Preparation and activation are separate commands; neither modifies Asterisk configuration. See [the deployment pipeline](deployment.md).

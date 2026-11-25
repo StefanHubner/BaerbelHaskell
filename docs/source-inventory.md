@@ -7,17 +7,19 @@ Counts compare the current working tree with `50ad8a9` using the same file scope
 | Pure Haskell core (`src/Baerbel/Core`) | 59 | 7,862 | 60 | 7,987 |
 | Haskell imperative shell (`src/Baerbel/Runtime`) | 52 | 6,846 | 51 | 6,873 |
 | Haskell application entry points (`app`) | 2 | 89 | 2 | 89 |
-| Build hook, Makefile and shell/Python helpers | 8 | 274 | 9 | 526 |
+| Build hook, Makefile and shell/Python helpers | 8 | 274 | 10 | 619 |
 | First-party native bridge (`cbits`) | 1 | 17 | 0 | 0 |
-| **Production source total, excluding tests** | **122** | **15,088** | **122** | **15,475** |
+| **Production source total, excluding tests** | **122** | **15,088** | **123** | **15,568** |
 
-The current change affects **20 production/build files**: **510 added, 123 removed and 65 changed lines**, a net increase of **387 lines**. Raw diff totals are **575 insertions and 188 deletions**. “Changed” pairs one old and one new line within each zero-context replacement hunk; only excess lines count as added or removed. These are line-edit measures, not semantic statements. Rename detection is disabled for this comparison, so the removed runtime parser/native build and their replacements remain visible.
+The current change affects **22 production/build files**: **623 added, 143 removed and 84 changed lines**, a net increase of **480 lines**. Raw diff totals are **707 insertions and 227 deletions**. “Changed” pairs one old and one new line within each zero-context replacement hunk; only excess lines count as added or removed. These are line-edit measures, not semantic statements. Rename detection is disabled for this comparison, so the removed runtime parser/native build and their replacements remain visible.
 
-Pure phone validation replaces the FFI module and C++ bridge. Its reference patterns are shared configuration data and do not inflate source counts. The typed metadata refresh utility is included as a build/maintenance helper; the live-check executable is a test harness and is excluded. Other production changes cover bounded Live shutdown, the verified-PIN handoff, provider transport fixes, and release/install verification.
+Pure phone validation replaces the FFI module and C++ bridge. Its reference patterns are shared configuration data and do not inflate source counts. The typed metadata refresh utility is included as a build/maintenance helper; the live-check executable is a test harness and is excluded. Other production changes cover bounded Live shutdown, the verified-PIN handoff, provider transport fixes, private configuration conversion, and release/install verification.
 
 The preserved Python runtime (`src/phone_assistant`) remains **50 files and 10,809 lines**, separate from the Haskell total. Older inventory totals included the five-line documentation renderer `architecture/render.sh`; the explicit scope above excludes it from both sides of this comparison.
 
 To recompute at the final freeze, enumerate baseline paths with `git ls-tree -r --name-only 50ad8a9` and current paths with `git ls-files --cached --others --exclude-standard`, filter both lists to the scope above, and count existing file contents with `splitlines()`. Read baseline contents with `git show 50ad8a9:PATH`. Compare those two source snapshots with `git diff --no-index --no-renames --unified=0`; sum additions/deletions inside each hunk, then pair their minimum as changed lines. This includes files not yet staged and avoids counting the live harness or metadata as production source.
+
+The private configuration/install update since `9475338` affects four production/build files: **116 added, 23 removed and 26 changed lines** (raw **142 insertions and 49 deletions**), a net **+93 lines**. Haskell runtime/core source is unchanged in that update; configuration aliases remain shared data.
 
 ## Earlier refactors
 

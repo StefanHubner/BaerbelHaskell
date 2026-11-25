@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-action=${1:?Expected install, activate or rollback}
-target=${2:?Set TARGET to the SSH destination}
-prefix=${3:?Set INSTALL_PREFIX to the remote release directory}
-archive=${4:-}
+action=$1
+target=stefan@192.168.50.83
+work=/home/stefan/.cache/baerbel-hs/deploy
 case "$action" in
-  install) test -f "$archive" ;;
-  activate|rollback) ;;
-  *) printf 'Unknown deployment action: %s\n' "$action" >&2; exit 2 ;;
+  install)
+    ssh -- "$target" "mkdir -p -m 0700 '$work'"
+    scp -- "$root/scripts/remote-deploy.sh" "$root/scripts/prepare-user-config.py" "$target:$work/"
+    scp -- "$root/release/baerbel-linux-x86_64.tar.gz" "$target:$work/release.tar.gz"
+    ssh -- "$target" "bash '$work/remote-deploy.sh' prepare"
+    ;;
+  activate|rollback) ssh -t -- "$target" "sudo bash '$work/remote-deploy.sh' '$action'" ;;
 esac
-stage=$(ssh -- "$target" mktemp -d)
-cleanup() {
-  local command
-  printf -v command 'rm -rf -- %q' "$stage"
-  ssh -- "$target" "$command"
-}
-trap cleanup EXIT
-scp -- "$root/scripts/remote-deploy.sh" "$target:$stage/remote-deploy.sh"
-case "$action" in
-  install) scp -- "$archive" "$target:$stage/release.tar.gz" ;;
-esac
-printf -v command 'sudo bash %q %q %q %q' "$stage/remote-deploy.sh" "$action" "$prefix" "$stage/release.tar.gz"
-ssh -t -- "$target" "$command"

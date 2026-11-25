@@ -15,14 +15,13 @@ The build uses the tested LTS package set. Package requirements specify minimum 
 
 ## Configuration and execution
 
-`config/global.json` contains shared defaults, policy, tool schemas and prompts. Copy `config/user.example.json` to a private file outside Git, set its `environment` entries, and restrict it to its service owner. The example contains no working credential. Provider credentials and state-file paths are referenced from that one user configuration.
+`config/global.json` contains shared defaults, policy, tool schemas and prompts. Local checks use `~/.config/baerbel/user.json`, prepared from the existing Python configuration and kept private outside Git. Provider credentials and state-file paths are referenced from that one user configuration; `config/user.example.json` documents its format without working credentials.
 
 ```sh
-stack exec phone-assistant-server -- --check config/global.json /private/user.json
-stack exec phone-assistant-server -- config/global.json /private/user.json
+stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbel/user.json
 ```
 
-`--check` validates local configuration and native dependencies without making provider requests. The server form can make provider requests and exposes the configured local telephony listeners. Do not start it on the running service's ports until migration checks and deployment prerequisites are satisfied.
+`--check` validates local configuration and native dependencies without making provider requests. Deployment uses the existing service and fixed server paths described below.
 
 The original Python service remains deployed. Local provider checks and deployment instructions do not activate Haskell; see the migration and live-verification records for the behavior actually exercised.
 
@@ -33,18 +32,18 @@ The Stack cradle in `hie.yaml` selects the library, runtime commands, live-check
 ```sh
 make prepare
 stack install hlint --local-bin-path .tools
-make check USER_CONFIG=/private/user.json
+make check
 ```
 
 `make check` includes the test suite, HLint, HLS and the offline executable check. To exercise configured providers and synthetic speech through the actual Haskell runtime, run:
 
 ```sh
-make live-check USER_CONFIG=/private/user.json
+make live-check
 ```
 
 This command makes real API requests, including OAuth refresh and billed model/audio requests. It reports redacted results, timings and cache assertions; it does not activate a service, send email/SMS, or create calendar events. Disabled integrations are reported separately. See [live-checks.md](docs/live-checks.md) for coverage and measured outcomes; a local live check does not verify an Asterisk call.
 
-For an explicitly requested end-to-end delivery check, run `make live-delivery-check USER_CONFIG=/private/user.json`. It sends one labelled self-email with synthetic audio and creates, reads and deletes one private calendar test event. Delivery and cleanup are reported separately.
+For an explicitly requested end-to-end delivery check, run `make live-delivery-check`. It sends one labelled self-email with synthetic audio and creates, reads and deletes one private calendar test event. Delivery and cleanup are reported separately.
 
 ## Release candidate
 
@@ -52,6 +51,13 @@ After committing the validated source, `make package` creates `release/baerbel-l
 
 The server command uses the global and private user files shown above. The preserved authorization command is `phone-assistant-gmail-auth GLOBAL_CONFIG --client-secrets FILE`; its existing integration selection, browser, port and timeout options remain available. Authorization performs a real consent flow and is separate from offline validation.
 
-Local packaging and archive staging have been exercised; see [migration.md](docs/migration.md) for that evidence. Rebuild the archive from the source revision whose checks passed. The standalone service template uses `/opt/baerbel`; the transition instructions instead stage under `/opt/baerbel-hs` and change the existing `phone-assistant.service` through one override. Do not install a second service. Both use `/etc/phone-assistant/user.json`. Keep existing credential and receipt paths, and preserve the Python application and virtual environment for rollback.
+Deployment is fixed to the existing SSH account `stefan@192.168.50.83`; no Make variables are required:
 
-Follow [deployment.md](docs/deployment.md) to stage, inspect, activate during a period with no active calls, and restore Python if needed. Staging does not restart anything. Activation and rollback restart the same service; no Python package is uninstalled. The target still supplies Asterisk, libsoxr and ffmpeg.
+```sh
+make install
+make activate
+```
+
+`make install` installs the existing release under `/home/stefan/apps/baerbel`, prepares the private configuration from the server's current settings and runs target library/configuration checks, without sudo or restarting anything. Its upload and configuration workspace is `/home/stefan/.cache/baerbel-hs/deploy`. `make activate` is the privileged step: it rejects active calls, installs the private configuration in `/etc/phone-assistant` and switches the existing `phone-assistant.service` through one override. It verifies the running executable and service stability.
+
+`make rollback` removes that override and restores the same Python service. The Python application in `/home/stefan/apps/assistant`, its virtual environment and shared state are preserved; no second service is installed. The server supplies Asterisk, libsoxr and ffmpeg. See [deployment.md](docs/deployment.md) for the workflow and [migration.md](docs/migration.md) for what has actually been exercised. Remote preparation and Haskell activation are not yet recorded as complete.

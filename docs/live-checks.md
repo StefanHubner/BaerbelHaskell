@@ -1,9 +1,9 @@
 # Live verification
 
-Run the local checks against a private user JSON file:
+Run the local checks using the private user file at `~/.config/baerbel/user.json`:
 
 ```sh
-make live-check USER_CONFIG=/absolute/private/user.json
+make live-check
 ```
 
 The executable uses the production Haskell HTTP, OAuth, WebSocket, speech, tool,
@@ -51,7 +51,7 @@ and create/read/delete a private temporary calendar event without guests.
 They are invoked explicitly:
 
 ```sh
-make live-delivery-check USER_CONFIG=/absolute/private/user.json
+make live-delivery-check
 ```
 
 The normal live-check command does not send email/SMS or create calendar events.

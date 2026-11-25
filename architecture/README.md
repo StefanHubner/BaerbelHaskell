@@ -1,6 +1,6 @@
 # Architecture source
 
-This diagram describes the Haskell candidate. The existing Python service and Asterisk configuration remain deployed. Deployment and real-call validation are explicitly deferred. Local checks now include real-provider probes and synthetic audio/tool sessions; these do not demonstrate activation or a real telephone call. See [the live-check record](../docs/live-checks.md) for their exact scope and results, and [the migration record](../docs/migration.md) for deployment evidence.
+This diagram describes the Haskell candidate. The existing Python service and Asterisk configuration remain deployed. Haskell activation and real-call validation remain outstanding. Local checks now include real-provider probes and synthetic audio/tool sessions; these do not demonstrate activation or a real telephone call. See [the live-check record](../docs/live-checks.md) for their exact scope and results, and [the migration record](../docs/migration.md) for deployment evidence.
 
 Edit `BAERBEL_SYSTEM_ARCHITECTURE.dot`, then run `./architecture/render.sh`. The source uses explicit coordinates; preserve the owner/public columns and use Graphviz `neato -n2`. Use DejaVu Sans and inspect both generated views for clipping and crossing labels. Commit the DOT, SVG and PNG together. Do not edit generated views by hand.
 

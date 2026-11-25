@@ -14777,6 +14777,16 @@
           ]
         }
       }
+    },
+    "configuration": {
+      "aliases": {
+        "PHONE_ASSISTANT_SMS_USERNAME": [
+          "AA_SIP_USERNAME"
+        ],
+        "PHONE_ASSISTANT_SMS_PASSWORD": [
+          "AA_SIP_PASSWORD"
+        ]
+      }
     }
   },
   "tools": {
