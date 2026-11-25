@@ -4,7 +4,6 @@ defaults:
   OPENAI_CHAT_SERVICE_TIER: priority  # OpenAI Fast mode
   OPENAI_LIVE_MODEL: gpt-live-1
   OPENAI_LIVE_VOICE: willow
-  PHONE_ASSISTANT_VOICE_PRESET: willow-friendly-p4
   PHONE_ASSISTANT_WEB_SEARCH: 'true'
   PHONE_ASSISTANT_WINDGURU: 'false'
   PHONE_ASSISTANT_MAPS_ELEVATION: 'true'
@@ -27,8 +26,7 @@ rules:
     ANNOUNCEMENT_TIMEOUT: 12
     CONTEXT_NAME_LIMIT: 40
     CONTEXT_SUMMARY_LIMIT: 160
-    activeSpokenName: Berrbl
-    defaultSpokenName: Bärbel
+    spokenName: Berrbel
     lookupMicros: 2000000
     screeningMicros: 40000000
     messageWaitMicros: 12000000
@@ -210,18 +208,6 @@ rules:
       handoff_line_chars: 500
       handoff_seconds: 120
       label_chars: 160
-  voice_catalogue:
-    DEFAULT_ACTIVE_PRESET: willow-friendly-p4
-    VOICE_PRESETS:
-      willow-friendly-p4:
-        voice: willow
-        pronunciation: 4
-      willow-p1:
-        voice: willow
-        pronunciation: 1
-      gleam-tough-p2:
-        voice: gleam
-        pronunciation: 2
   settings:
     incoming_owner_name: the owner
   integrations.owner_notes:

@@ -9,15 +9,13 @@ module Baerbel.Core.Protocol
 import Baerbel.Core.Error (Result, failure)
 import Baerbel.Core.Concurrent (hasElapsed)
 import Baerbel.Core.Config (Settings, renderOwnerName, rule, setting, integerSetting, booleanSetting)
-import Baerbel.Core.JSON (camelOptions, textField)
+import Baerbel.Core.JSON (textField)
 import Control.Monad (foldM)
 import Data.Char (isAlphaNum, generalCategory, GeneralCategory(..))
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Maybe (mapMaybe)
 import Data.Text.Normalize (NormalizationMode(NFKD), normalize)
-import Data.Aeson (Value(..), FromJSON(..), genericParseJSON, object, (.=), encode)
-import qualified Data.Map.Strict as Map
-import GHC.Generics (Generic)
+import Data.Aeson (Value(..), object, (.=), encode)
 import Data.Time (UTCTime, ZonedTime, LocalTime(..), TimeOfDay(..), utctDay, localDay, addDays, utcToZonedTime, timeZoneName, formatTime, defaultTimeLocale)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Time.Zones (TZ, utcToLocalTimeTZ, localTimeToUTCTZ, timeZoneForUTCTime)
@@ -121,11 +119,6 @@ validateDecoded :: Either String BS.ByteString -> Result BS.ByteString
 validateDecoded (Right bytes) | even (BS.length bytes) = Right bytes
 validateDecoded _ = Left (failure "invalid_live_audio")
 
-data VoicePreset = VoicePreset
-  { presetVoice :: Text, presetInstructions :: Text, presetStyle :: Text
-  } deriving (Eq, Show, Generic)
-instance FromJSON VoicePreset where parseJSON = genericParseJSON (camelOptions 6)
-
 type Instructions = (Text, Text)
 
 buildSession :: Settings -> UTCTime -> [Value] -> Result SessionSettings
@@ -164,28 +157,7 @@ initialInstructions settings = do
   applyRule settings pin appendBoth "PIN_INSTRUCTIONS" initial
 
 voiceIdentity :: Settings -> Result Text
-voiceIdentity settings = do
-  presets <- rule settings "voice_catalogue" "VOICE_PRESETS"
-  active <- rule settings "voice_catalogue" "DEFAULT_ACTIVE_PRESET"
-  legacy <- rule settings "voice_catalogue" "LEGACY_NAME_PRONUNCIATION_INSTRUCTIONS"
-  friendly <- rule settings "voice_catalogue" "FRIENDLY_IDENTITY_INSTRUCTIONS"
-  normal <- rule settings "config" "ASSISTANT_IDENTITY_INSTRUCTIONS"
-  let selected = setting settings "PHONE_ASSISTANT_VOICE_PRESET"
-      voice = setting settings "OPENAI_LIVE_VOICE"
-      preset = Map.lookup selected presets
-  pure (renderOwnerName settings (identityFor active selected voice legacy friendly normal preset))
-
-identityFor :: Text -> Text -> Text -> Text -> Text -> Text -> Maybe VoicePreset -> Text
-identityFor active selected voice legacy friendly normal preset = case preset of
-  Just choice | presetVoice choice == voice && selected == active ->
-    T.intercalate "\n\n" [friendly, presetInstructions choice, presetStyle choice]
-  Just choice | presetVoice choice == voice ->
-    T.replace legacy (presetInstructions choice) normal <> optionalStyle (presetStyle choice)
-  _ -> normal
-  where
-    optionalStyle text
-      | T.null text = ""
-      | otherwise = " " <> text
+voiceIdentity settings = rule settings "config" "ASSISTANT_IDENTITY_INSTRUCTIONS"
 
 configuredInstruction :: Settings -> Text -> Text -> Result Text
 configuredInstruction settings key fallback

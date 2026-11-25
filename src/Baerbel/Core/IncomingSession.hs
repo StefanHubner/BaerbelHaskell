@@ -54,12 +54,7 @@ names settings = do
   pure [("{owner}", owner), ("{assistant}", assistant)]
 
 spokenName :: Settings -> Result Text
-spokenName settings = do
-  active <- rule settings "voice_catalogue" "DEFAULT_ACTIVE_PRESET"
-  let selected = setting settings "PHONE_ASSISTANT_VOICE_PRESET" == active && setting settings "OPENAI_LIVE_VOICE" == "willow"
-      key | selected = "activeSpokenName"
-          | otherwise = "defaultSpokenName"
-  rule settings "incoming" key
+spokenName settings = rule settings "incoming" "spokenName"
 
 restrictedSettings :: Settings -> Bool -> Bool -> Result LiveConfig
 restrictedSettings settings allowMessages messageOnly = do
