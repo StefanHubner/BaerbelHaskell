@@ -1,6 +1,6 @@
 # Architecture source
 
-This diagram describes the Haskell candidate. The existing Python service and Asterisk configuration remain deployed. Haskell activation and real-call validation remain outstanding. Local checks now include real-provider probes and synthetic audio/tool sessions; these do not demonstrate activation or a real telephone call. See [the live-check record](../docs/live-checks.md) for their exact scope and results, and [the migration record](../docs/migration.md) for deployment evidence.
+This diagram describes the active Haskell implementation. The existing `phone-assistant.service` now runs the installed Haskell executable; Python is preserved for rollback and Asterisk remains active. Process, listener and startup-log checks passed. Real telephone-call verification remains outstanding, and loaded-dialplan inspection was unavailable with the current SSH/AMI permissions. Local real-provider and synthetic audio/tool checks are recorded in [the live-check record](../docs/live-checks.md); [the migration record](../docs/migration.md) contains deployment evidence.
 
 Edit `BAERBEL_SYSTEM_ARCHITECTURE.dot`, then run `./architecture/render.sh`. The source uses explicit coordinates; preserve the owner/public columns and use Graphviz `neato -n2`. Use DejaVu Sans and inspect both generated views for clipping and crossing labels. Commit the DOT, SVG and PNG together. Do not edit generated views by hand.
 
@@ -12,4 +12,4 @@ The architecture tests guard module placement, the Core import boundary and forb
 
 Phone-number validation now belongs to `Core.PhoneNumber`: the global file holds the reference metadata, and startup constructs a pure validator shared by calls. The C++ phone bridge and its protobuf/Abseil dependencies are removed; ICU remains for charset compatibility and WebRTC VAD remains native. Live cleanup stops bridge workers before a bounded provider close exchange, then reports whether closure was acknowledged. The existing PIN gate informs Live of successful local keypad verification before releasing its waiting protected tool.
 
-These changes preserve existing call paths, owner/public permissions and deployment status. The detailed module and effect boundaries are described in [architecture.md](../docs/architecture.md). Keep policy, call flow and deployment claims consistent across those files. No private numbers, credentials or tokens belong here.
+The design preserves existing call paths and owner/public permissions; deployment reuses the existing service. The detailed module and effect boundaries are described in [architecture.md](../docs/architecture.md). Keep policy, call flow and deployment claims consistent across those files. No private numbers, credentials or tokens belong here.

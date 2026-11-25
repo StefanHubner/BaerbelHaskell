@@ -1,6 +1,6 @@
 # Deployment and Python transition
 
-Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. The Python service remains deployed. Remote preparation and activation are separate steps, and the current evidence is recorded in [migration.md](migration.md).
+Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
 ## Check and package
 
@@ -26,7 +26,7 @@ This uploads the existing archive and preparation helpers over SSH to `/home/ste
 
 The helper runs `ldd` and the staged Haskell executable's `--check` as `stefan`, the current service user, before selecting `/home/stefan/apps/baerbel/staged`. It prepares the target binary and configuration without sudo, changing the running service, or opening its listeners. Missing dependencies or a failed preflight stop preparation. Asterisk, libsoxr and ffmpeg remain supplied by the server.
 
-Remote installation and preparation passed on 2026-11-25: the actual miniserver resolved every linked library and passed configuration/native audio checks using its existing settings. The activation attempt stopped at `sudo: a password is required`; Python remains active. Only `make activate` with sudo authentication remains. See [migration.md](migration.md) for the installed artifact and evidence.
+Remote installation, target library/configuration/native checks and activation passed on 2026-11-25. Post-activation checks confirmed the installed Haskell executable, zero restarts, all three loopback listeners, active Asterisk and no startup warnings or errors. The previous Python process exited. See [migration.md](migration.md) for the artifact, timings and verification limits.
 
 ## Activate with sudo
 
@@ -38,7 +38,7 @@ This uses the uploaded helper and requests sudo through the existing SSH connect
 
 Activation writes `/etc/systemd/system/phone-assistant.service.d/zz-baerbel-haskell.conf`, reloads systemd and restarts the existing `phone-assistant.service`. Systemd stops Python before starting Haskell; no second assistant service is installed. The helper verifies both assistant and Asterisk are active, checks `/proc/MainPID/exe` against the installed executable, waits three seconds and verifies the same PID again. It reports the executable and effective command.
 
-The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. Process checks establish startup; owner/public routing, PIN, screening and native forwarding still require real telephone-call verification.
+The Python application under `/home/stefan/apps/assistant`, its virtual environment, `assistant.env`, original unit, other overrides and shared runtime state remain intact. Asterisk configuration and logrotate are unchanged. Activation starts the enabled provider and notification workers. Process checks establish startup; owner/public routing, PIN, screening and native forwarding still require real telephone-call verification. Independent inspection of the loaded Asterisk dialplan was unavailable: the current SSH session lacks noninteractive sudo and the AMI account rejects the scoped dialplan query.
 
 ## Restore Python
 

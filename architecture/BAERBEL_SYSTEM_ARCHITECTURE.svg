@@ -103,8 +103,8 @@
 <!-- status -->
 <g id="node2" class="node">
 <title>status</title>
-<text text-anchor="middle" x="849.5" y="-1267.5" font-family="DejaVu Sans" font-size="15.00">Candidate · local provider/synthetic checks only</text>
-<text text-anchor="middle" x="849.5" y="-1250.5" font-family="DejaVu Sans" font-size="15.00">Python service remains deployed · real&#45;call validation deferred</text>
+<text text-anchor="middle" x="849.5" y="-1267.5" font-family="DejaVu Sans" font-size="15.00">Haskell service active · Asterisk retained</text>
+<text text-anchor="middle" x="849.5" y="-1250.5" font-family="DejaVu Sans" font-size="15.00">Provider/synthetic checks passed · real&#45;call verification pending</text>
 </g>
 <!-- phones -->
 <g id="node3" class="node">

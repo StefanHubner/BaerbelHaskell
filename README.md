@@ -23,7 +23,7 @@ stack exec phone-assistant-server -- --check config/global.json ~/.config/baerbe
 
 `--check` validates local configuration and native dependencies without making provider requests. Deployment uses the existing service and fixed server paths described below.
 
-The original Python service remains deployed. Local provider checks and deployment instructions do not activate Haskell; see the migration and live-verification records for the behavior actually exercised.
+Haskell now runs in the existing `phone-assistant.service` on the miniserver. The Python application is preserved for rollback. Process, listener and startup-log checks passed; real telephone-call verification remains outstanding. See the migration and live-verification records for the behavior actually exercised.
 
 ## Development checks
 
@@ -45,7 +45,7 @@ This command makes real API requests, including OAuth refresh and billed model/a
 
 For an explicitly requested end-to-end delivery check, run `make live-delivery-check`. It sends one labelled self-email with synthetic audio and creates, reads and deletes one private calendar test event. Delivery and cleanup are reported separately.
 
-## Release candidate
+## Release and deployment
 
 After committing the validated source, `make package` creates `release/baerbel-linux-x86_64.tar.gz`. It contains both compiled commands, global configuration, a private-user-file example, native license notices and reviewable systemd/logrotate files. Packaging refuses uncommitted source changes. It does not install or restart anything. The existing Asterisk deployment is maintained separately.
 
@@ -60,4 +60,4 @@ make activate
 
 `make install` installs the existing release under `/home/stefan/apps/baerbel`, prepares the private configuration from the server's current settings and runs target library/configuration checks, without sudo or restarting anything. Its upload and configuration workspace is `/home/stefan/.cache/baerbel-hs/deploy`. `make activate` is the privileged step: it rejects active calls, installs the private configuration in `/etc/phone-assistant` and switches the existing `phone-assistant.service` through one override. It verifies the running executable and service stability.
 
-`make rollback` removes that override and restores the same Python service. The Python application in `/home/stefan/apps/assistant`, its virtual environment and shared state are preserved; no second service is installed. The server supplies Asterisk, libsoxr and ffmpeg. See [deployment.md](docs/deployment.md) for the workflow and [migration.md](docs/migration.md) for what has actually been exercised. Remote installation and target checks passed. Activation requires sudo authentication; Python remains running until `make activate` completes.
+`make rollback` removes that override and restores the same Python service. The Python application in `/home/stefan/apps/assistant`, its virtual environment and shared state are preserved; no second service is installed. The server supplies Asterisk, libsoxr and ffmpeg. See [deployment.md](docs/deployment.md) for the workflow and [migration.md](docs/migration.md) for what has actually been exercised. Installation, target checks and activation passed on 2026-11-25. The Haskell process is active with zero restarts, its three loopback listeners are bound, Asterisk is active and the old Python process has exited. Actual telephone calls have not yet been verified.

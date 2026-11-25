@@ -49,7 +49,7 @@ The saved profile remains a private JSON document with atomic replacement. Typed
 
 ## Deployment boundary
 
-This repository remains a Haskell candidate. Haskell activation and real-call validation remain outstanding; the existing Python service and Asterisk configuration remain deployed. Local validation includes real-provider probes and synthetic audio/tool sessions, recorded separately in [live-checks.md](live-checks.md). These exercise workstation/provider behavior, not SIP calls or production activation. The Core/Runtime separation and pure phone validator do not alter activation or permissions.
+Haskell is active in the existing `phone-assistant.service`, with Python preserved for rollback. Post-activation checks verified the installed executable, a stable process with zero restarts, owner/public/FastAGI loopback listeners and active Asterisk; startup logs contained no warnings or errors. The deployment does not modify the Asterisk dialplan. Independent loaded-dialplan inspection was denied by the available SSH/AMI permissions, and real telephone-call validation remains outstanding. Local real-provider probes and synthetic audio/tool sessions are recorded separately in [live-checks.md](live-checks.md); they do not establish SIP-call behavior. See [migration.md](migration.md) for the exact deployment evidence.
 
 GHCup supplies GHC and Stack; Stack drives the build. Cabal is Stack's internal build backend. The small Setup hook resolves native library paths at configure time and introduces no runtime dependency on the build checkout.
 
