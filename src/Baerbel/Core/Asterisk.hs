@@ -18,7 +18,7 @@ instance FromJSON Pbx where parseJSON = genericParseJSON ((camelOptions 3) {reje
 instance ToJSON Pbx where toJSON = genericToJSON (camelOptions 3)
 
 data Sip = Sip {sipNumber :: Text, sipUser :: Text, sipPassword :: Text}
-data Roster = Roster {standardSip :: Sip, proSip :: Map Text (Text, Sip)}
+data Roster = Roster {standardSip :: Sip, proSip :: Map Text Sip}
 
 managedName :: FilePath -> Maybe FilePath
 managedName name = stripPrefix "phone-assistant-" name >>= valid
@@ -40,16 +40,16 @@ capture root previous primary shared dedicated files = do
 
 render :: Pbx -> Roster -> Result (Map FilePath Text)
 render pbx roster = do
-  (_, primary) <- required (pbxPrimaryPro pbx) (proSip roster)
+  primary <- required (pbxPrimaryPro pbx) (proSip roster)
   source <- required "bristol-pjsip.conf" (pbxFiles pbx)
   dialplan <- required "extensions.conf" (pbxFiles pbx)
+  let others = Map.delete (pbxPrimaryPro pbx) (proSip roster)
+  routes <- extendRoutes dialplan others
   let shared = standardSip roster
       replacements = sipFields "SHARED" shared ++ sipFields "PRO" primary ++ [("@@PRIMARY_PRO@@", pbxPrimaryPro pbx)]
-      flags = Map.delete (pbxPrimaryPro pbx) (proSip roster)
       prepared = Map.map (replaceAll replacements) (pbxFiles pbx)
-      additional = Map.mapWithKey (extraSip source) flags
+      additional = Map.mapWithKey (extraSip source) others
       sip = replaceAll replacements source <> Text.concat (Map.elems additional)
-      routes = extendRoutes dialplan flags
       filled = Map.insert "extensions.conf" (replaceAll replacements routes) prepared
       files = Map.insert "bristol-pjsip.conf" sip filled
   case all validFile (Map.toList files) of
@@ -108,18 +108,20 @@ replaceAll :: [(Text, Text)] -> Text -> Text
 replaceAll fields source = foldl' replace source fields
   where replace content (key, value) = Text.replace key value content
 
-extraSip :: Text -> Text -> (Text, Sip) -> Text
-extraSip source ident (_, sip) = "\n" <> replaceAll fields source
+extraSip :: Text -> Text -> Sip -> Text
+extraSip source ident sip = "\n" <> replaceAll fields source
   where
     endpoint = "phone-assistant-aa-pro-" <> ident
     fields = ("phone-assistant-aa-bristol", endpoint) : sipFields "PRO" sip
 
-extendRoutes :: Text -> Map Text (Text, Sip) -> Text
+extendRoutes :: Text -> Map Text Sip -> Result Text
 extendRoutes source extra
-  | Map.null extra = source
-  | otherwise = Text.replace original (preface <> matches <> Text.replace "exten => s,1," " same => n," original) source <> contexts
+  | Map.null extra = Right source
+  | Text.count original source == 1 = Right (Text.replace original expanded source <> contexts)
+  | otherwise = Left (failure "asterisk_pro_entry_template_missing")
   where
     original = "exten => s,1,GotoIf($[\"${CHANNEL(endpoint)}\"=\"phone-assistant-aa-bristol\"]?dedicated)"
+    expanded = preface <> matches <> Text.replace "exten => s,1," " same => n," original
     preface = "exten => s,1,NoOp(Baerbel SIP account)\n"
     matches = Text.concat (map select (Map.keys extra))
     select ident = " same => n,GotoIf($[\"${CHANNEL(endpoint)}\"=\"phone-assistant-aa-pro-" <> ident <> "\"]?baerbel-pro-" <> ident <> ",s,1)\n"

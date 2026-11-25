@@ -85,13 +85,12 @@ readRoster :: FilePath -> IO (Result Roster)
 readRoster path = mapResult buildRoster (databaseResult "sip_database_unavailable" (withConnection path fetch))
   where
     fetch connection = (,) <$> query_ connection "SELECT number, username, password FROM sip_accounts WHERE pro_user_id IS NULL"
-      <*> query_ connection "SELECT users.id, users.phone, number, username, password FROM users LEFT JOIN sip_accounts ON users.id=pro_user_id WHERE user_type='Pro'"
+      <*> query_ connection "SELECT users.id, number, username, password FROM users LEFT JOIN sip_accounts ON users.id=pro_user_id WHERE user_type='Pro'"
 
-buildRoster :: ([(Text, Text, Text)], [(Text, Text, Maybe Text, Maybe Text, Maybe Text)]) -> Result Roster
+buildRoster :: ([(Text, Text, Text)], [(Text, Maybe Text, Maybe Text, Maybe Text)]) -> Result Roster
 buildRoster ([(number, user, secret)], dedicated) = Roster <$> sip number user secret <*> (Map.fromList <$> traverse row dedicated)
   where
-    row (ident, phone, Just did, Just name, Just password) | validId ident =
-      (\line -> (ident, (phone, line))) <$> sip did name password
+    row (ident, Just did, Just name, Just password) | validId ident = (ident,) <$> sip did name password
     row _ = Left (failure "pro_sip_account_required")
 buildRoster _ = Left (failure "shared_sip_account_required")
 
