@@ -11,6 +11,13 @@ all three Bärbel listeners with zero restarts. Asterisk continued on
 PID 226605. Real carrier call evidence below retains its original release
 scope.
 
+After archival, the server verified the running Haskell command still used
+`/etc/phone-assistant/global.json`. Both services kept their existing
+PIDs, the executable configuration check passed, and SQLite reported
+integrity OK. `users.sqlite3` is the only file in the application state
+directory. The obsolete standalone state and Python configuration are now
+in the [private archives](deployment.md#archive-legacy-files).
+
 Haskell is active in the existing production service as of 2026-11-25T15:31:08Z. Post-activation process, listener and startup-log checks passed. Later approximately 149-second calls exposed an input-overflow failure; corrections passed local and focused target-provider checks and were activated at 17:18:47Z. Python is preserved for rollback. Real tests verified the owner Gmail path and known-caller forwarding/ringing on Haskell. The forwarded caller ended before answer and its outcome SMS was accepted; answered bridging and other call paths remain unverified.
 
 The Python baseline is commit `3d0819a` on `refactor/consolidate-codebase` in the sibling `baerbel` repository. Its 860 tests passed before porting. Runtime Python source has not been changed by the port. The Haskell implementation lives in a separate repository.

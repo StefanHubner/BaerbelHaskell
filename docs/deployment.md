@@ -107,6 +107,15 @@ and database before moving files. It runs while the services continue
 handling calls. The Python and account rollback commands restore the
 archived files before restarting the corresponding service.
 
+## Trace Asterisk routing
+
+The Asterisk database key `baerbel/account-routing-trace` controls a
+redacted trace of time, route and outcome at
+`/var/lib/phone-assistant-incoming-events/account-routing.log`. Run
+`sudo asterisk -rx 'database put baerbel account-routing-trace 0'` on the
+miniserver to disable it. `make trace-carrier` captures a redacted A&A
+signalling summary for failures before the dialplan.
+
 ## Restore Python
 
 ```sh
