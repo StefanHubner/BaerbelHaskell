@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Baerbel.Runtime.WebSocket (withSecureSocket) where
+module Baerbel.Runtime.WebSocket (withSecureSocket, socketResult) where
 
 import Baerbel.Core.Error ( Result, failure )
 import Control.Exception ( IOException, Handler(..), catches )
@@ -18,7 +18,7 @@ import qualified Network.WebSockets as WS
       ConnectionException )
 
 withSecureSocket :: forall a. Int -> Text -> String -> Int -> String -> (WS.Connection -> IO (Result a)) -> IO (Result a)
-withSecureSocket limit key host port path action = connect `catches` handlers
+withSecureSocket limit key host port path action = socketResult connect
   where
     headers = [("Authorization", "Bearer " <> Text.encodeUtf8 key)]
     service = fromIntegral port
@@ -26,6 +26,10 @@ withSecureSocket limit key host port path action = connect `catches` handlers
     options = WS.defaultConnectionOptions {WS.connectionFramePayloadSizeLimit = WS.SizeLimit limitBytes,
       WS.connectionMessageDataSizeLimit = WS.SizeLimit limitBytes}
     connect = Wuss.runSecureClientWith host service path options headers action
+
+socketResult :: forall a. IO (Result a) -> IO (Result a)
+socketResult action = action `catches` handlers
+  where
     handlers = [Handler (redacted :: IOException -> IO (Result a)),
       Handler (redacted :: WS.ConnectionException -> IO (Result a)),
       Handler (redacted :: WS.HandshakeException -> IO (Result a)),

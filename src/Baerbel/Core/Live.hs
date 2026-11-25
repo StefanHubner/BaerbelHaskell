@@ -31,6 +31,7 @@ data LiveConfig = LiveConfig
   { liveApiKey :: Text, liveHost :: String, livePort :: Int, livePath :: String
   , liveSession :: Value, liveGreeting :: Maybe Value
   , liveSetupMicros :: Int, liveWriteMicros :: Int
+  , liveCloseMicros :: Int, liveStartupCloseMicros :: Int
   , liveFrameBytes :: Int, liveFrameMicros :: Int
   , liveInputRate :: Int, liveProviderRate :: Int
   , liveQueueFrames :: Int, liveStartupFrames :: Int, liveToolLimits :: ToolLimits
@@ -274,3 +275,6 @@ closedEvent started now (closed, usage) = object
   ["type" .= ("phone.session_closed" :: Text), "finalized" .= closed,
    "final_usage" .= usage, "duration_ms" .= elapsed]
   where elapsed = fromIntegral (now - started) / (1000000 :: Double)
+
+closedStatus :: Value -> (Bool, Maybe Value)
+closedStatus event = (True, field "usage" event)

@@ -10,7 +10,8 @@ import Baerbel.Core.IncomingSession (restrictedSettings)
 import Baerbel.Core.Config (Global, User(..), Settings(..), resolveSettings)
 import Baerbel.Runtime.Live (LiveConfig(..), Media(receiveAudio))
 import Baerbel.Runtime.ManagedMedia (ManagedCall(..), newRegistry, withManaged)
-import Baerbel.Runtime.PhoneNumber (validateNumber)
+import Baerbel.Core.PhoneNumber (PhoneMetadata, validateNumber)
+import TestSupport (withRule)
 import Baerbel.Runtime.Recording
 import qualified Baerbel.Runtime.Telephony as Native
 import Baerbel.Core.Routing
@@ -48,7 +49,7 @@ spec = do
   describe "Public session composition" publicSpec
   describe "Native call state" callSpec
   describe "Call recording" recordingSpec
-  describe "Native number metadata" phoneSpec
+  describe "Pure number metadata" phoneSpec
   describe "Native call interpreter" nativeSpec
   describe "Managed media boundaries" managedSpec
 
@@ -244,23 +245,23 @@ instance FromJSON PhoneFixtures where
   parseJSON = withObject "PhoneFixtures" $ \fields -> PhoneFixtures <$> fields .: "cases"
 
 phoneSpec :: Spec
-phoneSpec = it "matches all 864 original Python fixtures with current native metadata" $ do
+phoneSpec = it "matches all 864 original Python fixtures with pure metadata validation" $ withRule "phone_numbers" "metadata" $ \metadata -> do
   bytes <- B.readFile "test/fixtures/phone_numbers.json"
   case eitherDecodeStrict' bytes of
     Left problem -> expectationFailure problem
-    Right (PhoneFixtures cases) -> mapM_ checkPhone cases
+    Right (PhoneFixtures cases) -> mapM_ (checkPhone metadata) cases
 
-checkPhone :: PhoneCase -> IO ()
-checkPhone (PhoneCase number expected accepted) = do
-  actual <- validateNumber number
-  let result | accepted = Right expected
+checkPhone :: PhoneMetadata -> PhoneCase -> IO ()
+checkPhone metadata (PhoneCase number expected accepted) = do
+  let actual = validateNumber metadata number
+      result | accepted = Right expected
              | otherwise = Left (failure expected)
   actual `shouldBe` result
 
 nativeSpec :: Spec
 nativeSpec = do
   it "announces, dials once, resumes after BUSY, and caches the exact result" $ withFakeAMI $ \requests -> do
-    opened <- Native.openOwner nativeConfig (pure . Right) nativeMedia "call"
+    opened <- Native.openOwner nativeConfig Right nativeMedia "call"
     case opened of
       Left problem -> expectationFailure (show problem)
       Right control -> bracket (pure control) Native.closeOwner (exerciseNative requests)
@@ -269,7 +270,7 @@ nativeSpec = do
     checkNoDial requests media "owner_interrupted_before_dial"
   it "uses the configured AMI action deadline without a retry" $ withFakeAMIUsing unansweredStatus $ \requests -> do
     let cfg = nativeConfig {Native.amiRules = amiTestRules {A.amiActionMicros = 20000}}
-    opened <- Native.openOwner cfg (pure . Right) nativeMedia "call"
+    opened <- Native.openOwner cfg Right nativeMedia "call"
     void opened `shouldBe` Left (Failure "ami_action_outcome_unknown" True)
     actions <- readMVar requests
     length [request | request <- actions, A.field "Action" request == "Status"] `shouldBe` 1
@@ -286,7 +287,7 @@ nativeSpec = do
 
 withOwner :: Native.TelephonyMedia -> (Native.OwnerControl -> IO ()) -> IO ()
 withOwner media action = do
-  opened <- Native.openOwner nativeConfig (pure . Right) media "call"
+  opened <- Native.openOwner nativeConfig Right media "call"
   either (expectationFailure . show) (\control -> bracket (pure control) Native.closeOwner action) opened
 
 directArgs :: Value
@@ -350,7 +351,7 @@ disconnectedFake connection variables message
 
 checkNoDial :: MVar [A.Message] -> Native.TelephonyMedia -> Text -> IO ()
 checkNoDial requests media expectedReason = do
-  opened <- Native.openOwner nativeConfig (pure . Right) media "call"
+  opened <- Native.openOwner nativeConfig Right media "call"
   case opened of
     Left problem -> expectationFailure (show problem)
     Right control -> bracket (pure control) Native.closeOwner run

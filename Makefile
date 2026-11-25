@@ -6,13 +6,13 @@ INSTALL_PREFIX ?= /opt/baerbel-hs
 USER_CONFIG ?=
 RELEASE_ARCHIVE ?= release/baerbel-linux-x86_64.tar.gz
 
-.PHONY: prepare native build test check package install activate rollback
+.PHONY: prepare native build test check live-check live-delivery-check require-config package install activate rollback
 
 prepare:
 	./scripts/prepare-build.sh
 
 native: prepare
-	test -f .native/lib/libbaerbel-phone.a || ./scripts/build-phone.sh
+	test -f .native/lib/libicuuc.a || ./scripts/build-icu.sh
 	test -f .native/lib/libbaerbel-vad.a || ./scripts/build-vad.sh
 
 build: native
@@ -21,11 +21,19 @@ build: native
 test: native
 	stack test
 
-check: test
-	@test -n "$(USER_CONFIG)" || { printf 'Set USER_CONFIG to a private JSON file outside the repository.\n' >&2; exit 2; }
+check: test require-config
 	.tools/hlint src app test Setup.hs
 	haskell-language-server-wrapper typecheck src app test Setup.hs --cwd "$(CURDIR)"
 	stack exec phone-assistant-server -- --check config/global.json "$(USER_CONFIG)"
+
+live-check: build require-config
+	stack exec baerbel-live-check -- config/global.json "$(USER_CONFIG)"
+
+live-delivery-check: build require-config
+	stack exec baerbel-live-check -- delivery config/global.json "$(USER_CONFIG)"
+
+require-config:
+	@test -n "$(USER_CONFIG)" || { printf 'Set USER_CONFIG to a private JSON file outside the repository.\n' >&2; exit 2; }
 
 package: native
 	./scripts/package-release.sh

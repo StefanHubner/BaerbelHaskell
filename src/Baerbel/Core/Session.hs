@@ -25,15 +25,19 @@ liveConfiguration settings session greeting = do
   directSeconds <- integerSetting settings "PHONE_ASSISTANT_DIRECT_CALL_TIMEOUT"
   extra <- rule settings "runtime" "direct_extra_micros"
   let callMicros = directSeconds * 1000000 + extra
-      ordinaryMicros = min toolMicros (ceiling (seconds * 1000000))
+      timeoutMicros = ceiling (seconds * 1000000)
+      ordinaryMicros = min toolMicros timeoutMicros
   let configuration = sessionConfig session
       opening = greetingCommand template greeting
       runtime :: FromJSON a => Text -> Result a
       runtime = rule settings "runtime"
+      boundedRuntime :: Text -> Result Int
+      boundedRuntime key = min timeoutMicros <$> runtime key
   LiveConfig (setting settings "OPENAI_API_KEY")
     <$> runtime "live_host" <*> runtime "live_port" <*> runtime "live_path"
     <*> pure configuration <*> pure opening <*> runtime "setup_micros"
-    <*> runtime "write_micros" <*> runtime "frame_bytes" <*> runtime "frame_micros"
+    <*> runtime "write_micros" <*> boundedRuntime "close_micros" <*> boundedRuntime "startup_close_micros"
+    <*> runtime "frame_bytes" <*> runtime "frame_micros"
     <*> runtime "input_rate" <*> runtime "provider_rate" <*> runtime "queue_frames"
     <*> runtime "startup_frames" <*> pure limits <*> pure ordinaryMicros
     <*> runtime "voice_test_micros" <*> pure callMicros <*> rule settings "live" "mutation_errors"
@@ -84,6 +88,7 @@ pinConfiguration settings = Pin.PinConfig (setting settings "PHONE_ASSISTANT_PRI
   <$> rule settings "pin" "PROTECTED_PREFIXES" <*> rule settings "pin" "windowMicros"
   <*> rule settings "pin" "minimumDigits" <*> rule settings "pin" "maximumDigits"
   <*> rule settings "pin" "prompt" <*> rule settings "pin" "incorrect"
+  <*> rule settings "pin" "verified"
 
 endConfiguration :: Settings -> Result EndConfig
 endConfiguration settings = EndConfig <$> readRule "farewellText" <*> readRule "farewellCompletion"

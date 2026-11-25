@@ -121,23 +121,32 @@ checkSubmission cfg encoded state deadline closed notifier digits = do
       checked = validLength && verifyPin encoded digits
       renewed = now + fromIntegral (pinWindowMicros cfg)
   verified <- evaluate checked
+  notification <- case verified of
+    True -> notifyPin closed notifier (pinVerified cfg)
+    False -> pure (Right ())
   atomically $ do
     stopped <- readTVar closed
-    let (updated, expires) = verifiedState renewed verified stopped
+    let unavailable = stopped || notification /= Right ()
+        (updated, expires) = verifiedState renewed verified unavailable
+    writeTVar closed unavailable
     writeTVar state updated
     writeTVar deadline expires
   unless verified (notifyIncorrect cfg state deadline closed notifier)
 
 notifyIncorrect :: PinConfig -> TVar PinState -> TVar Integer -> TVar Bool -> TVar (Maybe (Value -> IO (Result ()))) -> IO ()
 notifyIncorrect cfg state deadline closed notifier = do
-  send <- readTVarIO notifier
-  stopped <- readTVarIO closed
-  let notify | stopped = pure (Right ())
-             | otherwise = maybe (pure (Left (failure "pin_unavailable"))) ($ pinIncorrect cfg) send
-  result <- notify
+  result <- notifyPin closed notifier (pinIncorrect cfg)
   case result of
     Right () -> pure ()
     Left _ -> atomically (writeTVar state emptyPinState >> writeTVar deadline 0)
+
+notifyPin :: TVar Bool -> TVar (Maybe (Value -> IO (Result ()))) -> Value -> IO (Result ())
+notifyPin closed notifier event = do
+  send <- readTVarIO notifier
+  stopped <- readTVarIO closed
+  let notify | stopped = pure (Right ())
+             | otherwise = maybe (pure (Left (failure "pin_unavailable"))) ($ event) send
+  notify
 
 protectTool :: PinConfig -> TVar PinState -> TVar Integer -> TVar Bool -> (Value -> IO (Result ())) -> Text -> IO (Result ())
 protectTool cfg state deadline closed send name = do

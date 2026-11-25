@@ -14,7 +14,7 @@ import qualified Data.Text.Encoding as TE
 
 data PinConfig = PinConfig
   { pinEncoded :: Text, pinPrefixes :: [Text], pinWindowMicros :: Int
-  , pinMinimumDigits :: Int, pinMaximumDigits :: Int, pinPrompt :: Value, pinIncorrect :: Value
+  , pinMinimumDigits :: Int, pinMaximumDigits :: Int, pinPrompt :: Value, pinIncorrect :: Value, pinVerified :: Value
   }
 
 data PinHash = PinHash Int BS.ByteString BS.ByteString

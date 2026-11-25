@@ -8,12 +8,14 @@ The core receives immutable values: decoded events, state snapshots, settings, t
 |---|---|---|
 | Configuration and startup | Settings, rules, validation and service descriptions. | Read the global and private user files, open resources and construct enabled capabilities. |
 | Live speech and legacy pipeline | Protocol envelopes, tool batches, transcript/history reduction and turn decisions. | WebSocket/HTTP streams, queues, native audio processing and paced playback. |
-| Telephony and public screening | AudioSocket/AMI values, routing, ownership decisions, call transitions and restricted session configuration. | Listeners, native channel checks, dialing, media pause/reattachment and restricted session execution. |
+| Telephony and public screening | AudioSocket/AMI values, canonical number validation, routing, ownership decisions, call transitions and restricted session configuration. | Listeners, native channel checks, dialing, media pause/reattachment and restricted session execution. |
 | Personal integrations | Typed requests, provider result parsing, pagination, reference selection and profile transitions. | Authenticated requests, call-local caches and durable side effects. |
 | Notes, messages and call completion | Transcript selection, delivery/result interpretation, note/PIN/end-call decisions and event cursors. | Archive reads, encoding, delivery workers, PIN input, farewell playback and hangup. |
 | Persistence, authorization and shared support | Failure values, JSON codecs, request/receipt types, timestamps and metrics calculations. | Private files, SQLite transactions, token refresh, consent, logging, deadlines and cleanup. |
 
 These are feature modules, not one large core module. For example, `Core.Live` owns `ToolState` and `stepTools`; `Runtime.Live` owns `Media`, connections and queues. `Core.Profile` owns `ProfileState` and `transition`; `Runtime.Profile` owns the `ProfileStore` capability and invokes it. `Core.HTTP` defines request/response values, while `Runtime.HTTP` sends requests. `Core.AMI` defines messages and channels, allowing pure call-state logic to avoid importing the AMI connection implementation.
+
+`Core.PhoneNumber` validates numbers using typed libphonenumber 9.0.42 reference metadata in `rules.phone_numbers.metadata` of the shared global file. Application startup compiles its regex rules once and passes the resulting pure `NumberValidator` to owner dialing and home routing; regex matching automata are built lazily on first use. Calling-code selection, shared-country regions, restricted number types and rejection of canonical-prefix repairs remain data-driven. No phone-number FFI or native resource is involved. The deterministic refresh utility records upstream provenance; compatibility evidence and the retained ICU/VAD build are described in [native/README.md](../native/README.md).
 
 ## Values, capabilities and mutable state
 
@@ -33,9 +35,11 @@ The import list is an explicit review boundary, not a claim that every export of
 
 Owner and public listeners use separate managed-media registries. An incoming socket cannot reuse an owner's paused entry. AMI binding checks native channel ownership before exposing native dialing or recording access. Public sessions receive only their restricted schemas and prompts. The runtime may perform a fixed Contacts directory lookup for public screening; this does not expose owner tools to the caller. A model, transcript, contact, email or provider response cannot choose a recipient for SMS or voice notes, a filesystem path, or a dialplan destination.
 
-Owner ingress retains the original loopback/Asterisk trust boundary. It is not new independent caller authentication. The existing keypad PIN applies to the configured protected email tools. Keep this limitation explicit when describing deployments.
+Owner ingress retains the original loopback/Asterisk trust boundary. It is not new independent caller authentication. The existing keypad PIN applies to the configured protected email tools. Successful local keypad verification updates Live before releasing the waiting protected tool, so an earlier retry prompt does not hide its returned result. Keep this limitation explicit when describing deployments.
 
 Each call owns provider reference caches and conversation state. Account credentials, refresh caches and one prepared profile store are shared within the service scope. Pure shared service descriptions are distinct from factories that allocate call-local resources. Accepted profile operations drain their scoped worker. Accepted note/message sends have independent bounded lifetimes and drain before their underlying sender and ledger close. Async cancellation is never translated into a retry. Unknown provider outcomes remain durable and non-retryable.
+
+Live cleanup stops and joins the bridge workers before provider finalization. If `session.start` was sent, an established session sends `session.close` and waits for `session.closed` within `rules.runtime.close_micros`; a session still starting only attempts the send within `startup_close_micros`. An already acknowledged closure needs no second request. The final `phone.session_closed` log follows this bounded exchange and records the actual acknowledgement and final usage when supplied. A timeout or transport failure does not fabricate acknowledgement, retry a call or replace the original session outcome.
 
 ## Persistence
 
@@ -45,11 +49,11 @@ The saved profile remains a private JSON document with atomic replacement. Typed
 
 ## Deployment boundary
 
-This repository remains a Haskell candidate. Deployment and real-call validation are explicitly deferred; the existing Python service and Asterisk configuration remain deployed. The Core/Runtime separation changes source organization, not activation or permissions.
+This repository remains a Haskell candidate. Deployment and real-call validation are explicitly deferred; the existing Python service and Asterisk configuration remain deployed. Local validation includes real-provider probes and synthetic audio/tool sessions, recorded separately in [live-checks.md](live-checks.md). These exercise workstation/provider behavior, not SIP calls or production activation. The Core/Runtime separation and pure phone validator do not alter activation or permissions.
 
 GHCup supplies GHC and Stack; Stack drives the build. Cabal is Stack's internal build backend. The small Setup hook resolves native library paths at configure time and introduces no runtime dependency on the build checkout.
 
-The release contains the executable, global configuration and native license notices; the private user file and existing state are provisioned separately. Asterisk remains an external service. Native phone-number/VAD code and ICU codecs are linked into the executable. The system still supplies the standard C/C++ libraries, zlib, GMP and libsoxr; owner-note MP3 encoding requires ffmpeg. Verify the final executable with `ldd` on the target. Matching architecture alone is insufficient to prove compatibility.
+The release contains the executable, global configuration and native license notices; the private user file and existing state are provisioned separately. Asterisk remains an external service. Phone validation is pure Haskell with reference data in the global file; libphonenumber, protobuf and Abseil are no longer native dependencies. WebRTC VAD and ICU codecs remain linked into the executable. The standalone `scripts/build-icu.sh` preserves the existing malformed-Unicode and legacy-charset behavior. The system still supplies the standard C/C++ libraries, zlib, GMP and libsoxr; owner-note MP3 encoding requires ffmpeg. Verify the final executable with `ldd` on the target. Matching architecture alone is insufficient to prove compatibility.
 
 The shared HTTP manager disables automatic request replay and environment proxies. Configured mutation outcomes distinguish authentication failure, definite rejection and an unknown accepted-send outcome. Typed request bodies and derived JSON codecs keep serialization at shared boundaries.
 

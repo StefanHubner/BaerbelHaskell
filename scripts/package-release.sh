@@ -2,6 +2,8 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+source_status=$(git status --porcelain)
+[[ -z "$source_status" ]] || { printf 'Commit or remove source changes before packaging.\n' >&2; exit 2; }
 ./scripts/prepare-build.sh
 stack build --test --no-run-tests
 install_root=$(stack path --local-install-root)

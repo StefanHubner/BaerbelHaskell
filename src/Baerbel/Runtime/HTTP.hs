@@ -156,7 +156,7 @@ consume step state limit reader = HTTP.brRead reader >>= advance
     let remaining = limit - BS.length chunk
     continue (\value -> consume step value remaining reader) next
 
-authenticated :: IO (Result Text) -> Send -> Send
+authenticated :: IO (Result Text) -> (Request -> IO (Result a)) -> Request -> IO (Result a)
 authenticated token base request = do
   credential <- token
   continue (base . authorize) credential

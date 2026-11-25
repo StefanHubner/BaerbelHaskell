@@ -10,7 +10,8 @@ import Baerbel.Runtime.IncomingSession
 import Baerbel.Runtime.Logging ( Report, withLogging )
 import Baerbel.Runtime.ManagedMedia ( newRegistry )
 import Baerbel.Runtime.Messages ( Messages, withMessages )
-import Baerbel.Runtime.PhoneNumber ( validateNumber )
+import Baerbel.Core.PhoneNumber ( numberValidator )
+import Baerbel.Core.Routing ( NumberValidator )
 import Baerbel.Runtime.Pin ( parsePinHash )
 import Baerbel.Runtime.Pipeline
     ( preparePipeline, pipelineSession )
@@ -42,9 +43,11 @@ import qualified Baerbel.Runtime.Effects as Effects ( continue )
 import qualified Data.Text as Text ( null, unpack )
 
 checkConfiguration :: Settings -> IO (Result ())
-checkConfiguration settings = do
-  checked <- checkNative settings
-  Effects.continue (const (checkServices settings)) checked
+checkConfiguration settings = Effects.continue check (numberValidator settings)
+  where
+  check _ = do
+    checked <- checkNative settings
+    Effects.continue (const (checkServices settings)) checked
 
 checkNative :: Settings -> IO (Result ())
 checkNative settings = case pinValid of
@@ -75,10 +78,11 @@ runApplication settings = withLogging logPath (withShutdown . start)
   logPath
     | Text.null configuredPath = Nothing
     | otherwise = Just (Text.unpack configuredPath)
-  start output = do
+  start output = Effects.continue (startValidated output) (numberValidator settings)
+  startValidated output validate = do
     checked <- checkNative settings
-    Effects.continue (const (withServices settings (serveConfigured output))) checked
-  serveConfigured output services = withNotifications settings output (runConfigured settings services output)
+    Effects.continue (const (withServices settings (serveConfigured output validate))) checked
+  serveConfigured output validate services = withNotifications settings output (runConfigured settings validate services output)
 
 withNotifications :: Settings -> Report -> (Maybe Messages -> IO (Result a)) -> IO (Result a)
 withNotifications settings output action
@@ -94,8 +98,8 @@ withNotifications settings output action
         messageService sms = withMessages messageRules output sms events
     withSMS smsRules credentials sender (path "PHONE_ASSISTANT_SMS_STATE_FILE") messageService
 
-runConfigured :: Settings -> Services -> Report -> Maybe Messages -> IO (Result ())
-runConfigured settings services output messages = Effects.continue start configured
+runConfigured :: Settings -> NumberValidator -> Services -> Report -> Maybe Messages -> IO (Result ())
+runConfigured settings validate services output messages = Effects.continue start configured
   where
   configured = (,,) <$> telephonyConfiguration settings <*> rule settings "runtime" "native_pause_extra_seconds" <*> rule settings "runtime" "socket"
   start (native, extra, sockets) = do
@@ -107,24 +111,24 @@ runConfigured settings services output messages = Effects.continue start configu
   bind ownerRegistry publicRegistry handoffs = do
     let public = IncomingServices (lookupPublicCaller services) messages
         incoming = incomingSession settings public output publicRegistry handoffs
-        owner = ownerSession settings services output ownerRegistry handoffs
+        owner = ownerSession settings validate services output ownerRegistry handoffs
     selected <- chooseOwner settings output owner
-    Effects.continue (startServer settings output incoming) selected
+    Effects.continue (startServer settings validate output incoming) selected
 
 chooseOwner :: Settings -> Report -> CallHandler -> IO (Result CallHandler)
 chooseOwner settings output native
   | setting settings "PHONE_ASSISTANT_VOICE_MODE" == "pipeline" = fmap (fmap (`pipelineSession` output)) (preparePipeline settings)
   | otherwise = pure (Right native)
 
-startServer :: Settings -> Report -> CallHandler -> CallHandler -> IO (Result ())
-startServer settings output incoming owner = case serverConfiguration settings output incoming owner of
+startServer :: Settings -> NumberValidator -> Report -> CallHandler -> CallHandler -> IO (Result ())
+startServer settings validate output incoming owner = case serverConfiguration settings validate output incoming owner of
   Left err -> pure (Left err)
   Right config -> do
     output "server_started" []
     serve config `finally` output "server_stopped" []
 
-serverConfiguration :: Settings -> Report -> CallHandler -> CallHandler -> Result ServerConfig
-serverConfiguration settings output incoming owner = do
+serverConfiguration :: Settings -> NumberValidator -> Report -> CallHandler -> CallHandler -> Result ServerConfig
+serverConfiguration settings validate output incoming owner = do
   native <- telephonyConfiguration settings
   host <- rule settings "runtime" "host"
   port <- rule settings "runtime" "owner_port"
@@ -132,7 +136,7 @@ serverConfiguration settings output incoming owner = do
   homePortValue <- enabledPort "HOME_PHONE_ENABLED" "home_port"
   limit <- rule settings "runtime" "max_connections"
   sockets <- rule settings "runtime" "socket"
-  let home = homeRouteHandler native validateNumber
+  let home = homeRouteHandler native validate
       report issue = output "call_failed" ["error" .= failureCode issue]
   pure (ServerConfig host port incomingPortValue homePortValue limit owner incoming home sockets report)
   where

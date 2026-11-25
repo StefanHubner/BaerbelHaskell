@@ -20,6 +20,11 @@ cradle:
         cradle:
           stack:
             component: baerbel:exe:phone-assistant-gmail-auth
+    - path: ./test/live
+      config:
+        cradle:
+          stack:
+            component: baerbel:exe:baerbel-live-check
     - path: ./test
       config:
         cradle:

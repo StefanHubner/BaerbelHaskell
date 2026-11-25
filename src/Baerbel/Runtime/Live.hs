@@ -2,7 +2,7 @@
 module Baerbel.Runtime.Live
   ( LiveConfig(..), Media(..), AudioDelivery(..), LiveControls(..), ToolLimits(..), ToolCall(..), ToolBatch(..)
   , ToolState, emptyToolState, stepTools, rememberOutput, cachedOutput
-  , runLiveSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript, observeStarted
+  , runLiveSession, closeSession, audioCommand, toolOutputCommand, decodeAudio, abandonUncommitted, recoverable, appendTranscript, observeStarted
   ) where
 
 import Baerbel.Core.AudioMetrics
@@ -18,13 +18,14 @@ import Baerbel.Core.AudioMetrics
 import Baerbel.Core.Background
     ( BackgroundRules(..), Progress(..), progressStep )
 import Baerbel.Core.Error ( Failure(..), Result, failure )
-import Baerbel.Core.JSON ( field, textField, eventDelta )
+import Baerbel.Core.JSON ( textField, eventDelta )
 import Baerbel.Core.Live
 import Baerbel.Core.Protocol
     ( audioCommand,
       toolOutputCommand,
       decodeAudio,
       startCommand,
+      closeCommand,
       continueCommand,
       appendCommand,
       announcementReady )
@@ -39,7 +40,7 @@ import Baerbel.Runtime.Speech
       splitFrames,
       withResampler,
       audiblePCM )
-import Baerbel.Runtime.WebSocket ( withSecureSocket )
+import Baerbel.Runtime.WebSocket ( withSecureSocket, socketResult )
 import Control.Applicative ( (<|>) )
 import Control.Concurrent ( threadDelay )
 import Control.Concurrent.Async ( race )
@@ -105,7 +106,7 @@ data Runtime = Runtime
   { connection :: WS.Connection, config :: LiveConfig, media :: Media
   , inputQueue :: TBQueue InputFrame, outputQueue :: TBQueue PlaybackFrame
   , toolQueue :: TBQueue ToolBatch, toolState :: TVar ToolState
-  , ready :: TVar Bool, writeLock :: MVar ()
+  , ready :: TVar Bool, startSent :: TVar Bool, writeLock :: MVar ()
   , preview :: TVar Bool, interrupted :: TVar Bool, playing :: TVar Bool
   , generation :: TVar Int, stopping :: TVar Bool, commandSequence :: TVar Int
   , timeline :: TVar Timeline, previewMuted :: TVar Bool, playedSpeech :: TVar (Maybe Word64)
@@ -131,15 +132,57 @@ startSession :: LiveConfig -> Execute -> Media -> Word64 -> TBQueue InputFrame -
 startSession cfg execute transport startedAt input started conn = do
   runtime <- newRuntime cfg transport startedAt input started conn
   installControls transport (controls runtime)
-  let closed = closedEvent startedAt <$> getMonotonicTimeNSec <*> readTVarIO (finalStatus runtime)
-      closing = closed >>= observeEvent transport
-  finally (beginSession runtime execute) closing
+  finally (beginSession runtime execute) (finishSession runtime)
+
+finishSession :: Runtime -> IO ()
+finishSession runtime = finishProvider runtime `finally` reportClosed runtime
+
+finishProvider :: Runtime -> IO ()
+finishProvider runtime = do
+  sent <- readTVarIO (startSent runtime)
+  when sent (finalizeProvider runtime)
+
+finalizeProvider :: Runtime -> IO ()
+finalizeProvider runtime = do
+  started <- readTVarIO (ready runtime)
+  (closed, _) <- readTVarIO (finalStatus runtime)
+  result <- closeSession (config runtime) started closed (connection runtime)
+  let remember event = atomically (writeTVar (finalStatus runtime) (closedStatus event))
+  either (const (pure ())) (mapM_ remember) result
+
+reportClosed :: Runtime -> IO ()
+reportClosed runtime = do
+  now <- getMonotonicTimeNSec
+  final <- readTVarIO (finalStatus runtime)
+  let event = closedEvent (runtimeStart runtime) now final
+  observeEvent (media runtime) event
+
+-- Bridge readers and writers have stopped before this bounded close exchange.
+closeSession :: LiveConfig -> Bool -> Bool -> WS.Connection -> IO (Result (Maybe Value))
+closeSession _ _ True _ = pure (Right Nothing)
+closeSession cfg started False conn = socketResult limited
+  where
+    duration | started = liveCloseMicros cfg
+             | otherwise = liveStartupCloseMicros cfg
+    limited = Effects.within (failure "live_close_timeout") duration exchange
+    command = encode closeCommand
+    exchange = WS.sendTextData conn command >> finish
+    finish | started = awaitFinal cfg conn
+           | otherwise = pure (Right Nothing)
+
+awaitFinal :: LiveConfig -> WS.Connection -> IO (Result (Maybe Value))
+awaitFinal cfg conn = receiveMessage cfg conn >>= Effects.continue observe
+  where
+    observe event
+      | textField "type" event == Just "session.closed" = pure (Right (Just event))
+      | otherwise = awaitFinal cfg conn
 
 newRuntime :: LiveConfig -> Media -> Word64 -> TBQueue InputFrame -> TVar Bool -> WS.Connection -> IO Runtime
 newRuntime cfg transport startedAt input started conn = do
   output <- newTBQueueIO (fromIntegral (liveQueueFrames cfg))
   queue <- newTBQueueIO (fromIntegral (maxPendingResponses (liveToolLimits cfg)))
   state <- newTVarIO emptyToolState
+  sent <- newTVarIO False
   lock <- newMVar ()
   previewing <- newTVarIO False
   interrupt <- newTVarIO False
@@ -155,7 +198,7 @@ newRuntime cfg transport startedAt input started conn = do
   notice <- newTVarIO Nothing
   final <- newTVarIO (False, Nothing)
   metrics <- newTVarIO (emptyMetrics startedAt)
-  pure (Runtime conn cfg transport input output queue state started lock previewing interrupt playingNow epoch stop sequenceNumber clock mutedPreview lastSpeech metrics startedAt final transcriptTime notices notice)
+  pure (Runtime conn cfg transport input output queue state started sent lock previewing interrupt playingNow epoch stop sequenceNumber clock mutedPreview lastSpeech metrics startedAt final transcriptTime notices notice)
 
 beginSession :: Runtime -> Execute -> IO (Result ())
 beginSession runtime execute = do
@@ -165,6 +208,7 @@ beginSession runtime execute = do
   case sent of
     Left err -> pure (Left err)
     Right () -> do
+      atomically (writeTVar (startSent runtime) True)
       result <- Effects.within (failure "live_setup_timeout") (liveSetupMicros cfg) (awaitStarted runtime)
       Effects.continue (const (runBridge runtime execute)) result
 
@@ -271,9 +315,12 @@ sendGreeting runtime False = case liveGreeting (config runtime) of
 sendGreeting _ True = pure (Right True)
 
 receiveEvent :: Runtime -> IO (Result Value)
-receiveEvent runtime = do
-  bytes <- WS.receiveData (connection runtime) :: IO BS.ByteString
-  pure (decodeEvent (liveMessageBytes (config runtime)) bytes)
+receiveEvent runtime = receiveMessage (config runtime) (connection runtime)
+
+receiveMessage :: LiveConfig -> WS.Connection -> IO (Result Value)
+receiveMessage cfg conn = do
+  bytes <- WS.receiveData conn :: IO BS.ByteString
+  pure (decodeEvent (liveMessageBytes cfg) bytes)
 
 receiveOutput :: Runtime -> Resampler -> BS.ByteString -> Int -> IO (Result ())
 receiveOutput runtime converter pending epoch = do
@@ -296,7 +343,7 @@ receiveOutput runtime converter pending epoch = do
 
 dispatchEvent :: Runtime -> Resampler -> BS.ByteString -> Int -> Value -> IO (Result ())
 dispatchEvent runtime converter pending epoch event = case textField "type" event of
-  Just "session.closed" -> atomically (writeTVar (finalStatus runtime) (True, field "usage" event)) >> pure (Right ())
+  Just "session.closed" -> atomically (writeTVar (finalStatus runtime) (closedStatus event)) >> pure (Right ())
   Just "error" -> do
     observeEvent (media runtime) (object ["type" .= ("phone.provider_error" :: Text), "code" .= ("provider_error" :: Text)])
     recovered <- recoverHandoff runtime event

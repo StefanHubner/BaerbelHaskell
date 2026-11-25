@@ -1,15 +1,25 @@
 # Source inventory
 
-Physical source lines include comments and blank lines, exclude tests, fixtures, configuration, documentation, generated Cabal metadata and third-party source/build trees.
+Counts compare the current working tree with `50ad8a9` using the same file scope on both sides. Physical source lines include comments and blank lines. The scope is `src/**/*.hs`, `app/**/*.hs`, `Setup.hs`, `Makefile`, `scripts/**/*.sh`, `scripts/**/*.py` and first-party C/C++ headers/sources under `cbits/`. New untracked source files are included, and deleted source files are included in the baseline. Tests—including `test/live`—fixtures, configuration/phone metadata, documentation/rendering helpers, generated Cabal metadata and third-party source/build trees are excluded.
 
-| Scope | Files | Lines |
-|---|---:|---:|
-| Preserved Python runtime (`src/phone_assistant`) | 50 | 10,809 |
-| Pure Haskell core (`src/Baerbel/Core`) | 59 | 7,862 |
-| Haskell imperative shell (`src/Baerbel/Runtime`) | 52 | 6,846 |
-| Haskell application entry points (`app`) | 2 | 89 |
-| Haskell build hook, native bridge, Makefile and shell helpers | 10 | 296 |
-| Current production source total | 123 | 15,093 |
+| Scope | Baseline files | Baseline lines | Current files | Current lines |
+|---|---:|---:|---:|---:|
+| Pure Haskell core (`src/Baerbel/Core`) | 59 | 7,862 | 60 | 7,987 |
+| Haskell imperative shell (`src/Baerbel/Runtime`) | 52 | 6,846 | 51 | 6,873 |
+| Haskell application entry points (`app`) | 2 | 89 | 2 | 89 |
+| Build hook, Makefile and shell/Python helpers | 8 | 274 | 9 | 526 |
+| First-party native bridge (`cbits`) | 1 | 17 | 0 | 0 |
+| **Production source total, excluding tests** | **122** | **15,088** | **122** | **15,475** |
+
+The current change affects **20 production/build files**: **510 added, 123 removed and 65 changed lines**, a net increase of **387 lines**. Raw diff totals are **575 insertions and 188 deletions**. “Changed” pairs one old and one new line within each zero-context replacement hunk; only excess lines count as added or removed. These are line-edit measures, not semantic statements. Rename detection is disabled for this comparison, so the removed runtime parser/native build and their replacements remain visible.
+
+Pure phone validation replaces the FFI module and C++ bridge. Its reference patterns are shared configuration data and do not inflate source counts. The typed metadata refresh utility is included as a build/maintenance helper; the live-check executable is a test harness and is excluded. Other production changes cover bounded Live shutdown, the verified-PIN handoff, provider transport fixes, and release/install verification.
+
+The preserved Python runtime (`src/phone_assistant`) remains **50 files and 10,809 lines**, separate from the Haskell total. Older inventory totals included the five-line documentation renderer `architecture/render.sh`; the explicit scope above excludes it from both sides of this comparison.
+
+To recompute at the final freeze, enumerate baseline paths with `git ls-tree -r --name-only 50ad8a9` and current paths with `git ls-files --cached --others --exclude-standard`, filter both lists to the scope above, and count existing file contents with `splitlines()`. Read baseline contents with `git show 50ad8a9:PATH`. Compare those two source snapshots with `git diff --no-index --no-renames --unified=0`; sum additions/deletions inside each hunk, then pair their minimum as changed lines. This includes files not yet staged and avoids counting the live harness or metadata as production source.
+
+## Earlier refactors
 
 The module separation from `500bcfc` accounts for 4,970 added lines, 3,784 removed lines and 724 replaced lines, with Git rename detection enabled. Split portions still appear as additions/removals when Git can match only one destination to an original file. These counts pair old/new lines within replacement blocks and count only the excess as additions/removals; tests and documentation are excluded. The net source increase is 1,186 lines, primarily module headers, imports and explicit exports for the separated files.
 
@@ -61,7 +71,7 @@ The remaining effectful functions read or write sockets, HTTP responses, files, 
 
 ## Module boundary
 
-All 68 original production modules were relocated or split into 59 Core and 52 Runtime modules. There are no compatibility modules at the old paths. Core modules contain immutable domain/protocol values, parsing, calculations, state transitions, request construction and result interpretation. Runtime modules own effect capabilities, mutable/native handles, resource lifetimes, observations and execution. A runtime module may re-export its feature's core values; each definition still exists in only one place.
+At `50ad8a9`, all 68 original production modules had been relocated or split into 59 Core and 52 Runtime modules. Pure phone validation now moves that runtime feature into Core, giving 60 Core and 51 Runtime modules. There are no compatibility modules at the old paths. Core modules contain immutable domain/protocol values, parsing, calculations, state transitions, request construction and result interpretation. Runtime modules own effect capabilities, mutable/native handles, resource lifetimes, observations and execution. A runtime module may re-export its feature's core values; each definition still exists in only one place.
 
 Core imports only other Core modules and reviewed external modules from `architecture/core-imports.txt`. The architecture regressions recursively check the source layout and reject runtime imports, effect/native-handle types, unsafe execution, effect-generating extensions and clock reads in Core. Compilation rejects missing top-level signatures. Pure higher-order functions and pure function-valued records remain permitted.
 

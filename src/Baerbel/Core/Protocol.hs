@@ -2,7 +2,7 @@
 module Baerbel.Core.Protocol
   ( SessionRole(..), SessionSettings(..), sessionConfig, greetingCommand
   , allowedTools, applyInstructions, audioCommand, toolOutputCommand, decodeAudio
-  , startCommand, continueCommand, appendCommand, buildSession, buildSessionWithProfile, appendSessionContext
+  , startCommand, closeCommand, continueCommand, appendCommand, buildSession, buildSessionWithProfile, appendSessionContext
   , voiceIdentity, timeContext, gmailTimeContext, spokenWords, announcementComplete, announcementReady
   ) where
 
@@ -89,6 +89,9 @@ applyInstructions = foldl replace
 
 startCommand :: Value -> Value
 startCommand session = object ["type" .= ("session.start" :: Text), "event_id" .= ("phone_start" :: Text), "session" .= session]
+
+closeCommand :: Value
+closeCommand = object ["type" .= ("session.close" :: Text)]
 
 appendCommand :: Text -> Text -> Value
 appendCommand kind content = object ["type" .= kind, "delegation_id" .= Null, "content" .= content]

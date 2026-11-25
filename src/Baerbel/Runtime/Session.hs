@@ -9,7 +9,7 @@ import Baerbel.Core.Config
 import Baerbel.Core.Error ( Result, failure )
 import Baerbel.Core.Protocol
     ( buildSessionWithProfile, announcementReady )
-import Baerbel.Core.Routing ( announcement )
+import Baerbel.Core.Routing ( announcement, NumberValidator )
 import Baerbel.Core.Session
 import Baerbel.Runtime.EndCall
     ( EndConfig(..),
@@ -30,7 +30,6 @@ import Baerbel.Runtime.ManagedMedia
 import Baerbel.Runtime.NoteRuntime
     ( NoteRuntime(notePending, noteExecute, noteEvent, noteAudio),
       withNoteRuntime )
-import Baerbel.Runtime.PhoneNumber ( validateNumber )
 import Baerbel.Runtime.Recording ( Archive, closeRecording )
 import Baerbel.Runtime.Ringback ( withRingback )
 import Baerbel.Runtime.Server ( socketMedia )
@@ -107,8 +106,8 @@ awaitAnnouncement transcript lastAudio completion quietMicros = do
     continue True = pure (Right ())
     continue False = threadDelay 20000 >> awaitAnnouncement transcript lastAudio completion quietMicros
 
-ownerSession :: Settings -> Services -> Report -> Registry -> Handoffs -> Text -> Socket -> IO (Result ())
-ownerSession settings factories report registry handoffs identifier connection =
+ownerSession :: Settings -> NumberValidator -> Services -> Report -> Registry -> Handoffs -> Text -> Socket -> IO (Result ())
+ownerSession settings validate factories report registry handoffs identifier connection =
   Effects.continue route (telephonyConfiguration settings)
   where
     route native = do
@@ -119,7 +118,7 @@ ownerSession settings factories report registry handoffs identifier connection =
         Right Nothing -> withManaged registry identifier connection (startObserved native)
     startObserved native managed =
       let transport = (managedMedia managed) {observeEvent = reportOwnerEvent report identifier}
-      in startOwner settings factories native identifier managed {managedMedia = transport}
+      in startOwner settings validate factories native identifier managed {managedMedia = transport}
 
 playHandoff :: Settings -> Socket -> Text -> IO (Result ())
 playHandoff settings connection line = Effects.continue play (rule settings "runtime" "socket")
@@ -134,28 +133,28 @@ boundedAnnouncement :: Int -> LiveConfig -> Media -> Text -> Int -> IO (Result (
 boundedAnnouncement duration cfg transport completion quiet =
   Effects.within (failure "announcement_timeout") duration (runAnnouncement cfg transport completion quiet)
 
-startOwner :: Settings -> Services -> TelephonyConfig -> Text -> ManagedCall -> IO (Result ())
-startOwner settings factories native identifier managed = case rule settings "startup_ringback" "playback" of
+startOwner :: Settings -> NumberValidator -> Services -> TelephonyConfig -> Text -> ManagedCall -> IO (Result ())
+startOwner settings validate factories native identifier managed = case rule settings "startup_ringback" "playback" of
   Left err -> pure (Left err)
   Right rules -> withRingback rules (managedMedia managed) $ \transport ->
-    openOwnerSession settings factories native identifier managed {managedMedia = transport}
+    openOwnerSession settings validate factories native identifier managed {managedMedia = transport}
 
-openOwnerSession :: Settings -> Services -> TelephonyConfig -> Text -> ManagedCall -> IO (Result ())
-openOwnerSession settings factories native identifier managed = case pinConfiguration settings of
+openOwnerSession :: Settings -> NumberValidator -> Services -> TelephonyConfig -> Text -> ManagedCall -> IO (Result ())
+openOwnerSession settings validate factories native identifier managed = case pinConfiguration settings of
   Left err -> pure (Left err)
   Right cfg -> do
     gate <- Pin.newPinGate cfg
-    Effects.continue (\pin -> finally (bindOwner settings factories native identifier managed pin) (Pin.closePin pin)) gate
+    Effects.continue (\pin -> finally (bindOwner settings validate factories native identifier managed pin) (Pin.closePin pin)) gate
 
-bindOwner :: Settings -> Services -> TelephonyConfig -> Text -> ManagedCall -> Pin.PinGate -> IO (Result ())
-bindOwner settings factories native identifier managed pin = do
+bindOwner :: Settings -> NumberValidator -> Services -> TelephonyConfig -> Text -> ManagedCall -> Pin.PinGate -> IO (Result ())
+bindOwner settings validate factories native identifier managed pin = do
   setKeypad managed (Pin.feedDigit pin)
   bind (directEnabled native)
   where
     bind False = runOwner settings factories managed pin Nothing
     bind True = do
       let hooks = nativeMedia settings managed pin
-      opened <- openOwner native validateNumber hooks identifier
+      opened <- openOwner native validate hooks identifier
       Effects.continue runBound opened
     runBound owner = do
       setReattachAllowed managed (ownerCanResume owner)

@@ -23,7 +23,7 @@ import Baerbel.Core.Incoming
     ( trustedEndpoint, callbackNumber, remainingBudget )
 import Baerbel.Core.JSON ( resultValue )
 import Baerbel.Core.Routing
-    ( RouteSettings, Route, Permission(Owner, Screening), selectRoute )
+    ( NumberValidator, Route, Permission(Owner, Screening), selectRoute )
 import Baerbel.Core.Telephony
 import Baerbel.Runtime.AMI
     ( Channel(channelMessageOnly, channelUniqueId, channelName),
@@ -88,8 +88,6 @@ data OwnerRuntime = OwnerRuntime
   , ownerLock :: MVar (), ownerConfig :: TelephonyConfig, ownerMedia :: TelephonyMedia
   , ownerReconnect :: IO (Result ()) }
 
-type ValidateNumber = Text -> IO (Result Text)
-
 freshToken :: IO Text
 freshToken = render <$> (getRandomBytes 16 :: IO ByteString)
   where
@@ -102,21 +100,21 @@ bindOwner rules ami identifier = Effects.mapResult (ownerChannel rules identifie
     statuses :: IO (Result [Message])
     statuses = amiAction ami "Status" [("Variables", "PA_CALL_ID,PA_OWNER_AUTHORIZED,PA_PERMISSION")] (Just "StatusComplete")
 
-openOwner :: TelephonyConfig -> ValidateNumber -> TelephonyMedia -> Text -> IO (Result OwnerControl)
+openOwner :: TelephonyConfig -> NumberValidator -> TelephonyMedia -> Text -> IO (Result OwnerControl)
 openOwner cfg validate media identifier = do
   state <- newMVar Nothing
   events <- newBroadcastTChanIO
   connected <- connectAMI (amiRules cfg) (amiUsername cfg) (amiPassword cfg) (observeOwner state events media)
   Effects.continue (finishOwner cfg validate media identifier state events) connected
 
-finishOwner :: TelephonyConfig -> ValidateNumber -> TelephonyMedia -> Text -> MVar (Maybe CallState) -> TChan () -> AMI -> IO (Result OwnerControl)
+finishOwner :: TelephonyConfig -> NumberValidator -> TelephonyMedia -> Text -> MVar (Maybe CallState) -> TChan () -> AMI -> IO (Result OwnerControl)
 finishOwner cfg validate media identifier pending events ami = do
   bound <- bindOwner (amiRules cfg) ami identifier
   case bound of
     Left problem -> amiClose ami >> pure (Left problem)
     Right channel -> createOwner cfg validate media identifier pending events ami channel
 
-createOwner :: TelephonyConfig -> ValidateNumber -> TelephonyMedia -> Text -> MVar (Maybe CallState) -> TChan () -> AMI -> Channel -> IO (Result OwnerControl)
+createOwner :: TelephonyConfig -> NumberValidator -> TelephonyMedia -> Text -> MVar (Maybe CallState) -> TChan () -> AMI -> Channel -> IO (Result OwnerControl)
 createOwner cfg validate media identifier pending events ami channel = do
   let initial = initialCall identifier Owner channel
   state <- newMVar initial
@@ -158,23 +156,16 @@ saveState runtime pending state = do
     preserve (Just previous) | callPhase previous `elem` [Connected, Ended] = Just previous {callResults = M.union (callResults state) (callResults previous)}
     preserve _ = Just state
 
-executeOwner :: OwnerRuntime -> MVar (Maybe CallState) -> ValidateNumber -> Text -> Value -> Text -> IO (Result Value)
+executeOwner :: OwnerRuntime -> MVar (Maybe CallState) -> NumberValidator -> Text -> Value -> Text -> IO (Result Value)
 executeOwner runtime pending validate name args requestId = withMVar (ownerLock runtime) operation
   where
     operation :: () -> IO (Result Value)
     operation () = runExceptT $ do
       (mode, parsed) <- except (parseDirect (telephonyRules (ownerConfig runtime)) name args)
-      route <- ExceptT (validatedRoute runtime validate parsed)
+      let routes = routeSettings (ownerConfig runtime)
+      route <- except (selectRoute validate routes Owner (argumentNumber parsed))
       state <- lift (currentState runtime pending)
       maybe (executeBound runtime pending mode requestId parsed route state) except (cachedCommand (directEnabled (ownerConfig runtime)) requestId state)
-
-validatedRoute :: OwnerRuntime -> ValidateNumber -> DirectArgs -> IO (Result Route)
-validatedRoute runtime validate args
-  | argumentNumber args == "home" = pure (selectRoute Right settings Owner "home")
-  | otherwise = Effects.mapResult (selectRoute Right settings Owner) (validate (argumentNumber args))
-  where
-    settings :: RouteSettings
-    settings = routeSettings (ownerConfig runtime)
 
 runDirect :: OwnerRuntime -> MVar (Maybe CallState) -> DirectMode -> Text -> DirectArgs -> Route -> IO (Result Value)
 runDirect runtime pending mode requestId args route = do
@@ -488,18 +479,18 @@ terminateNative ami identifier channel state reason = modifyMVar state proceed
     terminate :: IO (Result ())
     terminate = runExceptT (ExceptT (setVariables ami channel [("TF_RESULT", incomingReason reason)]) >> ExceptT (hangup ami channel "21"))
 
-homeRouteHandler :: TelephonyConfig -> ValidateNumber -> Socket -> IO (Result ())
+homeRouteHandler :: TelephonyConfig -> NumberValidator -> Socket -> IO (Result ())
 homeRouteHandler cfg validate connection = Effects.within (failure "agi_timeout") duration operation
   where
     duration = nativeAGIMicros (telephonyRules cfg)
     operation = Effects.attempt "agi_connection_failed" (runExceptT (homeRoute cfg validate connection))
 
-homeRoute :: TelephonyConfig -> ValidateNumber -> Socket -> ExceptT Failure IO ()
+homeRoute :: TelephonyConfig -> NumberValidator -> Socket -> ExceptT Failure IO ()
 homeRoute cfg validate connection = do
   headers <- ExceptT (readAgiHeaders (telephonyRules cfg) connection 0 0 M.empty)
   number <- except (homeIdentity cfg headers)
   mapM_ (ExceptT . uncurry (agiCommand (telephonyRules cfg) connection)) homeChecks
-  canonical <- ExceptT (validate number)
+  canonical <- except (validate number)
   route <- except (selectRoute Right (routeSettings cfg) Owner canonical)
   mapM_ (ExceptT . uncurry (agiCommand (telephonyRules cfg) connection)) (homeCommands route)
 

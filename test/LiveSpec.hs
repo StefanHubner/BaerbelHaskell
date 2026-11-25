@@ -27,6 +27,8 @@ import Data.Either (isLeft)
 import Data.Text (Text)
 import Data.Time (UTCTime(..), fromGregorian, secondsToDiffTime)
 import Test.Hspec
+import qualified LiveCloseSpec
+import qualified PinVerificationSpec
 
 limits :: ToolLimits
 limits = ToolLimits 8 16 128 16000
@@ -54,6 +56,7 @@ advance = foldl step (Right (emptyToolState, []))
 
 spec :: Spec
 spec = do
+  LiveCloseSpec.spec
   describe "Live setup classification" $ do
     it "distinguishes startup, provider failure, closure and unrelated events" $ do
       let classify kind = observeStarted (object ["type" .= (kind :: Text)])
@@ -143,13 +146,14 @@ spec = do
       isLeft (Pin.parsePinHash uppercase) `shouldBe` True
     it "keeps PIN retry notification off the audio reader and cancels it on close" $ do
       let hash = "pbkdf2_sha256:600000:" <> T.replicate 32 "0" <> ":" <> T.replicate 64 "0"
-          config = Pin.PinConfig hash ["gmail_"] 60000000 4 8 (String "prompt") (String "incorrect")
+          config = Pin.PinConfig hash ["gmail_"] 60000000 4 8 (String "prompt") (String "incorrect") (String "verified")
       opened <- Pin.newPinGate config
       case opened of
         Left issue -> expectationFailure (show issue)
         Right gate -> do
           result <- timeout 1000000 (finally (exercisePin gate) (Pin.closePin gate))
           result `shouldBe` Just (Left (failure "pin_unavailable"))
+  PinVerificationSpec.spec
   describe "owner call ending" $ do
     let ready = End.EndContext True False False False False
         reason value = object ["reason" .= (value :: Text)]

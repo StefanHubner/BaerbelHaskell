@@ -42,7 +42,7 @@ UNIT
   rm "$unit"
   systemctl daemon-reload
   systemctl restart "$service"
-  verify_service
+  verify_service "$release/bin/phone-assistant-server"
 }
 
 rollback_release() {
@@ -53,10 +53,25 @@ rollback_release() {
 }
 
 verify_service() {
-  systemctl is-active "$service"
-  systemctl is-active asterisk.service
+  local expected=${1:-} first_pid current_pid
+  first_pid=$(systemctl show "$service" --property=MainPID --value)
+  verify_running "$expected" "$first_pid"
+  sleep 3
+  current_pid=$(systemctl show "$service" --property=MainPID --value)
+  [[ "$current_pid" == "$first_pid" ]] || { printf 'Assistant restarted during startup verification.\n' >&2; return 1; }
+  verify_running "$expected" "$current_pid"
   systemctl show "$service" --property=ExecStart --property=MainPID
   printf 'Process checks passed; real call behavior has not been exercised.\n'
+}
+
+verify_running() {
+  local expected=$1 pid=$2 executable
+  systemctl is-active "$service"
+  systemctl is-active asterisk.service
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || { printf 'Assistant has no running main process.\n' >&2; return 1; }
+  executable=$(readlink -e "/proc/$pid/exe")
+  [[ -z "$expected" || "$executable" == "$expected" ]] || { printf 'Assistant is not running the staged executable.\n' >&2; return 1; }
+  printf 'Running executable: %s\n' "$executable"
 }
 
 case "$action" in

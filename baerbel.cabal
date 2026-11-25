@@ -34,22 +34,18 @@ extra-source-files:
     test/fixtures/sms.json
     test/fixtures/vad.json
     test/fixtures/windguru-tools.json
-    cbits/phone_number.cpp
-    native/phone-source.txt
     native/build-sources.txt
-    native/licenses/abseil-LICENSE
     native/licenses/icu-copyright
-    native/licenses/libphonenumber-Chromium-LICENSE
     native/licenses/libphonenumber-LICENSE
-    native/licenses/protobuf-LICENSE
     native/licenses/webrtcvad-LICENSE
     native/README.md
-    scripts/build-phone.sh
+    scripts/build-icu.sh
     scripts/build-vad.sh
     scripts/deploy.sh
     scripts/package-release.sh
     scripts/prepare-build.sh
     scripts/remote-deploy.sh
+    scripts/update-phone-metadata.py
     deploy/phone-assistant.logrotate
     deploy/phone-assistant.service
     architecture/BAERBEL_SYSTEM_ARCHITECTURE.dot
@@ -104,6 +100,7 @@ library
       Baerbel.Core.Notes
       Baerbel.Core.OAuth
       Baerbel.Core.OpeningHours
+      Baerbel.Core.PhoneNumber
       Baerbel.Core.Pin
       Baerbel.Core.Pipeline
       Baerbel.Core.Profile
@@ -157,7 +154,6 @@ library
       Baerbel.Runtime.NoteRuntime
       Baerbel.Runtime.Notes
       Baerbel.Runtime.OAuth
-      Baerbel.Runtime.PhoneNumber
       Baerbel.Runtime.Pin
       Baerbel.Runtime.Pipeline
       Baerbel.Runtime.Profile
@@ -187,13 +183,85 @@ library
       DeriveGeneric
   ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates
   extra-libraries:
-      baerbel-phone
       baerbel-vad
       stdc++
       z
   build-depends:
       aeson >=2.2
     , async >=2.2
+    , base >=4.20
+    , base64-bytestring >=1.2
+    , binary >=0.8
+    , bytestring >=0.11
+    , case-insensitive >=1.2
+    , cassava >=0.5
+    , containers >=0.6
+    , crypton >=1.0
+    , crypton-connection >=0.4
+    , directory >=1.3
+    , filepath >=1.4
+    , http-client >=0.7
+    , http-client-tls >=0.3
+    , http-types >=0.12
+    , memory >=0.16
+    , mime-mail >=0.5
+    , mtl >=2.2
+    , network >=3.1
+    , process >=1.6
+    , regex-tdfa >=1.3
+    , scientific >=0.3
+    , sqlite-simple >=0.4
+    , stm >=2.5
+    , tagsoup >=0.14
+    , temporary >=1.3
+    , text >=1.2
+    , text-icu >=0.8
+    , time >=1.11
+    , tls >=2.0
+    , transformers >=0.5
+    , tz >=0.1
+    , tzdata >=0.2
+    , unicode-transforms >=0.4
+    , unix >=2.8
+    , uuid >=1.3
+    , vector >=0.12
+    , wai >=3.2
+    , warp >=3.3
+    , websockets >=0.12
+    , wuss >=1.1
+  default-language: Haskell2010
+
+executable baerbel-live-check
+  main-is: Main.hs
+  other-modules:
+      LiveCheck.Check
+      LiveCheck.Conversation
+      LiveCheck.Conversation.Audio
+      LiveCheck.Conversation.Model
+      LiveCheck.Conversation.Pin
+      LiveCheck.Conversation.Session
+      LiveCheck.Delivery
+      LiveCheck.Delivery.Calendar
+      LiveCheck.Delivery.Common
+      LiveCheck.Delivery.Email
+      LiveCheck.Native
+      LiveCheck.Providers
+      LiveCheck.Providers.Common
+      LiveCheck.Providers.Google
+      LiveCheck.Providers.Public
+      Paths_baerbel
+  autogen-modules:
+      Paths_baerbel
+  hs-source-dirs:
+      test/live
+  default-extensions:
+      OverloadedStrings
+      DeriveGeneric
+  ghc-options: -Wall -Wcompat -Wmissing-signatures -Werror=missing-signatures -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded -rtsopts
+  build-depends:
+      aeson >=2.2
+    , async >=2.2
+    , baerbel
     , base >=4.20
     , base64-bytestring >=1.2
     , binary >=0.8
@@ -359,6 +427,7 @@ test-suite baerbel-test
       EventsSpec
       GmailSpec
       HTTPSpec
+      LiveCloseSpec
       LiveSpec
       LoggingSpec
       MailContentSpec
@@ -367,6 +436,7 @@ test-suite baerbel-test
       MetricsSpec
       NoteMailSpec
       NotesSpec
+      PinVerificationSpec
       StoreSpec
       TelephonySpec
       TestSupport

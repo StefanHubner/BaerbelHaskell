@@ -9,12 +9,11 @@ extra-source-files:
 - config/global.json
 - config/user.example.json
 - test/fixtures/*.json
-- cbits/phone_number.cpp
-- native/phone-source.txt
 - native/build-sources.txt
 - native/licenses/*
 - native/README.md
 - scripts/*.sh
+- scripts/update-phone-metadata.py
 - deploy/*
 - architecture/*.dot
 - architecture/core-imports.txt
@@ -74,7 +73,7 @@ ghc-options:
 - -Wincomplete-record-updates
 library:
   source-dirs: src
-  extra-libraries: [baerbel-phone, baerbel-vad, stdc++, z]
+  extra-libraries: [baerbel-vad, stdc++, z]
 executables:
   phone-assistant-server:
     main: Main.hs
@@ -86,6 +85,11 @@ executables:
     main: AuthMain.hs
     source-dirs: app
     other-modules: []
+    dependencies: baerbel
+    ghc-options: [-threaded, -rtsopts]
+  baerbel-live-check:
+    main: Main.hs
+    source-dirs: test/live
     dependencies: baerbel
     ghc-options: [-threaded, -rtsopts]
 tests:

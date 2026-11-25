@@ -47,6 +47,7 @@ spec = describe "shared HTTP outcome boundary" $ do
     stream request unexpected `shouldReturn` rejected
   it "never marks a failed token refresh as an attempted mutation" $ do
     let token = pure (Left (failure "refresh_scopes_rejected"))
+        unexpected :: Send
         unexpected _ = expectationFailure "mutation transport was reached" >> pure (Left (failure "unexpected"))
         request = testRequest "POST" "http://127.0.0.1/unused" 64
     authenticated token unexpected request `shouldReturn` Left (failure "refresh_scopes_rejected")
