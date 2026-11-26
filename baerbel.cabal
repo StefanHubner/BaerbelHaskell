@@ -39,9 +39,9 @@ extra-source-files:
     test/fixtures/gmail-summaries.json
     test/fixtures/gmail-tools.json
     test/fixtures/ledger.json
-    test/fixtures/local-user.json
     test/fixtures/live-integrated-session.json
     test/fixtures/live-session.json
+    test/fixtures/local-user.json
     test/fixtures/mail-codecs.json
     test/fixtures/maps-details.json
     test/fixtures/maps-find.json
