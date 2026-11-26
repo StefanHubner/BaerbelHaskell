@@ -2,13 +2,12 @@
 
 Deployment uses the existing SSH account `stefan@192.168.50.83`. Paths and host are fixed in the scripts; the Make targets take no configuration arguments. Haskell is active in the existing `phone-assistant.service`; Python is preserved for rollback. Remote preparation and activation remain separate steps. Current verification evidence is recorded in [migration.md](migration.md).
 
-Release `21d9a944…` from source `27e84ed` is active as of
-2026-11-25T23:51Z. Bärbel loaded the split global, instruction and provider
-files. Asterisk continued running with the installed site YAML and
-generated SIP entries. Production FastAGI admitted the Standard caller on
-the shared route and the Pro caller on the dedicated route. It rejected the
-Pro and an unknown caller on the shared route. SQLite passed its integrity
-checks. See [migration](migration.md) for the verification record.
+Release `3b40818e…` from source `5849984` is active as of
+2026-11-26. Bärbel uses Willow with a single identity line. Asterisk
+requests the local Pro caller ID for UK handset calls. Both services were
+active after cutover, and live FastAGI probes passed the Standard and Pro
+admission checks. The carrier-presented CLI and fresh external screening
+through both providers have yet to be observed.
 
 ## Check and package
 
