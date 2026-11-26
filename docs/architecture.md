@@ -82,7 +82,9 @@ private site YAML and reusable PBX templates to render the files in
 `/etc/asterisk/phone-assistant/`. It attaches the relevant stock module
 includes, preserving existing administrator settings. Each Pro account
 uses the same SIP template and a distinct endpoint. The site YAML ties
-the existing handset and provider routes to the selected Pro account.
+the existing handset and provider routes to the selected Pro account. The
+UK handset route requests that account’s DID as caller ID on the A&A
+outbound trunk. The Austrian route uses the Telematica caller ID.
 
 ## Deployment boundary
 
