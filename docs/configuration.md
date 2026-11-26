@@ -25,7 +25,9 @@ outbound SIP assignment and each Pro user's dedicated DID and credentials.
 `localAccount` associates the handset extension and existing Telematica
 and forwarding routes with a Pro account. The installer gets that
 account's registered caller number from SQLite. It generates each Pro
-endpoint and authentication section from the same template.
+endpoint and authentication section from the same template. The handset uses the local
+account’s DID as its UK caller ID through A&A. Austrian calls use the
+Telematica identity.
 
 ## Connect a Google service
 
